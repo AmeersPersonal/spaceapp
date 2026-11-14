@@ -13,6 +13,7 @@ import {
   listCaptionsForEvent,
   listEvents,
   listLayersForEvent,
+  listSceneStats,
   listScenesForEvent,
   tileKey,
 } from './dataManger.js';
@@ -20,6 +21,10 @@ import { requireIngestKey } from './oAuth.js';
 import { normalizeRoomCode } from './sessionManger.js';
 import { answerQuestion, hashQuestion, validateAskRequest } from './AI/AIManger.js';
 import { AIError } from './AI/AIGateway.js';
+import { describeAgents } from './AI/agents.js';
+import { ChatError, getThread, runChat, validateChatRequest } from './AI/chat.js';
+import { forecastEvent, parseHorizon } from './AI/forecast.js';
+import { summarizeEvent, summaryCacheKey } from './AI/summary.js';
 import {
   EventError,
   datasetContext,
@@ -42,6 +47,7 @@ export { ReplayRoom } from './replay.js';
 
 const EVENT_CACHE_TTL = 60;
 const ANSWER_CACHE_TTL = 3600;
+const SUMMARY_CACHE_TTL = 3600;
 const SAFE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 const LAYER_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -84,6 +90,11 @@ app.get('/', (c) =>
       'POST /api/ingest',
       'GET /api/ingest/:id',
       'POST /api/ask',
+      'GET /api/agents',
+      'POST /api/chat',
+      'GET /api/chat/:conversationId',
+      'GET /api/events/:id/summary',
+      'GET /api/events/:id/predict',
       'WS /api/room/:code',
     ],
     credit: DATA_CREDIT,
@@ -294,6 +305,83 @@ app.post('/api/ask', async (c) => {
       console.error('ask failed', err.message);
       return c.json({ error: 'ai_unavailable', message: 'The AI service is temporarily unavailable' }, 502);
     }
+    throw err;
+  }
+});
+
+const aiUnavailable = (c, what, err) => {
+  console.error(`${what} failed`, err.message);
+  return c.json({ error: 'ai_unavailable', message: 'The AI service is temporarily unavailable' }, 502);
+};
+
+app.get('/api/agents', (c) => c.json({ agents: describeAgents(c.env) }));
+
+app.post('/api/chat', async (c) => {
+  const parsed = validateChatRequest(await readJson(c));
+  if (parsed.errors) return badRequest(c, parsed.errors);
+  const { eventId, message, conversationId, agent } = parsed.value;
+  if (!SAFE_ID_RE.test(eventId)) return badRequest(c, ['invalid eventId']);
+  const event = await getEvent(c.env.DB, eventId);
+  if (!event) return c.json({ error: 'not_found', message: `event ${eventId} not found` }, 404);
+  try {
+    const scenes = await listScenesForEvent(c.env.DB, eventId);
+    return c.json(await runChat(c.env, { event, scenes, message, conversationId, requestedAgent: agent }));
+  } catch (err) {
+    if (err instanceof ChatError) return c.json({ error: err.code, message: err.message }, err.status);
+    if (err instanceof AIError) return aiUnavailable(c, 'chat', err);
+    throw err;
+  }
+});
+
+app.get('/api/chat/:conversationId', async (c) => {
+  const id = c.req.param('conversationId');
+  if (!SAFE_ID_RE.test(id)) return badRequest(c, ['invalid conversation id']);
+  const thread = await getThread(c.env, id);
+  if (!thread) return c.json({ error: 'not_found', message: `conversation ${id} not found` }, 404);
+  return c.json(thread);
+});
+
+app.get('/api/events/:id/summary', async (c) => {
+  const id = c.req.param('id');
+  if (!SAFE_ID_RE.test(id)) return badRequest(c, ['invalid event id']);
+  const event = await getEvent(c.env.DB, id);
+  if (!event) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
+  try {
+    const [scenes, layers, captions] = await Promise.all([
+      listScenesForEvent(c.env.DB, id),
+      listLayersForEvent(c.env.DB, id),
+      listCaptionsForEvent(c.env.DB, id),
+    ]);
+    const result = await cached(c.env.CACHE, summaryCacheKey(event, scenes, captions), SUMMARY_CACHE_TTL, () =>
+      summarizeEvent(c.env, { event, scenes, captions, layers }),
+    );
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof AIError) return aiUnavailable(c, 'summary', err);
+    throw err;
+  }
+});
+
+app.get('/api/events/:id/predict', async (c) => {
+  const id = c.req.param('id');
+  if (!SAFE_ID_RE.test(id)) return badRequest(c, ['invalid event id']);
+  const horizon = parseHorizon(c.req.query('horizonDays'));
+  if (horizon.error) return badRequest(c, [horizon.error]);
+  const event = await getEvent(c.env.DB, id);
+  if (!event) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
+  try {
+    const [scenes, sceneStats, captions] = await Promise.all([
+      listScenesForEvent(c.env.DB, id),
+      listSceneStats(c.env.DB, id),
+      listCaptionsForEvent(c.env.DB, id, 5),
+    ]);
+    const key = `predict:${id}:${horizon.value}:${scenes.length}:${sceneStats.length}`;
+    const result = await cached(c.env.CACHE, key, SUMMARY_CACHE_TTL, () =>
+      forecastEvent(c.env, { event, scenes, sceneStats, captions, horizonDays: horizon.value }),
+    );
+    return c.json(result);
+  } catch (err) {
+    if (err instanceof AIError) return aiUnavailable(c, 'predict', err);
     throw err;
   }
 });

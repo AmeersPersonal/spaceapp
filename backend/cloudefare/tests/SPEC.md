@@ -10,8 +10,10 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `helpers.js` | Fake Workers AI and Vectorize, `testEnv()`, `resetDb()` (clears D1, KV and R2), and seed helpers. |
 | `api.test.js` | Every HTTP route: events, event detail, tiles (304/404/400), ingest create/status/validation/auth, ask (cache/400/404/502), root. |
 | `ingest.test.js` | AOI and ingest validation, `IngestWorkflow` happy path and ASF failure, failure to create the workflow, queue consumer (dispatch, retry backoff, 4xx, manifest→ready+caption, idempotency, invalid manifests), DLQ, cron. |
+| `main.test.js` | `backend/main.js` re-exports the Worker handlers, `IngestWorkflow` and `ReplayRoom`. |
 | `replay.test.js` | `ReplayRoom` over real WebSockets: join state, presence, broadcast, errors, sync/ping, persistence, room isolation, cleanup alarm. |
 | `events.test.js` | USGS parsing/fetching, quake→ingest request, NISAR preview, Google geocoding (incl. key never leaked), event/batch/queue handlers, and the four discovery routes. |
+| `agents.test.js` | Agent routing and models, chat (consults, shared thread, failure and foreign-conversation paths), summary, forecast math, scene stats, and the `/api/agents`, `/api/chat`, summary and predict routes. |
 | `datasets.test.js` | Seven NASA source adapters, query validation, CMR pagination, FIRMS CSV parsing and key handling, GEOS initialization/valid-time filtering, response limits, partial context, generic event integration and API routes. Provider calls are mocked. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
@@ -26,7 +28,7 @@ Run `npm test` from `backend/cloudefare/`. The vitest config forces `EARTHDATA_T
 `../vitest.config.js`, `../wrangler.jsonc` and `../migrations/`.
 
 ## Tests
-On 2026-11-14 all 132 tests passed in 9 files. Known gaps:
+On 2026-11-14 all 141 tests passed in 10 files. Known gaps:
 - The `getQueueResult()` helper does not record `delaySeconds`, so the backoff check spies on `msg.retry`.
 - `mockStepError` makes the Workflows engine log "uncaught exception" lines. This is expected.
 - Real Workers AI, Vectorize and R2 notification delivery are untested.
@@ -35,6 +37,8 @@ On 2026-11-14 all 132 tests passed in 9 files. Known gaps:
 Done.
 
 ## Changelog
+- 2026-11-14 - Added agents.test.js (30 tests) and a stats assertion in ingest.test.js; `resetDb` also clears messages and conversations.
+- 2026-11-14 - Added main.test.js (entry-point re-exports).
 - 2026-11-14 - Removed the unshipped processor bridge test file at user request.
 - 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.
 - 2026-11-14 - Added supplementary NASA adapter and route tests; live checks are separate from automated suites and recorded in ../DATASET_ACCESS.md.
