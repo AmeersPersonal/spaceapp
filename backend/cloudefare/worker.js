@@ -16,7 +16,8 @@ import {
   listScenesForEvent,
   tileKey,
 } from './dataManger.js';
-import { requireIngestKey } from './oAuth.js';
+import { authenticate, mountAuthRoutes } from './auth0.js';
+import { HTTPException } from 'hono/http-exception';
 import { normalizeRoomCode } from './sessionManger.js';
 import { answerQuestion, hashQuestion, validateAskRequest } from './AI/AIManger.js';
 import { AIError } from './AI/AIGateway.js';
@@ -48,10 +49,24 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const app = new Hono();
 
-app.use('/api/*', async (c, next) => cors({ origin: c.env.CORS_ORIGIN || '*' })(c, next));
+app.use('/api/*', async (c, next) => {
+  const origins = (c.env.CORS_ORIGIN || '*').split(',').map(s => s.trim());
+  return cors({
+    origin: origins.includes('*') ? '*' : origins,
+    credentials: !origins.includes('*'),
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type'],
+  })(c, next);
+});
 app.use('/tiles/*', async (c, next) => cors({ origin: c.env.CORS_ORIGIN || '*' })(c, next));
+app.use('*', authenticate);
+mountAuthRoutes(app);
 
 app.onError((err, c) => {
+  if (c.req.path.startsWith('/auth/')) {
+    return c.json({ error: 'authentication_failed', message: 'Login could not be completed; start again at /auth/login' }, 400);
+  }
+  if (err instanceof HTTPException) return c.json({ error: 'unauthorized' }, err.status);
   console.error('unhandled error', err);
   return c.json({ error: 'internal_error', message: 'Unexpected server error' }, 500);
 });
@@ -71,6 +86,10 @@ app.get('/', (c) =>
   c.json({
     service: 'earth-replay-api',
     routes: [
+      'GET /auth/login',
+      'GET /auth/callback',
+      'GET /auth/logout',
+      'GET /api/auth/me',
       'GET /api/events',
       'GET /api/events/:id',
       'GET /tiles/:event/:layer/:date/:z/:x/:y.png',
@@ -159,7 +178,7 @@ function newEventId(name) {
   return `${slug}-${crypto.randomUUID().slice(0, 6)}`;
 }
 
-app.post('/api/ingest', requireIngestKey(), async (c) => {
+app.post('/api/ingest', async (c) => {
   const body = await readJson(c);
   const parsed = parseIngestRequest(body);
   if (parsed.errors) return badRequest(c, parsed.errors);
@@ -221,7 +240,7 @@ app.get('/api/discover/earthquakes', async (c) => {
   }
 });
 
-app.post('/api/events/earthquake', requireIngestKey(), async (c) => {
+app.post('/api/events/earthquake', async (c) => {
   const body = await readJson(c);
   if (typeof body?.usgsId !== 'string') return badRequest(c, ['usgsId is required (e.g. "us6000u18k")']);
   try {

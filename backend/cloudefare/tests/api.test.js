@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createExecutionContext, env, introspectWorkflow, waitOnExecutionContext } from 'cloudflare:test';
 import worker, { parseTileCoords } from '../worker.js';
+import { sessionCookie } from './auth0-helpers.js';
 import { tileKey, upsertLayers } from '../dataManger.js';
 import { fakeAI, resetDb, SAMPLE_EVENT, seedEvent, seedScenes, testEnv } from './helpers.js';
 
 beforeEach(resetDb);
 
 async function call(path, init = {}, e = testEnv()) {
+  if (init.method === 'POST') init = { ...init, headers: { cookie: await sessionCookie(), ...init.headers } };
   const ctx = createExecutionContext();
   const res = await worker.fetch(new Request(`https://api.test${path}`, init), e, ctx);
   await waitOnExecutionContext(ctx);
@@ -124,9 +126,9 @@ describe('POST /api/ingest + GET /api/ingest/:id', () => {
     expect((await post('/api/ingest', '{not json')).status).toBe(400);
   });
 
-  it('requires the ingest key when INGEST_API_KEY is configured', async () => {
+  it('requires a user session even when a legacy ingest key is configured', async () => {
     const e = testEnv({ INGEST_API_KEY: 'secret' });
-    expect((await post('/api/ingest', body, e)).status).toBe(401);
+    expect((await post('/api/ingest', body, e, { cookie: '', authorization: 'Bearer secret' })).status).toBe(401);
   });
 
   it('404s for unknown ingests', async () => {

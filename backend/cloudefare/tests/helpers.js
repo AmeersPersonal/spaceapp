@@ -1,6 +1,7 @@
 // Shared test helpers: fake Workers AI / Vectorize bindings (never call the real services),
 // database reset and seed data.
 import { env } from 'cloudflare:test';
+import { authEnv } from './auth0-helpers.js';
 import { insertEvent, upsertScenes } from '../dataManger.js';
 import fixture from './fixtures/asf-search-nisar.json';
 import { parseSearchResponse } from '../asf.js';
@@ -47,7 +48,7 @@ export function fakeVectors() {
   };
 }
 
-export const testEnv = (overrides = {}) => ({ ...env, AI: fakeAI(), VECTORS: fakeVectors(), ...overrides });
+export const testEnv = (overrides = {}) => ({ ...env, ...authEnv, AI: fakeAI(), VECTORS: fakeVectors(), ...overrides });
 
 export const SAMPLE_EVENT = {
   id: 'baja-test',
