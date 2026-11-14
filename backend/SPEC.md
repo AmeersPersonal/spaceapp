@@ -13,6 +13,7 @@ Scope summary (the source of truth is [CLAUDE.md](CLAUDE.md)):
 | [cloudefare/](cloudefare/SPEC.md) | The Cloudflare Worker: API, Workflow, Queues, Durable Object, AI and D1 schema. |
 | `main.js` | Empty placeholder that predates the Worker and isn't used by it. |
 | `CLAUDE.md` | Project scope and working rules. |
+| `AGENTS.md` | Backend-scoped Codex instructions that refer to CLAUDE.md. |
 | `prompt.md` | A pointer to Cloudflare's agent-setup prompt. |
 | `.gitignore` | Ignores `node_modules`, `.wrangler`, `.dev.vars` and build output. |
 
@@ -53,8 +54,10 @@ Cloudflare account resources (see the setup commands in `cloudefare/SPEC.md`), A
 `cd cloudefare && npm test` (Vitest + `@cloudflare/vitest-plugin`).
 
 ## Status
-The Worker is done and its tests pass. Planned: the Python processor (local or Container), plus production resource IDs and the deploy itself.
+The Worker includes supplementary NASA discovery adapters for FIRMS, GPM, SMAP, HLS, GEOS-FP, NASADEM and GRACE/GRACE-FO. These expose bounded metadata/file references and FIRMS detections, not raster analysis or predictions. Live catalog checks and limitations are in [cloudefare/DATASET_ACCESS.md](cloudefare/DATASET_ACCESS.md). Planned: the Python processor (local or Container), plus production resource IDs and the deploy itself.
 
 ## Changelog
+- 2026-11-14 - Scoped Codex instructions to the backend with AGENTS.md referencing CLAUDE.md.
+- 2026-11-14 - Added regional NASA dataset discovery and partial-result context API; documented live provider checks and remaining processing requirements.
 - 2026-11-14 - Added event discovery (USGS), NISAR preview and geocoding routes to the Worker.
 - 2026-11-14 - Created the root spec, the architecture diagram and .gitignore, and added the cloudefare Worker.

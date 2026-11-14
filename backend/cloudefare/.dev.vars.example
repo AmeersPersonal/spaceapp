@@ -1,6 +1,9 @@
 # Copy to .dev.vars for `wrangler dev`. Never commit .dev.vars.
 # Earthdata Login user token (https://urs.earthdata.nasa.gov -> Generate Token). Optional for search.
 EARTHDATA_TOKEN=
+# Separate free FIRMS key: https://firms.modaps.eosdis.nasa.gov/api/map_key/
+# Needed only for /api/datasets/firms; never substitute an Earthdata token.
+FIRMS_MAP_KEY=
 # When set, POST /api/ingest requires `Authorization: Bearer <INGEST_API_KEY>`.
 INGEST_API_KEY=
 # Shared secret sent to the Python processor as a bearer token.

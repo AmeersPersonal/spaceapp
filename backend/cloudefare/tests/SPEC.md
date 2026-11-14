@@ -12,6 +12,7 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `ingest.test.js` | AOI and ingest validation, `IngestWorkflow` happy path and ASF failure, failure to create the workflow, queue consumer (dispatch, retry backoff, 4xx, manifest→ready+caption, idempotency, invalid manifests), DLQ, cron. |
 | `replay.test.js` | `ReplayRoom` over real WebSockets: join state, presence, broadcast, errors, sync/ping, persistence, room isolation, cleanup alarm. |
 | `events.test.js` | USGS parsing/fetching, quake→ingest request, NISAR preview, Google geocoding (incl. key never leaked), event/batch/queue handlers, and the four discovery routes. |
+| `datasets.test.js` | Seven NASA source adapters, query validation, CMR pagination, FIRMS CSV parsing and key handling, GEOS initialization/valid-time filtering, response limits, partial context, generic event integration and API routes. Provider calls are mocked. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
 | `oAuth.test.js` | JWT expiry, Earthdata headers, the ingest key middleware and constant-time compare. |
@@ -25,7 +26,7 @@ Run `npm test` from `backend/cloudefare/`. The vitest config forces `EARTHDATA_T
 `../vitest.config.js`, `../wrangler.jsonc` and `../migrations/`.
 
 ## Tests
-On 2026-11-14 all 109 tests passed in 8 files. Known gaps:
+On 2026-11-14 all 132 tests passed in 9 files. Known gaps:
 - The `getQueueResult()` helper does not record `delaySeconds`, so the backoff check spies on `msg.retry`.
 - `mockStepError` makes the Workflows engine log "uncaught exception" lines. This is expected.
 - Real Workers AI, Vectorize and R2 notification delivery are untested.
@@ -34,5 +35,7 @@ On 2026-11-14 all 109 tests passed in 8 files. Known gaps:
 Done.
 
 ## Changelog
+- 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.
+- 2026-11-14 - Added supplementary NASA adapter and route tests; live checks are separate from automated suites and recorded in ../DATASET_ACCESS.md.
 - 2026-11-14 - Added events.test.js (35 tests).
 - 2026-11-14 - Initial suites for all Worker features.

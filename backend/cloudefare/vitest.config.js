@@ -14,6 +14,8 @@ export default defineConfig({
           // Force unauthenticated, offline defaults regardless of local .dev.vars.
           EARTHDATA_TOKEN: '',
           INGEST_API_KEY: '',
+          FIRMS_MAP_KEY: '',
+          GOOGLE_MAPS_API_KEY: '',
           PROCESSOR_URL: '',
           ASF_SEARCH_URL: 'https://asf.test/services/search/param',
         },
