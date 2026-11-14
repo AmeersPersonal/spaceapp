@@ -11,6 +11,8 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `dataManger.js` | D1 catalog queries, R2 key layout/manifest reads, KV cache helpers, `DATA_CREDIT`. |
 | `events.js` | USGS, NISAR, geocoding, seven supplementary NASA dataset adapters, and event/batch/queue handlers. |
 | `DATASET_ACCESS.md` | Dataset integration scope, query examples, credentials, live checks and limitations. |
+| `ENDPOINT_REFERENCE.md` | Deployed endpoint inputs, authentication, outputs, observed verification results and operational limits. |
+| `ENDPOINT_CHECKS.json` | Credential-checked production HTTP/WebSocket verification evidence from November 14, 2026. |
 | `asf.js` | ASF DAAC search client and NISAR GeoJSON normalizer (metadata only). |
 | `oAuth.js` | Earthdata token helpers, optional ingest API key middleware, processor auth header. |
 | `sessionManger.js` | Room-code validation and the pure replay-state reducer. |
@@ -101,13 +103,14 @@ npm run db:migrate:remote
 ## Status
 Done: discovery/geocode/preview routes in events.js, every route in the contract, the ingest Workflow, queue/DLQ, cron, the replay DO, AI captions/ask, and KV caching.
 TODO:
-- Create real resource IDs (D1, KV) and the AI Gateway before deploy.
+- Deployed via MCP to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; real D1/KV/account IDs are now in wrangler.jsonc. Gateway, Vectorize event metadata filter and R2 manifest notifications are configured; traces enabled. See ENDPOINT_REFERENCE.md for verification scope.
 - The Python processor (and an optional Container) does not exist yet. Scenes stay `awaiting_processor` until it does.
 - Supplementary NASA discovery is implemented; raster extraction, cross-source alignment, persistence, automatic `manifest.context` enrichment and predictive modeling are not. FIRMS live access requires a map key. JRC Surface Water/WorldPop/WorldCover connectors remain unimplemented.
 - `handleEventQueue` is not bound to a queue yet (events are handled inline by the routes).
 - `compatibility_date` is pinned to 2026-08-15 because the local workerd bundled with the test plugin does not support later dates.
 
 ## Changelog
+- 2026-11-14 - Verified existing production setup; reconciled resource IDs; deployed dataset adapters and local secrets through MCP while preserving Google key; configured Gateway/filter/manifest notifications; checked 34 HTTP requests and three WebSocket interactions and documented every endpoint.
 - 2026-11-14 - Isolated tests from local FIRMS and Google credentials; prevents missing-key cases from accessing live APIs.
 - 2026-11-14 - Added seven NASA dataset adapters, bounded regional queries, combined partial results, API routes, credential template, tests and live access notes.
 - 2026-11-14 - Implemented events.js: USGS earthquake discovery/registration, NISAR preview, Google geocoding, event handlers; four new routes; fixture and 35 tests.

@@ -1,0 +1,2381 @@
+{
+  "baseUrl": "https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev",
+  "records": [
+    {
+      "label": "datasets",
+      "method": "GET",
+      "path": "/api/datasets",
+      "status": 200,
+      "seconds": 0.08,
+      "response": {
+        "sources": [
+          {
+            "id": "firms",
+            "name": "FIRMS / VIIRS NOAA-20 active fires",
+            "kind": "fire_detections",
+            "credit": "NASA LANCE FIRMS; NOAA-20 VIIRS.",
+            "requiredSecret": "FIRMS_MAP_KEY",
+            "notes": "Thermal detections, not confirmed wildfire perimeters or ignition forecasts. Query at most five inclusive days.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "gpm",
+            "name": "GPM IMERG Early daily precipitation",
+            "kind": "granule_catalog",
+            "credit": "NASA GPM / GES DISC.",
+            "shortNames": [
+              "GPM_3IMERGDE"
+            ],
+            "notes": "Daily precipitation estimates, not future rainfall forecasts.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "smap",
+            "name": "SMAP enhanced daily soil moisture",
+            "kind": "granule_catalog",
+            "credit": "NASA SMAP / NSIDC DAAC.",
+            "shortNames": [
+              "SPL3SMP_E"
+            ],
+            "notes": "Soil moisture; apply retrieval flags. Not direct vegetation fuel moisture.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "hls",
+            "name": "Harmonized Landsat Sentinel-2",
+            "kind": "granule_catalog",
+            "credit": "NASA HLS / USGS Landsat / ESA Sentinel-2 / LP DAAC.",
+            "shortNames": [
+              "HLSL30",
+              "HLSS30"
+            ],
+            "notes": "Optical reflectance; clouds and shadows require masking.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "geos",
+            "name": "GEOS-FP surface meteorology forecasts",
+            "kind": "forecast_file_catalog",
+            "credit": "NASA GMAO / NCCS GEOS-FP.",
+            "notes": "Global tavg1_2d_slv_Nx NetCDF files; initialization is runDate (default start) and cycle (default 00). Archive retention is limited. Variable extraction needs a processor.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "terrain",
+            "name": "NASADEM elevation",
+            "kind": "granule_catalog",
+            "credit": "NASA / JPL / USGS / LP DAAC.",
+            "shortNames": [
+              "NASADEM_HGT"
+            ],
+            "static": true,
+            "notes": "Static terrain; requested dates do not filter this source. Coverage is not all latitudes.",
+            "configured": true,
+            "measurementsRetrieved": false
+          },
+          {
+            "id": "grace",
+            "name": "GRACE / GRACE-FO JPL mascon water storage",
+            "kind": "granule_catalog",
+            "credit": "NASA / JPL / PO.DAAC GRACE and GRACE-FO.",
+            "shortNames": [
+              "TELLUS_GRAC-GRFO_MASCON_CRI_GRID_RL06.3_V4"
+            ],
+            "notes": "Regional total water-storage anomalies, not parcel-scale groundwater. A granule can contain a multi-month time series; slice by date in a processor.",
+            "configured": true,
+            "measurementsRetrieved": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "root",
+      "method": "GET",
+      "path": "/",
+      "status": 200,
+      "seconds": 0.09,
+      "response": {
+        "service": "earth-replay-api",
+        "routes": [
+          "GET /api/events",
+          "GET /api/events/:id",
+          "GET /tiles/:event/:layer/:date/:z/:x/:y.png",
+          "GET /api/discover/earthquakes",
+          "POST /api/events/earthquake",
+          "GET /api/nisar/search",
+          "GET /api/geocode",
+          "GET /api/datasets",
+          "GET /api/datasets/context",
+          "GET /api/datasets/:source",
+          "POST /api/ingest",
+          "GET /api/ingest/:id",
+          "POST /api/ask",
+          "WS /api/room/:code"
+        ],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "geocode",
+      "method": "GET",
+      "path": "/api/geocode?q=California",
+      "status": 200,
+      "seconds": 0.24,
+      "response": {
+        "query": "California",
+        "formattedAddress": "California, USA",
+        "location": {
+          "lat": 36.778261,
+          "lng": -119.4179324
+        },
+        "bbox": [
+          -124.482003,
+          32.52950810000001,
+          -114.131211,
+          42.009503
+        ],
+        "aoi": [
+          -121.8066,
+          34.7695,
+          -116.8066,
+          39.7695
+        ],
+        "credit": "Geocoding: Google Maps Platform."
+      }
+    },
+    {
+      "label": "earthquake-discovery",
+      "method": "GET",
+      "path": "/api/discover/earthquakes?days=30&minMagnitude=6",
+      "status": 200,
+      "seconds": 0.34,
+      "response": {
+        "earthquakes": [
+          {
+            "source": "usgs",
+            "sourceId": "us7000tx16",
+            "type": "earthquake",
+            "title": "M 6.4 - 30 km WSW of Lata, Solomon Islands",
+            "place": "30 km WSW of Lata, Solomon Islands",
+            "magnitude": 6.4,
+            "time": "2026-11-09T03:34:59.466Z",
+            "longitude": 165.5616,
+            "latitude": -10.8669,
+            "depthKm": 17,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tx16",
+            "suggested": {
+              "eventId": "usgs-us7000tx16",
+              "name": "M 6.4 - 30 km WSW of Lata, Solomon Islands",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.4 - 30 km WSW of Lata, Solomon Islands (2026-11-09T03:34:59.466Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.1663,
+                -11.2622,
+                165.9569,
+                -10.4716
+              ],
+              "dateRange": {
+                "start": "2026-10-04",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000twg9",
+            "type": "earthquake",
+            "title": "M 6.1 - 144 km SE of Hasaki, Japan",
+            "place": "144 km SE of Hasaki, Japan",
+            "magnitude": 6.1,
+            "time": "2026-11-06T10:39:27.869Z",
+            "longitude": 142.1175,
+            "latitude": 34.9677,
+            "depthKm": 29,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000twg9",
+            "suggested": {
+              "eventId": "usgs-us7000twg9",
+              "name": "M 6.1 - 144 km SE of Hasaki, Japan",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.1 - 144 km SE of Hasaki, Japan (2026-11-06T10:39:27.869Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                141.7876,
+                34.6378,
+                142.4474,
+                35.2976
+              ],
+              "dateRange": {
+                "start": "2026-10-01",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000tw8r",
+            "type": "earthquake",
+            "title": "M 6.1 - Fiji region",
+            "place": "Fiji region",
+            "magnitude": 6.1,
+            "time": "2026-11-05T17:21:45.305Z",
+            "longitude": -178.7145,
+            "latitude": -21.1984,
+            "depthKm": 535,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tw8r",
+            "suggested": {
+              "eventId": "usgs-us7000tw8r",
+              "name": "M 6.1 - Fiji region",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.1 - Fiji region (2026-11-05T17:21:45.305Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                -179.0444,
+                -21.5283,
+                -178.3846,
+                -20.8685
+              ],
+              "dateRange": {
+                "start": "2026-09-30",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000tupl",
+            "type": "earthquake",
+            "title": "M 6.0 - 165 km NW of Port-Olry, Vanuatu",
+            "place": "165 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6,
+            "time": "2026-11-01T11:47:03.778Z",
+            "longitude": 165.8242,
+            "latitude": -14.1689,
+            "depthKm": 10,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tupl",
+            "suggested": {
+              "eventId": "usgs-us7000tupl",
+              "name": "M 6.0 - 165 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.0 - 165 km NW of Port-Olry, Vanuatu (2026-11-01T11:47:03.778Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.5108,
+                -14.4823,
+                166.1376,
+                -13.8555
+              ],
+              "dateRange": {
+                "start": "2026-09-26",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000tuku",
+            "type": "earthquake",
+            "title": "M 6.0 - 58 km SSE of Shima, Japan",
+            "place": "58 km SSE of Shima, Japan",
+            "magnitude": 6,
+            "time": "2026-10-31T22:15:02.901Z",
+            "longitude": 136.9854,
+            "latitude": 33.822,
+            "depthKm": 352.449,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tuku",
+            "suggested": {
+              "eventId": "usgs-us7000tuku",
+              "name": "M 6.0 - 58 km SSE of Shima, Japan",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.0 - 58 km SSE of Shima, Japan (2026-10-31T22:15:02.901Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                136.672,
+                33.5086,
+                137.2988,
+                34.1354
+              ],
+              "dateRange": {
+                "start": "2026-09-25",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000tu4f",
+            "type": "earthquake",
+            "title": "M 6.2 - 43 km ESE of Port-Olry, Vanuatu",
+            "place": "43 km ESE of Port-Olry, Vanuatu",
+            "magnitude": 6.2,
+            "time": "2026-10-29T21:46:44.786Z",
+            "longitude": 167.4523,
+            "latitude": -15.1891,
+            "depthKm": 142.833,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tu4f",
+            "suggested": {
+              "eventId": "usgs-us7000tu4f",
+              "name": "M 6.2 - 43 km ESE of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.2 - 43 km ESE of Port-Olry, Vanuatu (2026-10-29T21:46:44.786Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                167.1035,
+                -15.5379,
+                167.8011,
+                -14.8403
+              ],
+              "dateRange": {
+                "start": "2026-09-23",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000ttxz",
+            "type": "earthquake",
+            "title": "M 6.4 - southeast of Easter Island",
+            "place": "southeast of Easter Island",
+            "magnitude": 6.4,
+            "time": "2026-10-29T07:49:50.096Z",
+            "longitude": -98.0105,
+            "latitude": -36.4649,
+            "depthKm": 10,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttxz",
+            "suggested": {
+              "eventId": "usgs-us7000ttxz",
+              "name": "M 6.4 - southeast of Easter Island",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.4 - southeast of Easter Island (2026-10-29T07:49:50.096Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                -98.4058,
+                -36.8602,
+                -97.6152,
+                -36.0696
+              ],
+              "dateRange": {
+                "start": "2026-09-23",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000ttlm",
+            "type": "earthquake",
+            "title": "M 6.0 - 214 km NW of Port-Olry, Vanuatu",
+            "place": "214 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6,
+            "time": "2026-10-28T02:21:45.806Z",
+            "longitude": 165.446,
+            "latitude": -13.9312,
+            "depthKm": 10,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000ttlm",
+            "suggested": {
+              "eventId": "usgs-us7000ttlm",
+              "name": "M 6.0 - 214 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.0 - 214 km NW of Port-Olry, Vanuatu (2026-10-28T02:21:45.806Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.1326,
+                -14.2446,
+                165.7594,
+                -13.6178
+              ],
+              "dateRange": {
+                "start": "2026-09-22",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u4rf",
+            "type": "earthquake",
+            "title": "M 6.1 - 22 km ENE of Port-Olry, Vanuatu",
+            "place": "22 km ENE of Port-Olry, Vanuatu",
+            "magnitude": 6.1,
+            "time": "2026-10-25T02:24:00.630Z",
+            "longitude": 167.2727,
+            "latitude": -14.9726,
+            "depthKm": 116,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u4rf",
+            "suggested": {
+              "eventId": "usgs-us6000u4rf",
+              "name": "M 6.1 - 22 km ENE of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.1 - 22 km ENE of Port-Olry, Vanuatu (2026-10-25T02:24:00.630Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                166.9428,
+                -15.3025,
+                167.6026,
+                -14.6427
+              ],
+              "dateRange": {
+                "start": "2026-09-19",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us7000tw0y",
+            "type": "earthquake",
+            "title": "M 6.0 - Bonin Islands, Japan region",
+            "place": "Bonin Islands, Japan region",
+            "magnitude": 6,
+            "time": "2026-10-25T02:09:44.027Z",
+            "longitude": 139.8079,
+            "latitude": 27.7325,
+            "depthKm": 472.952,
+            "tsunami": false,
+            "alert": null,
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000tw0y",
+            "suggested": {
+              "eventId": "usgs-us7000tw0y",
+              "name": "M 6.0 - Bonin Islands, Japan region",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.0 - Bonin Islands, Japan region (2026-10-25T02:09:44.027Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                139.4945,
+                27.4191,
+                140.1213,
+                28.0459
+              ],
+              "dateRange": {
+                "start": "2026-09-19",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u4r9",
+            "type": "earthquake",
+            "title": "M 6.5 - Bonin Islands, Japan region",
+            "place": "Bonin Islands, Japan region",
+            "magnitude": 6.5,
+            "time": "2026-10-25T02:09:22.321Z",
+            "longitude": 139.7102,
+            "latitude": 27.8093,
+            "depthKm": 475,
+            "tsunami": true,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u4r9",
+            "suggested": {
+              "eventId": "usgs-us6000u4r9",
+              "name": "M 6.5 - Bonin Islands, Japan region",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.5 - Bonin Islands, Japan region (2026-10-25T02:09:22.321Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                139.2865,
+                27.3856,
+                140.1339,
+                28.233
+              ],
+              "dateRange": {
+                "start": "2026-09-19",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u4jb",
+            "type": "earthquake",
+            "title": "M 6.1 - 163 km NW of Port-Olry, Vanuatu",
+            "place": "163 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6.1,
+            "time": "2026-10-24T02:35:57.344Z",
+            "longitude": 165.8938,
+            "latitude": -14.1107,
+            "depthKm": 10,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u4jb",
+            "suggested": {
+              "eventId": "usgs-us6000u4jb",
+              "name": "M 6.1 - 163 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.1 - 163 km NW of Port-Olry, Vanuatu (2026-10-24T02:35:57.344Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.5639,
+                -14.4406,
+                166.2237,
+                -13.7808
+              ],
+              "dateRange": {
+                "start": "2026-09-18",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u4j2",
+            "type": "earthquake",
+            "title": "M 6.8 - 203 km NW of Port-Olry, Vanuatu",
+            "place": "203 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6.8,
+            "time": "2026-10-24T02:31:28.880Z",
+            "longitude": 165.5629,
+            "latitude": -13.9369,
+            "depthKm": 16,
+            "tsunami": true,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u4j2",
+            "suggested": {
+              "eventId": "usgs-us6000u4j2",
+              "name": "M 6.8 - 203 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.8 - 203 km NW of Port-Olry, Vanuatu (2026-10-24T02:31:28.880Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.0266,
+                -14.4732,
+                166.0992,
+                -13.4006
+              ],
+              "dateRange": {
+                "start": "2026-09-18",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u43g",
+            "type": "earthquake",
+            "title": "M 7.0 - 189 km ENE of Nagqu, China",
+            "place": "189 km ENE of Nagqu, China",
+            "magnitude": 7,
+            "time": "2026-10-22T14:33:40.289Z",
+            "longitude": 93.7837,
+            "latitude": 32.3376,
+            "depthKm": 18,
+            "tsunami": false,
+            "alert": "orange",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u43g",
+            "suggested": {
+              "eventId": "usgs-us6000u43g",
+              "name": "M 7.0 - 189 km ENE of Nagqu, China",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 7.0 - 189 km ENE of Nagqu, China (2026-10-22T14:33:40.289Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                93.1425,
+                31.6964,
+                94.4249,
+                32.9788
+              ],
+              "dateRange": {
+                "start": "2026-09-16",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u3jl",
+            "type": "earthquake",
+            "title": "M 6.3 - 202 km NW of Port-Olry, Vanuatu",
+            "place": "202 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6.3,
+            "time": "2026-10-20T04:20:38.782Z",
+            "longitude": 165.5746,
+            "latitude": -13.9347,
+            "depthKm": 16,
+            "tsunami": true,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u3jl",
+            "suggested": {
+              "eventId": "usgs-us6000u3jl",
+              "name": "M 6.3 - 202 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.3 - 202 km NW of Port-Olry, Vanuatu (2026-10-20T04:20:38.782Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.2041,
+                -14.3052,
+                165.9451,
+                -13.5642
+              ],
+              "dateRange": {
+                "start": "2026-09-14",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u3bc",
+            "type": "earthquake",
+            "title": "M 6.0 - 184 km NW of Port-Olry, Vanuatu",
+            "place": "184 km NW of Port-Olry, Vanuatu",
+            "magnitude": 6,
+            "time": "2026-10-19T07:49:04.693Z",
+            "longitude": 165.7158,
+            "latitude": -14.0203,
+            "depthKm": 10,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u3bc",
+            "suggested": {
+              "eventId": "usgs-us6000u3bc",
+              "name": "M 6.0 - 184 km NW of Port-Olry, Vanuatu",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.0 - 184 km NW of Port-Olry, Vanuatu (2026-10-19T07:49:04.693Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                165.4024,
+                -14.3337,
+                166.0292,
+                -13.7069
+              ],
+              "dateRange": {
+                "start": "2026-09-13",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          },
+          {
+            "source": "usgs",
+            "sourceId": "us6000u2mq",
+            "type": "earthquake",
+            "title": "M 6.9 - 72 km NE of Ozernovskiy, Russia",
+            "place": "72 km NE of Ozernovskiy, Russia",
+            "magnitude": 6.9,
+            "time": "2026-10-16T03:35:32.092Z",
+            "longitude": 157.133,
+            "latitude": 52.0153,
+            "depthKm": 135,
+            "tsunami": false,
+            "alert": "green",
+            "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u2mq",
+            "suggested": {
+              "eventId": "usgs-us6000u2mq",
+              "name": "M 6.9 - 72 km NE of Ozernovskiy, Russia",
+              "type": "earthquake",
+              "products": [
+                "GUNW"
+              ],
+              "description": "M 6.9 - 72 km NE of Ozernovskiy, Russia (2026-10-16T03:35:32.092Z). AOI is a magnitude-scaled box around the USGS epicenter. Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat.",
+              "aoi": [
+                156.5478,
+                51.4301,
+                157.7182,
+                52.6005
+              ],
+              "dateRange": {
+                "start": "2026-09-10",
+                "end": "2026-11-14"
+              }
+            },
+            "registered": false
+          }
+        ],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ],
+          "supplementary": "Earthquake catalog: U.S. Geological Survey (USGS) ANSS ComCat."
+        }
+      }
+    },
+    {
+      "label": "gpm",
+      "method": "GET",
+      "path": "/api/datasets/gpm?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2",
+      "status": 200,
+      "seconds": 0.2,
+      "response": {
+        "source": "gpm",
+        "name": "GPM IMERG Early daily precipitation",
+        "kind": "granule_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "credit": "NASA GPM / GES DISC.",
+        "notes": "Daily precipitation estimates, not future rainfall forecasts.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "G3588785401-GES_DISC",
+            "title": "GPM_3IMERGDE.07:3B-DAY-E.MS.MRG.3IMERG.20250701-S000000-E235959.V07B.nc4",
+            "start": "2025-07-01T00:00:00.000Z",
+            "end": "2025-07-01T23:59:59.999Z",
+            "collectionId": "C2723754850-GES_DISC",
+            "sizeMB": "30.490122795105",
+            "boxes": [
+              "-90 -180 90 180"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGDE.07/2025/07/3B-DAY-E.MS.MRG.3IMERG.20250701-S000000-E235959.V07B.nc4"
+            ]
+          },
+          {
+            "id": "G3589673860-GES_DISC",
+            "title": "GPM_3IMERGDE.07:3B-DAY-E.MS.MRG.3IMERG.20250702-S000000-E235959.V07B.nc4",
+            "start": "2025-07-02T00:00:00.000Z",
+            "end": "2025-07-02T23:59:59.999Z",
+            "collectionId": "C2723754850-GES_DISC",
+            "sizeMB": "31.780101776123",
+            "boxes": [
+              "-90 -180 90 180"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGDE.07/2025/07/3B-DAY-E.MS.MRG.3IMERG.20250702-S000000-E235959.V07B.nc4"
+            ]
+          }
+        ],
+        "total": 5,
+        "nextPage": 2,
+        "truncated": true,
+        "temporalFilterApplied": true,
+        "spatialSubsetApplied": false,
+        "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+        "count": 2
+      }
+    },
+    {
+      "label": "events",
+      "method": "GET",
+      "path": "/api/events",
+      "status": 200,
+      "seconds": 0.54,
+      "response": {
+        "events": [],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "context",
+      "method": "GET",
+      "path": "/api/datasets/context?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2&sources=gpm,smap,hls,terrain,grace",
+      "status": 200,
+      "seconds": 0.22,
+      "response": {
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "gpm",
+            "smap",
+            "hls",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "partial": false,
+        "results": {
+          "gpm": {
+            "ok": true,
+            "result": {
+              "source": "gpm",
+              "name": "GPM IMERG Early daily precipitation",
+              "kind": "granule_catalog",
+              "query": {
+                "bbox": [
+                  -119,
+                  35,
+                  -118,
+                  36
+                ],
+                "start": "2025-07-01",
+                "end": "2025-07-05",
+                "limit": 2,
+                "page": 1,
+                "sources": [
+                  "gpm",
+                  "smap",
+                  "hls",
+                  "terrain",
+                  "grace"
+                ],
+                "runDate": "2025-07-01",
+                "cycle": "00"
+              },
+              "credit": "NASA GPM / GES DISC.",
+              "notes": "Daily precipitation estimates, not future rainfall forecasts.",
+              "measurementsRetrieved": false,
+              "items": [
+                {
+                  "id": "G3588785401-GES_DISC",
+                  "title": "GPM_3IMERGDE.07:3B-DAY-E.MS.MRG.3IMERG.20250701-S000000-E235959.V07B.nc4",
+                  "start": "2025-07-01T00:00:00.000Z",
+                  "end": "2025-07-01T23:59:59.999Z",
+                  "collectionId": "C2723754850-GES_DISC",
+                  "sizeMB": "30.490122795105",
+                  "boxes": [
+                    "-90 -180 90 180"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGDE.07/2025/07/3B-DAY-E.MS.MRG.3IMERG.20250701-S000000-E235959.V07B.nc4"
+                  ]
+                },
+                {
+                  "id": "G3589673860-GES_DISC",
+                  "title": "GPM_3IMERGDE.07:3B-DAY-E.MS.MRG.3IMERG.20250702-S000000-E235959.V07B.nc4",
+                  "start": "2025-07-02T00:00:00.000Z",
+                  "end": "2025-07-02T23:59:59.999Z",
+                  "collectionId": "C2723754850-GES_DISC",
+                  "sizeMB": "31.780101776123",
+                  "boxes": [
+                    "-90 -180 90 180"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.gesdisc.earthdata.nasa.gov/data/GPM_L3/GPM_3IMERGDE.07/2025/07/3B-DAY-E.MS.MRG.3IMERG.20250702-S000000-E235959.V07B.nc4"
+                  ]
+                }
+              ],
+              "total": 5,
+              "nextPage": 2,
+              "truncated": true,
+              "temporalFilterApplied": true,
+              "spatialSubsetApplied": false,
+              "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+              "count": 2
+            }
+          },
+          "smap": {
+            "ok": true,
+            "result": {
+              "source": "smap",
+              "name": "SMAP enhanced daily soil moisture",
+              "kind": "granule_catalog",
+              "query": {
+                "bbox": [
+                  -119,
+                  35,
+                  -118,
+                  36
+                ],
+                "start": "2025-07-01",
+                "end": "2025-07-05",
+                "limit": 2,
+                "page": 1,
+                "sources": [
+                  "gpm",
+                  "smap",
+                  "hls",
+                  "terrain",
+                  "grace"
+                ],
+                "runDate": "2025-07-01",
+                "cycle": "00"
+              },
+              "credit": "NASA SMAP / NSIDC DAAC.",
+              "notes": "Soil moisture; apply retrieval flags. Not direct vegetation fuel moisture.",
+              "measurementsRetrieved": false,
+              "items": [
+                {
+                  "id": "G3589003945-NSIDC_CPRD",
+                  "title": "SMAP_L3_SM_P_E_20250701_R19240_001.h5",
+                  "start": "2025-07-01T00:00:00.000Z",
+                  "end": "2025-07-01T23:59:59.999Z",
+                  "collectionId": "C2938664763-NSIDC_CPRD",
+                  "sizeMB": "655.1109342575073",
+                  "boxes": [
+                    "-85.0445023 -180 85.0445023 180"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/SMAP/SPL3SMP_E/006/2025/07/01/SMAP_L3_SM_P_E_20250701_R19240_001.h5"
+                  ]
+                },
+                {
+                  "id": "G3596281780-NSIDC_CPRD",
+                  "title": "SMAP_L3_SM_P_E_20250702_R19240_002.h5",
+                  "start": "2025-07-02T00:00:00.000Z",
+                  "end": "2025-07-02T23:59:59.999Z",
+                  "collectionId": "C2938664763-NSIDC_CPRD",
+                  "sizeMB": "667.0576601028442",
+                  "boxes": [
+                    "-85.0445023 -180 85.0445023 180"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/SMAP/SPL3SMP_E/006/2025/07/02/SMAP_L3_SM_P_E_20250702_R19240_002.h5"
+                  ]
+                }
+              ],
+              "total": 5,
+              "nextPage": 2,
+              "truncated": true,
+              "temporalFilterApplied": true,
+              "spatialSubsetApplied": false,
+              "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+              "count": 2
+            }
+          },
+          "hls": {
+            "ok": true,
+            "result": {
+              "source": "hls",
+              "name": "Harmonized Landsat Sentinel-2",
+              "kind": "granule_catalog",
+              "query": {
+                "bbox": [
+                  -119,
+                  35,
+                  -118,
+                  36
+                ],
+                "start": "2025-07-01",
+                "end": "2025-07-05",
+                "limit": 2,
+                "page": 1,
+                "sources": [
+                  "gpm",
+                  "smap",
+                  "hls",
+                  "terrain",
+                  "grace"
+                ],
+                "runDate": "2025-07-01",
+                "cycle": "00"
+              },
+              "credit": "NASA HLS / USGS Landsat / ESA Sentinel-2 / LP DAAC.",
+              "notes": "Optical reflectance; clouds and shadows require masking.",
+              "measurementsRetrieved": false,
+              "items": [
+                {
+                  "id": "G3589498632-LPCLOUD",
+                  "title": "HLS.L30.T11SLV.2025182T182741.v2.0",
+                  "start": "2025-07-01T18:27:41.748Z",
+                  "end": "2025-07-01T18:28:05.643Z",
+                  "collectionId": "C2021957657-LPCLOUD",
+                  "sizeMB": null,
+                  "boxes": [],
+                  "polygons": [
+                    [
+                      "35.135002 -119.19517 35.1508431 -117.9902792 36.140702 -118.0025713 36.1291489 -118.9421966 35.203392 -119.1970097 35.135002 -119.19517"
+                    ]
+                  ],
+                  "downloads": [
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B02.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B11.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B06.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.SZA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B07.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B01.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.VAA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.Fmask.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.VZA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B03.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.SAA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B05.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B09.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B04.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B10.tif"
+                  ]
+                },
+                {
+                  "id": "G3589495883-LPCLOUD",
+                  "title": "HLS.L30.T11SMU.2025182T182741.v2.0",
+                  "start": "2025-07-01T18:27:41.748Z",
+                  "end": "2025-07-01T18:28:05.643Z",
+                  "collectionId": "C2021957657-LPCLOUD",
+                  "sizeMB": null,
+                  "boxes": [],
+                  "polygons": [
+                    [
+                      "34.2481073 -118.0864404 34.2523292 -117.381106 35.2430467 -117.0866115 35.2380835 -118.0994804 34.2481073 -118.0864404"
+                    ]
+                  ],
+                  "downloads": [
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B05.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.VAA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B09.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B07.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B03.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B10.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.SZA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B01.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B04.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B11.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B02.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.VZA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.SAA.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B06.tif",
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.Fmask.tif"
+                  ]
+                }
+              ],
+              "total": 10,
+              "nextPage": 2,
+              "truncated": true,
+              "temporalFilterApplied": true,
+              "spatialSubsetApplied": false,
+              "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+              "count": 2
+            }
+          },
+          "terrain": {
+            "ok": true,
+            "result": {
+              "source": "terrain",
+              "name": "NASADEM elevation",
+              "kind": "granule_catalog",
+              "query": {
+                "bbox": [
+                  -119,
+                  35,
+                  -118,
+                  36
+                ],
+                "start": "2025-07-01",
+                "end": "2025-07-05",
+                "limit": 2,
+                "page": 1,
+                "sources": [
+                  "gpm",
+                  "smap",
+                  "hls",
+                  "terrain",
+                  "grace"
+                ],
+                "runDate": "2025-07-01",
+                "cycle": "00"
+              },
+              "credit": "NASA / JPL / USGS / LP DAAC.",
+              "notes": "Static terrain; requested dates do not filter this source. Coverage is not all latitudes.",
+              "measurementsRetrieved": false,
+              "items": [
+                {
+                  "id": "G2816845610-LPCLOUD",
+                  "title": "NASADEM_HGT_n34w118",
+                  "start": "2000-02-11T00:00:00.000Z",
+                  "end": "2000-02-21T23:59:59.000Z",
+                  "collectionId": "C2763264762-LPCLOUD",
+                  "sizeMB": "10.6602",
+                  "boxes": [
+                    "33.9998611 -118.0001389 35.0001389 -116.9998611"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_n34w118/NASADEM_HGT_n34w118.zip"
+                  ]
+                },
+                {
+                  "id": "G2816847214-LPCLOUD",
+                  "title": "NASADEM_HGT_n34w119",
+                  "start": "2000-02-11T00:00:00.000Z",
+                  "end": "2000-02-21T23:59:59.000Z",
+                  "collectionId": "C2763264762-LPCLOUD",
+                  "sizeMB": "12.373",
+                  "boxes": [
+                    "33.9998611 -119.0001389 35.0001389 -117.9998611"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_n34w119/NASADEM_HGT_n34w119.zip"
+                  ]
+                }
+              ],
+              "total": 9,
+              "nextPage": 2,
+              "truncated": true,
+              "temporalFilterApplied": false,
+              "spatialSubsetApplied": false,
+              "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+              "count": 2
+            }
+          },
+          "grace": {
+            "ok": true,
+            "result": {
+              "source": "grace",
+              "name": "GRACE / GRACE-FO JPL mascon water storage",
+              "kind": "granule_catalog",
+              "query": {
+                "bbox": [
+                  -119,
+                  35,
+                  -118,
+                  36
+                ],
+                "start": "2025-07-01",
+                "end": "2025-07-05",
+                "limit": 2,
+                "page": 1,
+                "sources": [
+                  "gpm",
+                  "smap",
+                  "hls",
+                  "terrain",
+                  "grace"
+                ],
+                "runDate": "2025-07-01",
+                "cycle": "00"
+              },
+              "credit": "NASA / JPL / PO.DAAC GRACE and GRACE-FO.",
+              "notes": "Regional total water-storage anomalies, not parcel-scale groundwater. A granule can contain a multi-month time series; slice by date in a processor.",
+              "measurementsRetrieved": false,
+              "items": [
+                {
+                  "id": "G4407658620-POCLOUD",
+                  "title": "GRCTellus.JPL.200204_202609.GLO.RL06.3M.MSCNv04CRI",
+                  "start": "2002-04-16T00:00:00.000Z",
+                  "end": "2026-09-16T23:59:59.000Z",
+                  "collectionId": "C3195527175-POCLOUD",
+                  "sizeMB": "44.217355728149414",
+                  "boxes": [
+                    "-89.75 0.25 89.75 180",
+                    "-89.75 -180 89.75 -0.25"
+                  ],
+                  "polygons": [],
+                  "downloads": [
+                    "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/TELLUS_GRAC-GRFO_MASCON_CRI_GRID_RL06.3_V4/GRCTellus.JPL.200204_202609.GLO.RL06.3M.MSCNv04CRI.nc"
+                  ]
+                }
+              ],
+              "total": 1,
+              "nextPage": null,
+              "truncated": false,
+              "temporalFilterApplied": true,
+              "spatialSubsetApplied": false,
+              "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+              "count": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "label": "smap",
+      "method": "GET",
+      "path": "/api/datasets/smap?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2",
+      "status": 200,
+      "seconds": 0.31,
+      "response": {
+        "source": "smap",
+        "name": "SMAP enhanced daily soil moisture",
+        "kind": "granule_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "credit": "NASA SMAP / NSIDC DAAC.",
+        "notes": "Soil moisture; apply retrieval flags. Not direct vegetation fuel moisture.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "G3589003945-NSIDC_CPRD",
+            "title": "SMAP_L3_SM_P_E_20250701_R19240_001.h5",
+            "start": "2025-07-01T00:00:00.000Z",
+            "end": "2025-07-01T23:59:59.999Z",
+            "collectionId": "C2938664763-NSIDC_CPRD",
+            "sizeMB": "655.1109342575073",
+            "boxes": [
+              "-85.0445023 -180 85.0445023 180"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/SMAP/SPL3SMP_E/006/2025/07/01/SMAP_L3_SM_P_E_20250701_R19240_001.h5"
+            ]
+          },
+          {
+            "id": "G3596281780-NSIDC_CPRD",
+            "title": "SMAP_L3_SM_P_E_20250702_R19240_002.h5",
+            "start": "2025-07-02T00:00:00.000Z",
+            "end": "2025-07-02T23:59:59.999Z",
+            "collectionId": "C2938664763-NSIDC_CPRD",
+            "sizeMB": "667.0576601028442",
+            "boxes": [
+              "-85.0445023 -180 85.0445023 180"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.nsidc.earthdatacloud.nasa.gov/nsidc-cumulus-prod-protected/SMAP/SPL3SMP_E/006/2025/07/02/SMAP_L3_SM_P_E_20250702_R19240_002.h5"
+            ]
+          }
+        ],
+        "total": 5,
+        "nextPage": 2,
+        "truncated": true,
+        "temporalFilterApplied": true,
+        "spatialSubsetApplied": false,
+        "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+        "count": 2
+      }
+    },
+    {
+      "label": "hls",
+      "method": "GET",
+      "path": "/api/datasets/hls?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2",
+      "status": 200,
+      "seconds": 0.33,
+      "response": {
+        "source": "hls",
+        "name": "Harmonized Landsat Sentinel-2",
+        "kind": "granule_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "credit": "NASA HLS / USGS Landsat / ESA Sentinel-2 / LP DAAC.",
+        "notes": "Optical reflectance; clouds and shadows require masking.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "G3589498632-LPCLOUD",
+            "title": "HLS.L30.T11SLV.2025182T182741.v2.0",
+            "start": "2025-07-01T18:27:41.748Z",
+            "end": "2025-07-01T18:28:05.643Z",
+            "collectionId": "C2021957657-LPCLOUD",
+            "sizeMB": null,
+            "boxes": [],
+            "polygons": [
+              [
+                "35.135002 -119.19517 35.1508431 -117.9902792 36.140702 -118.0025713 36.1291489 -118.9421966 35.203392 -119.1970097 35.135002 -119.19517"
+              ]
+            ],
+            "downloads": [
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B02.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B11.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B06.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.SZA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B07.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B01.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.VAA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.Fmask.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.VZA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B03.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.SAA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B05.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B09.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B04.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SLV.2025182T182741.v2.0/HLS.L30.T11SLV.2025182T182741.v2.0.B10.tif"
+            ]
+          },
+          {
+            "id": "G3589495883-LPCLOUD",
+            "title": "HLS.L30.T11SMU.2025182T182741.v2.0",
+            "start": "2025-07-01T18:27:41.748Z",
+            "end": "2025-07-01T18:28:05.643Z",
+            "collectionId": "C2021957657-LPCLOUD",
+            "sizeMB": null,
+            "boxes": [],
+            "polygons": [
+              [
+                "34.2481073 -118.0864404 34.2523292 -117.381106 35.2430467 -117.0866115 35.2380835 -118.0994804 34.2481073 -118.0864404"
+              ]
+            ],
+            "downloads": [
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B05.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.VAA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B09.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B07.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B03.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B10.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.SZA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B01.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B04.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B11.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B02.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.VZA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.SAA.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.B06.tif",
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/HLSL30.020/HLS.L30.T11SMU.2025182T182741.v2.0/HLS.L30.T11SMU.2025182T182741.v2.0.Fmask.tif"
+            ]
+          }
+        ],
+        "total": 10,
+        "nextPage": 2,
+        "truncated": true,
+        "temporalFilterApplied": true,
+        "spatialSubsetApplied": false,
+        "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+        "count": 2
+      }
+    },
+    {
+      "label": "terrain",
+      "method": "GET",
+      "path": "/api/datasets/terrain?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2",
+      "status": 200,
+      "seconds": 0.4,
+      "response": {
+        "source": "terrain",
+        "name": "NASADEM elevation",
+        "kind": "granule_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "credit": "NASA / JPL / USGS / LP DAAC.",
+        "notes": "Static terrain; requested dates do not filter this source. Coverage is not all latitudes.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "G2816845610-LPCLOUD",
+            "title": "NASADEM_HGT_n34w118",
+            "start": "2000-02-11T00:00:00.000Z",
+            "end": "2000-02-21T23:59:59.000Z",
+            "collectionId": "C2763264762-LPCLOUD",
+            "sizeMB": "10.6602",
+            "boxes": [
+              "33.9998611 -118.0001389 35.0001389 -116.9998611"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_n34w118/NASADEM_HGT_n34w118.zip"
+            ]
+          },
+          {
+            "id": "G2816847214-LPCLOUD",
+            "title": "NASADEM_HGT_n34w119",
+            "start": "2000-02-11T00:00:00.000Z",
+            "end": "2000-02-21T23:59:59.000Z",
+            "collectionId": "C2763264762-LPCLOUD",
+            "sizeMB": "12.373",
+            "boxes": [
+              "33.9998611 -119.0001389 35.0001389 -117.9998611"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/NASADEM_HGT.001/NASADEM_HGT_n34w119/NASADEM_HGT_n34w119.zip"
+            ]
+          }
+        ],
+        "total": 9,
+        "nextPage": 2,
+        "truncated": true,
+        "temporalFilterApplied": false,
+        "spatialSubsetApplied": false,
+        "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+        "count": 2
+      }
+    },
+    {
+      "label": "nisar-search",
+      "method": "GET",
+      "path": "/api/nisar/search?bbox=-119,35,-118,36&start=2026-10-21&end=2026-11-14&products=GCOV",
+      "status": 200,
+      "seconds": 0.95,
+      "response": {
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "dateRange": {
+            "start": "2026-10-21",
+            "end": "2026-11-14"
+          },
+          "products": [
+            "GCOV"
+          ]
+        },
+        "count": 4,
+        "byProduct": {
+          "GCOV": 4
+        },
+        "dates": [
+          "2026-10-25",
+          "2026-10-26"
+        ],
+        "polarizations": [
+          "HH",
+          "HV"
+        ],
+        "scenes": [
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:00Z",
+            "acquiredEnd": "2026-10-25T02:40:35Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "DESCENDING",
+            "pathNumber": 13,
+            "frameNumber": 70,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001_LATLON.png"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:34Z",
+            "acquiredEnd": "2026-10-25T02:41:11Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "DESCENDING",
+            "pathNumber": 13,
+            "frameNumber": 71,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001_LATLON.png"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:23Z",
+            "acquiredEnd": "2026-10-26T13:08:58Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "ASCENDING",
+            "pathNumber": 34,
+            "frameNumber": 19,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001_LATLON.png"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:57Z",
+            "acquiredEnd": "2026-10-26T13:09:31Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "ASCENDING",
+            "pathNumber": 34,
+            "frameNumber": 20,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001_LATLON.png"
+          }
+        ],
+        "truncated": false,
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "grace",
+      "method": "GET",
+      "path": "/api/datasets/grace?bbox=-119,35,-118,36&start=2025-07-01&end=2025-07-05&limit=2",
+      "status": 200,
+      "seconds": 0.24,
+      "response": {
+        "source": "grace",
+        "name": "GRACE / GRACE-FO JPL mascon water storage",
+        "kind": "granule_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2025-07-01",
+          "end": "2025-07-05",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2025-07-01",
+          "cycle": "00"
+        },
+        "credit": "NASA / JPL / PO.DAAC GRACE and GRACE-FO.",
+        "notes": "Regional total water-storage anomalies, not parcel-scale groundwater. A granule can contain a multi-month time series; slice by date in a processor.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "G4407658620-POCLOUD",
+            "title": "GRCTellus.JPL.200204_202609.GLO.RL06.3M.MSCNv04CRI",
+            "start": "2002-04-16T00:00:00.000Z",
+            "end": "2026-09-16T23:59:59.000Z",
+            "collectionId": "C3195527175-POCLOUD",
+            "sizeMB": "44.217355728149414",
+            "boxes": [
+              "-89.75 0.25 89.75 180",
+              "-89.75 -180 89.75 -0.25"
+            ],
+            "polygons": [],
+            "downloads": [
+              "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/TELLUS_GRAC-GRFO_MASCON_CRI_GRID_RL06.3_V4/GRCTellus.JPL.200204_202609.GLO.RL06.3M.MSCNv04CRI.nc"
+            ]
+          }
+        ],
+        "total": 1,
+        "nextPage": null,
+        "truncated": false,
+        "temporalFilterApplied": true,
+        "spatialSubsetApplied": false,
+        "access": "Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.",
+        "count": 1
+      }
+    },
+    {
+      "label": "firms",
+      "method": "GET",
+      "path": "/api/datasets/firms?bbox=-119,35,-118,36&start=2026-11-13&end=2026-11-14&limit=2",
+      "status": 200,
+      "seconds": 0.23,
+      "response": {
+        "source": "firms",
+        "name": "FIRMS / VIIRS NOAA-20 active fires",
+        "kind": "fire_detections",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2026-11-13",
+          "end": "2026-11-14",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2026-11-13",
+          "cycle": "00"
+        },
+        "credit": "NASA LANCE FIRMS; NOAA-20 VIIRS.",
+        "notes": "Thermal detections, not confirmed wildfire perimeters or ignition forecasts. Query at most five inclusive days.",
+        "measurementsRetrieved": true,
+        "items": [],
+        "total": 0,
+        "nextPage": null,
+        "truncated": false,
+        "spatialSubsetApplied": true,
+        "count": 0
+      }
+    },
+    {
+      "label": "geos",
+      "method": "GET",
+      "path": "/api/datasets/geos?bbox=-119,35,-118,36&start=2026-11-13&end=2026-11-14&limit=2",
+      "status": 200,
+      "seconds": 0.44,
+      "response": {
+        "source": "geos",
+        "name": "GEOS-FP surface meteorology forecasts",
+        "kind": "forecast_file_catalog",
+        "query": {
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "start": "2026-11-13",
+          "end": "2026-11-14",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2026-11-13",
+          "cycle": "00"
+        },
+        "credit": "NASA GMAO / NCCS GEOS-FP.",
+        "notes": "Global tavg1_2d_slv_Nx NetCDF files; initialization is runDate (default start) and cycle (default 00). Archive retention is limited. Variable extraction needs a processor.",
+        "measurementsRetrieved": false,
+        "items": [
+          {
+            "id": "GEOS.fp.fcst.tavg1_2d_slv_Nx.20261113_00+20261113_0030.V01.nc4",
+            "url": "https://portal.nccs.nasa.gov/datashare/gmao/geos-fp/forecast/Y2026/M11/D13/H00/GEOS.fp.fcst.tavg1_2d_slv_Nx.20261113_00%2B20261113_0030.V01.nc4",
+            "initializedAt": "2026-11-13T00:00:00Z",
+            "validAt": "2026-11-13T00:30:00Z",
+            "coverage": "global"
+          },
+          {
+            "id": "GEOS.fp.fcst.tavg1_2d_slv_Nx.20261113_00+20261113_0130.V01.nc4",
+            "url": "https://portal.nccs.nasa.gov/datashare/gmao/geos-fp/forecast/Y2026/M11/D13/H00/GEOS.fp.fcst.tavg1_2d_slv_Nx.20261113_00%2B20261113_0130.V01.nc4",
+            "initializedAt": "2026-11-13T00:00:00Z",
+            "validAt": "2026-11-13T01:30:00Z",
+            "coverage": "global"
+          }
+        ],
+        "total": 48,
+        "nextPage": 2,
+        "truncated": true,
+        "spatialSubsetApplied": false,
+        "access": "Global NetCDF file references only; bbox is not applied to forecast grids. Crop and extract weather variables in the processor. Forecasts are model outputs, not observations.",
+        "count": 2
+      }
+    },
+    {
+      "label": "ingest-unauthorized",
+      "method": "POST",
+      "path": "/api/ingest",
+      "status": 401,
+      "seconds": 0.07,
+      "response": {
+        "error": "unauthorized",
+        "message": "Missing or invalid ingest API key"
+      }
+    },
+    {
+      "label": "ingest-invalid",
+      "method": "POST",
+      "path": "/api/ingest",
+      "status": 400,
+      "seconds": 0.05,
+      "response": {
+        "error": "invalid_request",
+        "details": [
+          "aoi must be [west, south, east, north] or a GeoJSON Polygon",
+          "dateRange.start and dateRange.end must be YYYY-MM-DD dates"
+        ]
+      }
+    },
+    {
+      "label": "ingest-create",
+      "method": "POST",
+      "path": "/api/ingest",
+      "status": 202,
+      "seconds": 0.88,
+      "response": {
+        "id": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+        "eventId": "verification-nisar-20261114",
+        "status": "queued",
+        "dateRange": {
+          "start": "2026-10-25",
+          "end": "2026-10-26"
+        },
+        "statusUrl": "/api/ingest/ing_23e02aca-90df-483c-b008-3a91f2d28d69"
+      }
+    },
+    {
+      "label": "event-detail",
+      "method": "GET",
+      "path": "/api/events/verification-nisar-20261114",
+      "status": 200,
+      "seconds": 0.44,
+      "response": {
+        "event": {
+          "id": "verification-nisar-20261114",
+          "name": "Deployment verification: California NISAR coverage",
+          "type": "other",
+          "description": "Real NISAR metadata used for deployment verification. No change or hazard classification claimed.",
+          "aoiWkt": "POLYGON((-119 35,-118 35,-118 36,-119 36,-119 35))",
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "products": [
+            "GCOV"
+          ],
+          "startDate": null,
+          "endDate": null,
+          "watch": false,
+          "lastPolledAt": null,
+          "createdAt": "2026-11-14T18:19:08.783Z"
+        },
+        "scenes": [],
+        "dates": [],
+        "polarizations": [],
+        "layers": [],
+        "captions": [],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "tiles-missing",
+      "method": "GET",
+      "path": "/tiles/verification-nisar-20261114/hh-backscatter/2026-10-25/0/0/0.png",
+      "status": 404,
+      "seconds": 0.1,
+      "response": {
+        "text": ""
+      }
+    },
+    {
+      "label": "ask",
+      "method": "POST",
+      "path": "/api/ask",
+      "status": 200,
+      "seconds": 3.19,
+      "response": {
+        "eventId": "verification-nisar-20261114",
+        "question": "What measured surface change has been established for this event?",
+        "answer": "The context does not contain information about established surface change for this event. It only lists available products (GCOV, GUNW, GOFF, SME2) that could be used to measure surface changes, such as surface roughness, displacement, and soil moisture, but does not provide actual measurements or results.",
+        "sources": [],
+        "sceneCount": 0,
+        "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        "aiGenerated": true,
+        "disclaimer": "AI-generated hypothesis based on NISAR-derived statistics and catalog metadata. Not a verified interpretation.",
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "room-upgrade-required",
+      "method": "GET",
+      "path": "/api/room/VERIFY26",
+      "status": 426,
+      "seconds": 0.04,
+      "response": {
+        "error": "upgrade_required",
+        "message": "Connect with a WebSocket"
+      }
+    },
+    {
+      "label": "invalid-query",
+      "method": "GET",
+      "path": "/api/datasets/gpm?bbox=bad",
+      "status": 400,
+      "seconds": 0.07,
+      "response": {
+        "error": "invalid_request",
+        "details": [
+          "bbox must be \"west,south,east,north\"",
+          "start and end must be YYYY-MM-DD dates",
+          "runDate must be a YYYY-MM-DD date"
+        ]
+      }
+    },
+    {
+      "label": "missing-event",
+      "method": "GET",
+      "path": "/api/events/nonexistent-verification-event",
+      "status": 404,
+      "seconds": 0.17,
+      "response": {
+        "error": "not_found",
+        "message": "event nonexistent-verification-event not found"
+      }
+    },
+    {
+      "label": "missing-ingest",
+      "method": "GET",
+      "path": "/api/ingest/nonexistent-verification-ingest",
+      "status": 404,
+      "seconds": 0.06,
+      "response": {
+        "error": "not_found",
+        "message": "ingest nonexistent-verification-ingest not found"
+      }
+    },
+    {
+      "label": "earthquake-register",
+      "method": "POST",
+      "path": "/api/events/earthquake",
+      "status": 202,
+      "seconds": 0.69,
+      "response": {
+        "eventId": "usgs-us7000tx16",
+        "created": true,
+        "ingest": {
+          "id": "ing_2adbd19d-52fd-488d-afaf-a64a198e43d2",
+          "eventId": "usgs-us7000tx16",
+          "status": "queued",
+          "dateRange": {
+            "start": "2026-10-04",
+            "end": "2026-11-14"
+          },
+          "statusUrl": "/api/ingest/ing_2adbd19d-52fd-488d-afaf-a64a198e43d2"
+        }
+      }
+    },
+    {
+      "label": "ingest-status",
+      "method": "GET",
+      "path": "/api/ingest/ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+      "status": 200,
+      "seconds": 0.38,
+      "response": {
+        "id": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+        "eventId": "verification-nisar-20261114",
+        "dateRange": {
+          "start": "2026-10-25",
+          "end": "2026-10-26"
+        },
+        "trigger": "api",
+        "status": "searching",
+        "sceneCount": 0,
+        "error": null,
+        "createdAt": "2026-11-14T18:19:08.828Z",
+        "updatedAt": "2026-11-14T18:19:14.321Z",
+        "workflow": {
+          "status": "running",
+          "error": null
+        },
+        "progress": {
+          "total": 0
+        },
+        "scenes": [],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "events-after",
+      "method": "GET",
+      "path": "/api/events",
+      "status": 200,
+      "seconds": 0.04,
+      "response": {
+        "events": [],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "ingest-final-status",
+      "method": "GET",
+      "path": "/api/ingest/ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+      "status": 200,
+      "response": {
+        "id": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+        "eventId": "verification-nisar-20261114",
+        "dateRange": {
+          "start": "2026-10-25",
+          "end": "2026-10-26"
+        },
+        "trigger": "api",
+        "status": "dispatched",
+        "sceneCount": 4,
+        "error": null,
+        "createdAt": "2026-11-14T18:19:08.828Z",
+        "updatedAt": "2026-11-14T18:19:15.833Z",
+        "workflow": {
+          "status": "complete",
+          "error": null
+        },
+        "progress": {
+          "total": 4,
+          "awaiting_processor": 4
+        },
+        "scenes": [
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:00Z",
+            "status": "awaiting_processor",
+            "error": null,
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001.h5"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:34Z",
+            "status": "awaiting_processor",
+            "error": null,
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001.h5"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:23Z",
+            "status": "awaiting_processor",
+            "error": null,
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001.h5"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:57Z",
+            "status": "awaiting_processor",
+            "error": null,
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001.h5"
+          }
+        ],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "event-detail-after",
+      "method": "GET",
+      "path": "/api/events/verification-nisar-20261114",
+      "status": 200,
+      "response": {
+        "event": {
+          "id": "verification-nisar-20261114",
+          "name": "Deployment verification: California NISAR coverage",
+          "type": "other",
+          "description": "Real NISAR metadata used for deployment verification. No change or hazard classification claimed.",
+          "aoiWkt": "POLYGON((-119 35,-118 35,-118 36,-119 36,-119 35))",
+          "bbox": [
+            -119,
+            35,
+            -118,
+            36
+          ],
+          "products": [
+            "GCOV"
+          ],
+          "startDate": "2026-10-25",
+          "endDate": "2026-10-26",
+          "watch": false,
+          "lastPolledAt": null,
+          "createdAt": "2026-11-14T18:19:08.783Z"
+        },
+        "scenes": [
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001",
+            "eventId": "verification-nisar-20261114",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:00Z",
+            "acquiredEnd": "2026-10-25T02:40:35Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "DESCENDING",
+            "pathNumber": 13,
+            "frameNumber": 70,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_070_4005_DHDH_A_20261025T024000_20261025T024035_P05036_N_F_J_001_LATLON.png",
+            "status": "awaiting_processor",
+            "error": null,
+            "ingestId": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+            "source": "ASF DAAC"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001",
+            "eventId": "verification-nisar-20261114",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-25T02:40:34Z",
+            "acquiredEnd": "2026-10-25T02:41:11Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "DESCENDING",
+            "pathNumber": 13,
+            "frameNumber": 71,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_013_D_071_4005_DHDH_A_20261025T024034_20261025T024111_P05036_N_F_J_001_LATLON.png",
+            "status": "awaiting_processor",
+            "error": null,
+            "ingestId": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+            "source": "ASF DAAC"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001",
+            "eventId": "verification-nisar-20261114",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:23Z",
+            "acquiredEnd": "2026-10-26T13:08:58Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "ASCENDING",
+            "pathNumber": 34,
+            "frameNumber": 19,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_019_4005_DHDH_A_20261026T130823_20261026T130858_P05036_N_F_J_001_LATLON.png",
+            "status": "awaiting_processor",
+            "error": null,
+            "ingestId": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+            "source": "ASF DAAC"
+          },
+          {
+            "id": "NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001",
+            "eventId": "verification-nisar-20261114",
+            "product": "GCOV",
+            "acquiredAt": "2026-10-26T13:08:57Z",
+            "acquiredEnd": "2026-10-26T13:09:31Z",
+            "polarizations": [
+              "HH",
+              "HV"
+            ],
+            "flightDirection": "ASCENDING",
+            "pathNumber": 34,
+            "frameNumber": 20,
+            "productionConfig": "PR",
+            "url": "https://nisar.asf.earthdatacloud.nasa.gov/NISAR/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001.h5",
+            "browseUrl": "https://nisar.asf.earthdatacloud.nasa.gov/BROWSE/NISAR_L2_GCOV_V1/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001/NISAR_L2_PR_GCOV_034_034_A_020_4005_DHDH_A_20261026T130857_20261026T130931_P05036_N_F_J_001_LATLON.png",
+            "status": "awaiting_processor",
+            "error": null,
+            "ingestId": "ing_23e02aca-90df-483c-b008-3a91f2d28d69",
+            "source": "ASF DAAC"
+          }
+        ],
+        "dates": [
+          "2026-10-25",
+          "2026-10-26"
+        ],
+        "polarizations": [
+          "HH",
+          "HV"
+        ],
+        "layers": [],
+        "captions": [],
+        "credit": {
+          "data": "NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by the Alaska Satellite Facility (ASF DAAC).",
+          "links": [
+            "https://nisar.jpl.nasa.gov",
+            "https://asf.alaska.edu"
+          ]
+        }
+      }
+    },
+    {
+      "label": "firms-additional-region",
+      "method": "GET",
+      "path": "/api/datasets/firms?bbox=-48,-15,-45,-12&start=2026-11-13&end=2026-11-14&limit=2",
+      "status": 200,
+      "response": {
+        "source": "firms",
+        "name": "FIRMS / VIIRS NOAA-20 active fires",
+        "kind": "fire_detections",
+        "query": {
+          "bbox": [
+            -48,
+            -15,
+            -45,
+            -12
+          ],
+          "start": "2026-11-13",
+          "end": "2026-11-14",
+          "limit": 2,
+          "page": 1,
+          "sources": [
+            "firms",
+            "gpm",
+            "smap",
+            "hls",
+            "geos",
+            "terrain",
+            "grace"
+          ],
+          "runDate": "2026-11-13",
+          "cycle": "00"
+        },
+        "credit": "NASA LANCE FIRMS; NOAA-20 VIIRS.",
+        "notes": "Thermal detections, not confirmed wildfire perimeters or ignition forecasts. Query at most five inclusive days.",
+        "measurementsRetrieved": true,
+        "items": [],
+        "total": 0,
+        "nextPage": null,
+        "truncated": false,
+        "spatialSubsetApplied": true,
+        "count": 0
+      }
+    },
+    {
+      "label": "earthquake-register-unauthorized",
+      "method": "POST",
+      "path": "/api/events/earthquake",
+      "status": 401,
+      "response": {
+        "error": "unauthorized",
+        "message": "Missing or invalid ingest API key"
+      }
+    },
+    {
+      "label": "ask-invalid",
+      "method": "POST",
+      "path": "/api/ask",
+      "status": 400,
+      "response": {
+        "error": "invalid_request",
+        "details": [
+          "eventId is required",
+          "question must be at least 3 characters"
+        ]
+      }
+    },
+    {
+      "label": "room-invalid",
+      "method": "GET",
+      "path": "/api/room/ab",
+      "status": 400,
+      "response": {
+        "error": "invalid_request",
+        "details": [
+          "room code must be 4-12 letters or digits"
+        ]
+      }
+    },
+    {
+      "label": "cors-preflight",
+      "method": "OPTIONS",
+      "path": "/api/datasets",
+      "status": 204,
+      "response": {
+        "body": ""
+      }
+    }
+  ],
+  "websocketChecks": [
+    {
+      "check": "websocket-upgrade-and-state",
+      "message": {
+        "type": "state",
+        "state": {
+          "eventId": null,
+          "layer": null,
+          "frame": 0,
+          "playing": false,
+          "speed": 1,
+          "updatedAt": 1794680385678,
+          "version": 0
+        },
+        "serverTime": 1794680385678
+      }
+    },
+    {
+      "check": "cross-client-broadcast",
+      "message": {
+        "type": "state",
+        "state": {
+          "eventId": "verification-nisar-20261114",
+          "layer": "hh-backscatter",
+          "frame": 0,
+          "playing": false,
+          "speed": 1,
+          "updatedAt": 1794680385807,
+          "version": 1
+        },
+        "serverTime": 1794680385807
+      }
+    },
+    {
+      "check": "ping",
+      "message": {
+        "type": "pong"
+      }
+    }
+  ],
+  "checkedAt": "2026-11-14"
+}
