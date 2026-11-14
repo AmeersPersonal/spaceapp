@@ -1,7 +1,7 @@
 // AI features: scene captions that hypothesize the physical driver of observed change,
 // Vectorize-backed semantic search over captions, and grounded answers for POST /api/ask.
 
-import { embed, generateText } from './AIGateway.js';
+import { AIError, embed, generateText } from './AIGateway.js';
 import { DATA_CREDIT, getCaptionsByIds, insertCaption, listCaptionsForEvent } from '../dataManger.js';
 
 export const AI_DISCLAIMER =
@@ -77,8 +77,9 @@ export async function searchCaptions(env, eventId, query, topK = 5) {
   return matches.filter((m) => byId.has(m.id)).map((m) => ({ ...byId.get(m.id), score: m.score }));
 }
 
-export function buildAnswerMessages(event, scenes, captions, question) {
-  const context = {
+/** Grounding facts shared by ask, chat, summary and forecast prompts. */
+export function buildEventContext(event, scenes, captions) {
+  return {
     event: { id: event.id, name: event.name, type: event.type, bbox: event.bbox, startDate: event.startDate, endDate: event.endDate },
     scenes: scenes.slice(0, 30).map((s) => ({
       id: s.id,
@@ -91,6 +92,21 @@ export function buildAnswerMessages(event, scenes, captions, question) {
     sceneCaptions: captions.map((c) => ({ sceneId: c.sceneId, caption: c.text })),
     productNotes: PRODUCT_NOTES,
   };
+}
+
+/** Captions most relevant to a query (Vectorize), falling back to the latest ones. */
+export async function retrieveCaptions(env, eventId, query, topK = 5) {
+  let captions = [];
+  try {
+    captions = await searchCaptions(env, eventId, query, topK);
+  } catch (err) {
+    if (!(err instanceof AIError)) throw err; // search is best-effort: fall back to recency
+  }
+  return captions.length ? captions : listCaptionsForEvent(env.DB, eventId, topK);
+}
+
+export function buildAnswerMessages(event, scenes, captions, question) {
+  const context = buildEventContext(event, scenes, captions);
   return [
     {
       role: 'system',
@@ -104,8 +120,7 @@ export function buildAnswerMessages(event, scenes, captions, question) {
 
 /** Answer a question about an event, grounded in its scenes and the most relevant captions. */
 export async function answerQuestion(env, { event, scenes, question }) {
-  let captions = await searchCaptions(env, event.id, question);
-  if (!captions.length) captions = await listCaptionsForEvent(env.DB, event.id, 5);
+  const captions = await retrieveCaptions(env, event.id, question);
   const answer = await generateText(env, buildAnswerMessages(event, scenes, captions, question), { maxTokens: 350, cacheTtl: 3600 });
   return {
     eventId: event.id,

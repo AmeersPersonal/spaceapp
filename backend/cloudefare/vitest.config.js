@@ -17,6 +17,7 @@ export default defineConfig({
           FIRMS_MAP_KEY: '',
           GOOGLE_MAPS_API_KEY: '',
           PROCESSOR_URL: '',
+          GOOGLE_MAPS_API_KEY: '',
           ASF_SEARCH_URL: 'https://asf.test/services/search/param',
         },
       },
