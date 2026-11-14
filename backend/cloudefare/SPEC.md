@@ -11,10 +11,11 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `dataManger.js` | D1 catalog queries, R2 key layout/manifest reads, KV cache helpers, `DATA_CREDIT`. |
 | `events.js` | Event discovery and external fetchers: USGS earthquakes, NISAR scene preview, Google geocoding, plus generic `handleEvent`/batch/queue handlers. |
 | `asf.js` | ASF DAAC search client and NISAR GeoJSON normalizer (metadata only). |
+| `cloudflare.md` | Step-by-step setup and deploy guide: account login, resource creation, secrets, deploy, troubleshooting. |
 | `oAuth.js` | Earthdata token helpers, optional ingest API key middleware, processor auth header. |
 | `sessionManger.js` | Room-code validation and the pure replay-state reducer. |
 | `replay.js` | `ReplayRoom` Durable Object (hibernating WebSockets). |
-| `AI/` | Workers AI via AI Gateway: captions, Vectorize search, `/api/ask` answers. See [AI/SPEC.md](AI/SPEC.md). |
+| `AI/` | Workers AI via AI Gateway: captions, Vectorize search, `/api/ask`, the multi-agent chat, summaries and predictions. See [AI/SPEC.md](AI/SPEC.md). |
 | `migrations/` | D1 schema. See [migrations/SPEC.md](migrations/SPEC.md). |
 | `tests/` | Vitest suites + fixtures. See [tests/SPEC.md](tests/SPEC.md). |
 | `wrangler.jsonc` | Bindings, vars, queues, workflow, DO, cron. |
@@ -41,6 +42,11 @@ All JSON responses from catalog/ingest routes include `credit` (NASA/JPL-Caltech
 | `POST /api/ingest` | Body `{aoi, dateRange:{start,end}, eventId?, name?, type?, products?, description?, watch?}`. `aoi` is `[w,s,e,n]` or a GeoJSON Polygon of at most 5°×5°. Dates are `YYYY-MM-DD`, span ≤ 366 days, end on/after 2025-07-30 and start no later than today. `type` is one of earthquake, flood, wetland, forest, crop, glacier, soil_moisture, other. `products` is a subset of GCOV/GUNW/GOFF/SME2, defaulting by type (earthquake→GUNW, glacier→GOFF, soil_moisture→SME2, else GCOV). Returns 202 `{id, eventId, status:'queued', dateRange, statusUrl}`. If `INGEST_API_KEY` is set, a missing or wrong key returns 401. |
 | `GET /api/ingest/:id` | `{id, eventId, dateRange, trigger, status, sceneCount, error, workflow:{status,error}, progress:{total, <sceneStatus>:n}, scenes[{id,product,acquiredAt,status,error,url}], credit}`. `status` is queued, searching, dispatched, complete or failed. It reads complete once all scenes are ready or failed. |
 | `POST /api/ask` | Body `{eventId, question}` (question 3–500 chars). Returns `{answer, sources[{captionId,sceneId,score}], sceneCount, model, aiGenerated:true, disclaimer, credit}`. Cached in KV for 1 h. Errors: 400, 404, or 502 `ai_unavailable`. |
+| `GET /api/agents` | `{agents:[{id,name,expertise,eventTypes,model}]}`. |
+| `POST /api/chat` | Body `{eventId, message (2-1000 chars), conversationId?, agent?}`. Routes to a specialist (or the requested `agent`), who may consult up to 2 others. Returns `{conversationId, eventId, reply:{agent,name,model,text}, consults:[{agent,name,model,text}], consultsFailed[], sources[], aiGenerated:true, disclaimer, credit}`. Pass `conversationId` back to continue the shared thread. Errors: 400, 404 (event or conversation, including one from another event), 502 `ai_unavailable`. |
+| `GET /api/chat/:conversationId` | `{conversationId, eventId, createdAt, updatedAt, messages:[{id,role,agent,model,content,createdAt}], credit}` (role is user, consult or assistant). 404 if unknown. |
+| `GET /api/events/:id/summary` | `{eventId, summary, agent, name, model, coverage:{sceneCount,byStatus,byProduct,firstDate,lastDate,layers}, captionCount, aiGenerated:true, disclaimer, credit}`. Cached in KV for 1 h, keyed on scene/ready/caption counts. 404 or 502. |
+| `GET /api/events/:id/predict` | Query `horizonDays` (1-90, default 30). Returns `{eventId, modeled:true, horizonDays, status:'ok' or 'insufficient_data', observations:{count,firstDate,lastDate,cadenceDays,nextExpectedAcquisition}, metrics:[{key,product,metric,n,slopePerDay,r2,latest,projected:{date,value,low,high},direction,confidence}], skipped[], narrative, agent, model, aiGenerated, method, disclaimer, credit}`. A projection, never an observation. 400, 404 or 502. |
 | `WS /api/room/:code` | `code` is 4–12 alphanumerics, case-insensitive. A request without `Upgrade: websocket` gets 426. |
 
 ### Replay WebSocket protocol
@@ -67,7 +73,7 @@ Params `{ingestId, eventId, wkt, start, end, products, maxScenes}`. Steps: `mark
 `DB` (D1 `earth-replay`), `TILES` (R2 `earth-replay-tiles`), `CACHE` (KV), `INGEST_QUEUE` (Queue), `INGEST_WORKFLOW` (Workflow), `REPLAY_ROOM` (DO, SQLite), `AI` (Workers AI), `VECTORS` (Vectorize `earth-replay-captions`, 768-dim cosine).
 
 ### Env vars / secrets
-Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`.
+Vars: `AGENT_MODEL_<ID>` (optional per-agent model override, e.g. `AGENT_MODEL_FORECASTER`), `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`.
 
 ### Setup commands (one-time)
 ```sh
@@ -89,18 +95,22 @@ npm run db:migrate:remote
 - npm: `hono`; dev: `wrangler`, `vitest` 4.1, `@cloudflare/vitest-plugin`.
 
 ## Tests
-`npm test` (from this folder) runs Vitest in workerd with local D1/R2/KV/Queues/DO/Workflows. Workers AI and Vectorize are replaced by in-memory fakes, and ASF uses a recorded fixture, so tests make no external calls. There are 109 tests across 8 files; see [tests/SPEC.md](tests/SPEC.md). Gaps: Google responses are shaped from its documentation (no key to record one); real Vectorize/AI behavior is untested, as is the R2 notification wiring itself (only the message handler is tested).
+`npm test` (from this folder) runs Vitest in workerd with local D1/R2/KV/Queues/DO/Workflows. Workers AI and Vectorize are replaced by in-memory fakes, and ASF uses a recorded fixture, so tests make no external calls. There are 141 tests across 10 files; see [tests/SPEC.md](tests/SPEC.md). Gaps: Google responses are shaped from its documentation (no key to record one); real Vectorize/AI behavior is untested, as is the R2 notification wiring itself (only the message handler is tested).
 
 ## Status
 Done: discovery/geocode/preview routes in events.js, every route in the contract, the ingest Workflow, queue/DLQ, cron, the replay DO, AI captions/ask, and KV caching.
 TODO:
-- Create real resource IDs (D1, KV) and the AI Gateway before deploy.
+- D1 and KV now have real IDs in wrangler.jsonc. Still to do before deploy: confirm the R2 bucket, queues and Vectorize index exist, apply the D1 migration remotely (`npm run db:migrate:remote`), and create the AI Gateway.
 - The Python processor (and an optional Container) does not exist yet. Scenes stay `awaiting_processor` until it does.
 - Only USGS is integrated as a supplementary source. FIRMS, JRC Surface Water, etc. are only passed through `manifest.context`.
 - `handleEventQueue` is not bound to a queue yet (events are handled inline by the routes).
 - `compatibility_date` is pinned to 2026-08-15 because the local workerd bundled with the test plugin does not support later dates.
 
 ## Changelog
+- 2026-11-14 - Added the multi-agent chat, per-event summary and predictive analysis (routes, AI/ modules, migration 0002); the queue consumer now stores `manifest.stats` on scenes; vitest config blanks `GOOGLE_MAPS_API_KEY`.
+- 2026-11-14 - Added cloudflare.md, the setup and deploy guide. Docs only, no code change.
+- 2026-11-14 - Moved to a new Cloudflare account: wrangler.jsonc now has one `DB` (D1 `febe4577…`), `CACHE` (KV `8a8fcf0b…`) and `VECTORS` binding; removed the duplicate `earth_replay`/`VECTORIZE` bindings Wrangler had added and the `remote: true` flags. Config only, no code change.
+- 2026-11-14 - Replaced the placeholder KV namespace id in wrangler.jsonc with the real `CACHE` namespace id so `wrangler deploy` stops failing with error 10041. Config only, no code change.
 - 2026-11-14 - Implemented events.js: USGS earthquake discovery/registration, NISAR preview, Google geocoding, event handlers; four new routes; fixture and 35 tests.
 - 2026-11-14 - Added gitignored `.env` for local secrets and ignored `.env*` in backend/.gitignore.
 - 2026-11-14 - Initial Worker: Hono API, IngestWorkflow, ingest queue + DLQ, cron poller, ReplayRoom DO, AI captions/ask with Vectorize, D1 schema, tests. Validated ASF NISAR field names against live search responses.

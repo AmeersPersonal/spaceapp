@@ -27,9 +27,10 @@ export async function runModel(env, model, inputs, options) {
 }
 
 /** Text generation; returns the response string. */
-export async function generateText(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl } = {}) {
-  const out = await runModel(env, env.LLM_MODEL, { messages, max_tokens: maxTokens, temperature }, { cacheTtl });
-  const text = typeof out === 'string' ? out : out?.response;
+export async function generateText(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl, model } = {}) {
+  const out = await runModel(env, model || env.LLM_MODEL, { messages, max_tokens: maxTokens, temperature }, { cacheTtl });
+  // Most Workers AI models return {response}; newer ones use OpenAI-style choices.
+  const text = typeof out === 'string' ? out : (out?.response ?? out?.choices?.[0]?.message?.content);
   if (typeof text !== 'string' || !text.trim()) throw new AIError('Model returned an empty response');
   return text.trim();
 }
