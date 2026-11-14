@@ -2,6 +2,8 @@
 
 Source update: Auth0 login/logout/profile and session-protected ingest/AI writes are now implemented locally; see [AUTH0.md](AUTH0.md). They have not been deployed. The authentication descriptions and verification evidence below describe the earlier production deployment, not the current source contract.
 
+Persistent owner-scoped chat endpoints and optional `/api/ask` conversation storage are also implemented locally, with migration 0002 applied locally only; see [CHAT_STORAGE.md](CHAT_STORAGE.md).
+
 Verified November 14, 2026. Base URL:
 
 `https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`

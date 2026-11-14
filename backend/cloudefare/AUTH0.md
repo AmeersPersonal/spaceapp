@@ -11,9 +11,9 @@ The Worker uses `@auth0/auth0-hono` 1.2.6 and its authorization-code flow with P
 | `GET /auth/logout` | Clear the local session and redirect through Auth0 logout, then back to the API root. |
 | `GET /api/auth/me` | `{user:{sub,name?,email?,picture?}}`; 401 when logged out. Never returns tokens. |
 
-`POST /api/ingest`, `POST /api/events/earthquake`, and `POST /api/ask` require a user session and `Content-Type: application/json`. A legacy `INGEST_API_KEY` no longer grants access to these endpoints or adds an extra requirement for signed-in users. Public catalog, discovery, tiles, ingest status and replay routes remain public. Login does not establish per-user resource ownership or administrator permissions: every signed-in user can use those three write operations.
+`POST /api/ingest`, `POST /api/events/earthquake`, and `POST /api/ask` require a user session and `Content-Type: application/json`. A legacy `INGEST_API_KEY` no longer grants access to these endpoints or adds an extra requirement for signed-in users. Public catalog, discovery, tiles, ingest status and replay routes remain public. Every signed-in user can use those three write operations. Persistent chats enforce per-user ownership; administrator permissions and ownership of catalog/ingest resources are not implemented.
 
-Authentication routes, profile responses and protected writes use `Cache-Control: no-store`. Missing Auth0 configuration returns 503 on these routes; missing or invalid sessions return 401 on API operations. Invalid callbacks return a generic 400. Cross-site write origins return 403 and non-JSON writes return 415.
+All `/api/chats` routes require authentication and owner-scoped access, including reads; see [CHAT_STORAGE.md](CHAT_STORAGE.md). Authentication routes, profile responses and protected operations use `Cache-Control: no-store`. Missing Auth0 configuration returns 503 on these routes; missing or invalid sessions return 401 on API operations. Invalid callbacks return a generic 400. Cross-site write origins return 403 and non-JSON writes return 415.
 
 ## Local setup
 

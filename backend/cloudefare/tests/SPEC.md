@@ -9,6 +9,7 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `setup.js` | Applies the D1 migrations before the suites run. |
 | `auth0.test.js` | Auth0 login/callback/logout/profile, signed-token callback exchange, real encrypted cookies, missing/forged/expired sessions, fail-closed configuration, CORS, CSRF and protected write routes. |
 | `auth0-helpers.js` | Test-only Auth0 configuration and encrypted session-cookie fixtures using the official server SDK. |
+| `chats.test.js` | Persistent chats/messages, new login retrieval, owner isolation, bounds, pagination, role spoofing, authenticated AI history/cache bypass, failure and atomic rollback. |
 | `helpers.js` | Fake Workers AI and Vectorize, `testEnv()`, `resetDb()` (clears D1, KV and R2), and seed helpers. |
 | `api.test.js` | Every HTTP route: events, event detail, tiles (304/404/400), ingest create/status/validation/auth, ask (cache/400/404/502), root. |
 | `ingest.test.js` | AOI and ingest validation, `IngestWorkflow` happy path and ASF failure, failure to create the workflow, queue consumer (dispatch, retry backoff, 4xx, manifest→ready+caption, idempotency, invalid manifests), DLQ, cron. |
@@ -28,7 +29,7 @@ Run `npm test` from `backend/cloudefare/`. The vitest config blanks local servic
 `../vitest.config.js`, `../wrangler.jsonc` and `../migrations/`.
 
 ## Tests
-On 2026-11-14 all 146 tests passed in 10 files. Known gaps:
+The suite includes 157 tests in 11 files, including chat persistence and HTTP session policy. Known gaps:
 - The `getQueueResult()` helper does not record `delaySeconds`, so the backoff check spies on `msg.retry`.
 - `mockStepError` makes the Workflows engine log "uncaught exception" lines. This is expected.
 - Real Workers AI, Vectorize and R2 notification delivery are untested.
@@ -37,6 +38,7 @@ On 2026-11-14 all 146 tests passed in 10 files. Known gaps:
 Done.
 
 ## Changelog
+- 2026-11-14 - Added ten persistent-chat tests plus session access-policy coverage; reset chat tables before parent events to preserve foreign keys.
 - 2026-11-14 - Added 14 Auth0 security/integration tests and authenticated existing write-route tests without adding a production bypass.
 - 2026-11-14 - Removed the unshipped processor bridge test file at user request.
 - 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.

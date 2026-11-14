@@ -1,5 +1,15 @@
-// Replay session logic: room-code validation and the pure playback-state reducer used by the
-// ReplayRoom Durable Object (replay.js). Kept free of Cloudflare APIs so it is unit-testable.
+// User-session access policy and replay-room state. Auth0 verifies identity; D1 persists
+// owned chats across login sessions. Replay playback state remains independent.
+
+/** Pure route policy shared by authentication and tests. Unknown chat subroutes stay private. */
+export function sessionAccess(method, path) {
+  const chat = path === '/api/chats' || path.startsWith('/api/chats/');
+  const write = !['GET', 'HEAD', 'OPTIONS'].includes(method);
+  return {
+    required: chat || (method === 'POST' && ['/api/ingest', '/api/events/earthquake', '/api/ask'].includes(path)),
+    write,
+  };
+}
 
 export const ROOM_CODE_RE = /^[A-Z0-9]{4,12}$/;
 export const MAX_MESSAGE_BYTES = 4096;
