@@ -15,6 +15,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `oAuth.js` | Earthdata token helpers, optional ingest API key middleware, processor auth header. |
 | `sessionManger.js` | Room-code validation and the pure replay-state reducer. |
 | `replay.js` | `ReplayRoom` Durable Object (hibernating WebSockets). |
+| `bench/` | Developer-only benchmark of Gemini and Groq models on the real AI prompts. See [bench/SPEC.md](bench/SPEC.md). |
 | `AI/` | Workers AI via AI Gateway: captions, Vectorize search, `/api/ask`, the multi-agent chat, summaries and predictions. See [AI/SPEC.md](AI/SPEC.md). |
 | `migrations/` | D1 schema. See [migrations/SPEC.md](migrations/SPEC.md). |
 | `tests/` | Vitest suites + fixtures. See [tests/SPEC.md](tests/SPEC.md). |
@@ -107,6 +108,8 @@ TODO:
 - `compatibility_date` is pinned to 2026-08-15 because the local workerd bundled with the test plugin does not support later dates.
 
 ## Changelog
+- 2026-11-14 - Per-use-case AI model routing with Groq and Gemini through AI Gateway (AI/AIGateway.js, wrangler.jsonc MODEL_* vars, cloudflare.md gateway guide, tests/routing.test.js).
+- 2026-11-14 - Added bench/ (manual Gemini and Groq model benchmark; no Worker changes).
 - 2026-11-14 - Added the multi-agent chat, per-event summary and predictive analysis (routes, AI/ modules, migration 0002); the queue consumer now stores `manifest.stats` on scenes; vitest config blanks `GOOGLE_MAPS_API_KEY`.
 - 2026-11-14 - Added cloudflare.md, the setup and deploy guide. Docs only, no code change.
 - 2026-11-14 - Moved to a new Cloudflare account: wrangler.jsonc now has one `DB` (D1 `febe4577…`), `CACHE` (KV `8a8fcf0b…`) and `VECTORS` binding; removed the duplicate `earth_replay`/`VECTORIZE` bindings Wrangler had added and the `remote: true` flags. Config only, no code change.

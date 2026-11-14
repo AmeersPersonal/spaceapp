@@ -80,6 +80,28 @@ Leave the all-zeros placeholder IDs out of any deploy. They cause error 10041 (K
 
 In the dashboard go to **AI → AI Gateway → Create Gateway** and name it `earth-replay`. The name must match `AI_GATEWAY_ID` in `wrangler.jsonc`.
 
+### Using the gateway for outside models (Groq, Gemini)
+
+The Worker calls Workers AI models through the `AI` binding and every other model through the gateway's OpenAI-compatible endpoint, `https://gateway.ai.cloudflare.com/v1/<ACCOUNT_ID>/earth-replay/compat/chat/completions`. The gateway adds logging, caching and rate limits to both.
+
+1. Create the gateway (above). Under **Settings** you can turn on **Authenticated Gateway**. If you do, create a token (**AI Gateway → your gateway → Create token**) and set it as `CF_AIG_TOKEN`; the Worker then sends it as `cf-aig-authorization`. An unauthenticated call to an authenticated gateway returns `401 {"code":2009}`.
+2. Set the secrets (step 7): `CF_ACCOUNT_ID` (from `npx wrangler whoami`), `GROQ_API_KEY` (console.groq.com) and `GEMINI_API_KEY`. The Gemini key must be a Google AI Studio key (starts with `AIza`) from aistudio.google.com. A Vertex AI key (starts with `AQ.`) does not work with the `google-ai-studio` provider.
+3. Pick a model per use case in `wrangler.jsonc`. Model ids are `@cf/...` for Workers AI or `<provider>/<model>` for outside models (`groq/qwen/qwen3.8-27b`, `google-ai-studio/gemini-3.1-flash-lite`). Each use case takes a comma-separated list: the first is tried first and the next ones are used if it errors or returns nothing; `MODEL_FALLBACK` and `LLM_MODEL` (Workers AI) are always the last resort.
+
+| Use case | Setting | Default chain | Why |
+|---|---|---|---|
+| Scene captions | `MODEL_CAPTION` | Groq qwen3.8-27b | Short, runs once per scene at ingest, fastest model |
+| Grounded answers (`/api/ask`) | `MODEL_ASK` | Llama 3.3 (Workers AI), then Gemini 3.1 Flash-Lite | Must refuse when the data has no answer; answers are cached for an hour |
+| Chat reply | `MODEL_CHAT` | Gemini 3.1 Flash-Lite, then Groq qwen3.8-27b | Cites scene IDs, needs quality and enough rate limit for several users |
+| Specialist consults | `MODEL_CONSULT` | Groq qwen3.8-27b | 80-word notes in parallel, so speed matters most |
+| Event summary | `MODEL_SUMMARY` | Gemini 3.1 Flash-Lite | Five labelled sections; passed 10/10 in the bench |
+| Forecast narrative | `MODEL_FORECAST` | Gemini 3.1 Flash-Lite, then Groq qwen3.8-27b | Only narrates computed numbers |
+
+A single agent can still be pinned with `AGENT_MODEL_<ID>` (for example `AGENT_MODEL_HYDROLOGIST`); that wins over the use-case setting. Set a use case to an empty string to go back to `LLM_MODEL`.
+4. Check it works: `npx wrangler tail` while calling `POST /api/chat`, then open **AI Gateway → earth-replay → Logs**. Each call shows its provider, model, tokens and latency. The `model` field in API responses and stored captions/messages is the model that actually answered, so a fallback shows up there.
+
+Embeddings (`bge-base-en-v1.5`) stay on Workers AI because the Vectorize index is 768-dimensional.
+
 ## 6. Apply the database schema
 
 ```
@@ -110,6 +132,10 @@ npx wrangler secret put EARTHDATA_TOKEN
 npx wrangler secret put INGEST_API_KEY
 npx wrangler secret put PROCESSOR_TOKEN
 npx wrangler secret put GOOGLE_MAPS_API_KEY
+npx wrangler secret put CF_ACCOUNT_ID
+npx wrangler secret put GROQ_API_KEY
+npx wrangler secret put GEMINI_API_KEY
+npx wrangler secret put CF_AIG_TOKEN   # only if the gateway is authenticated
 ```
 
 If the worker doesn't exist yet, Wrangler may offer to create it. You can also deploy first (step 8) and set secrets afterwards.

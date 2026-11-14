@@ -1,8 +1,8 @@
 // Multi-agent chatbot. One conversation per event thread; every specialist reads and writes the
 // same thread, and the answering agent can consult colleagues whose expertise the question touches.
 
-import { AGENT_IDS, agentModel, getAgent, routeMessage, systemPromptFor } from './agents.js';
-import { generateText } from './AIGateway.js';
+import { AGENT_IDS, agentModel, agentPinned, getAgent, routeMessage, systemPromptFor } from './agents.js';
+import { generateTextDetailed } from './AIGateway.js';
 import { AI_DISCLAIMER, buildEventContext, retrieveCaptions } from './AIManger.js';
 import { DATA_CREDIT, addMessages, createConversation, getConversation, listMessages } from '../dataManger.js';
 
@@ -97,18 +97,24 @@ export async function runChat(env, { event, scenes, message, conversationId, req
   const context = buildEventContext(event, scenes, captions);
 
   const settled = await Promise.allSettled(
-    consults.map((a) => generateText(env, consultMessages(a, context, history, message), { model: agentModel(env, a), maxTokens: 160 })),
+    consults.map((a) =>
+      generateTextDetailed(env, consultMessages(a, context, history, message), { model: agentModel(env, a), pinned: agentPinned(env, a), useCase: 'consult', maxTokens: 160 }),
+    ),
   );
   const notes = [];
   const consultsFailed = [];
   settled.forEach((r, i) => {
     const a = consults[i];
-    if (r.status === 'fulfilled') notes.push({ agent: a.id, name: a.name, model: agentModel(env, a), text: r.value });
+    if (r.status === 'fulfilled') notes.push({ agent: a.id, name: a.name, model: r.value.model, text: r.value.text });
     else consultsFailed.push(a.id);
   });
 
-  const model = agentModel(env, primary);
-  const text = await generateText(env, primaryMessages(primary, context, history, message, notes), { model, maxTokens: 350 });
+  const { text, model } = await generateTextDetailed(env, primaryMessages(primary, context, history, message, notes), {
+    model: agentModel(env, primary),
+    pinned: agentPinned(env, primary),
+    useCase: 'chat',
+    maxTokens: 350,
+  });
 
   const id = conversationId ?? `conv_${crypto.randomUUID()}`;
   if (!conversationId) await createConversation(env.DB, { id, eventId: event.id });

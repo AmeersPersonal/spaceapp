@@ -1,7 +1,7 @@
 // AI features: scene captions that hypothesize the physical driver of observed change,
 // Vectorize-backed semantic search over captions, and grounded answers for POST /api/ask.
 
-import { AIError, embed, generateText } from './AIGateway.js';
+import { AIError, embed, generateTextDetailed } from './AIGateway.js';
 import { DATA_CREDIT, getCaptionsByIds, insertCaption, listCaptionsForEvent } from '../dataManger.js';
 
 export const AI_DISCLAIMER =
@@ -56,8 +56,8 @@ export function buildCaptionMessages(event, scene, manifest) {
  * Returns the stored caption.
  */
 export async function captionScene(env, { event, scene, manifest }) {
-  const text = await generateText(env, buildCaptionMessages(event, scene, manifest), { maxTokens: 220 });
-  const caption = { id: `cap_${crypto.randomUUID()}`, eventId: event.id, sceneId: scene.id, text, model: env.LLM_MODEL };
+  const { text, model } = await generateTextDetailed(env, buildCaptionMessages(event, scene, manifest), { maxTokens: 220, useCase: 'caption' });
+  const caption = { id: `cap_${crypto.randomUUID()}`, eventId: event.id, sceneId: scene.id, text, model };
   const [vector] = await embed(env, [text]);
   await insertCaption(env.DB, caption);
   await env.VECTORS.upsert([
@@ -121,14 +121,14 @@ export function buildAnswerMessages(event, scenes, captions, question) {
 /** Answer a question about an event, grounded in its scenes and the most relevant captions. */
 export async function answerQuestion(env, { event, scenes, question }) {
   const captions = await retrieveCaptions(env, event.id, question);
-  const answer = await generateText(env, buildAnswerMessages(event, scenes, captions, question), { maxTokens: 350, cacheTtl: 3600 });
+  const { text: answer, model } = await generateTextDetailed(env, buildAnswerMessages(event, scenes, captions, question), { maxTokens: 350, cacheTtl: 3600, useCase: 'ask' });
   return {
     eventId: event.id,
     question,
     answer,
     sources: captions.map((c) => ({ captionId: c.id, sceneId: c.sceneId, score: c.score ?? null })),
     sceneCount: scenes.length,
-    model: env.LLM_MODEL,
+    model,
     aiGenerated: true,
     disclaimer: AI_DISCLAIMER,
     credit: DATA_CREDIT,

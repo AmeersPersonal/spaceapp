@@ -14,6 +14,7 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `replay.test.js` | `ReplayRoom` over real WebSockets: join state, presence, broadcast, errors, sync/ping, persistence, room isolation, cleanup alarm. |
 | `events.test.js` | USGS parsing/fetching, quake→ingest request, NISAR preview, Google geocoding (incl. key never leaked), event/batch/queue handlers, and the four discovery routes. |
 | `agents.test.js` | Agent routing and models, chat (consults, shared thread, failure and foreign-conversation paths), summary, forecast math, scene stats, and the `/api/agents`, `/api/chat`, summary and predict routes. |
+| `routing.test.js` | Per-use-case model chains, outside-provider calls through the AI Gateway (mocked fetch), fallback on errors/empty answers/missing keys, reasoning settings. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
 | `oAuth.test.js` | JWT expiry, Earthdata headers, the ingest key middleware and constant-time compare. |
@@ -36,6 +37,7 @@ On 2026-11-14 all 141 tests passed in 10 files. Known gaps:
 Done.
 
 ## Changelog
+- 2026-11-14 - Added routing.test.js (13 tests); vitest.config.js blanks MODEL_* and provider keys so tests never route to outside providers unless a test opts in.
 - 2026-11-14 - Added agents.test.js (30 tests) and a stats assertion in ingest.test.js; `resetDb` also clears messages and conversations.
 - 2026-11-14 - Added main.test.js (entry-point re-exports).
 - 2026-11-14 - Added events.test.js (35 tests).
