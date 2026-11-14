@@ -92,9 +92,8 @@ export const studyArea = {
 
   // Text for the side panel. Explain what the viewer is seeing and why.
   story: [
-    'Aso is one of the most restless places on Earth: an active volcano sitting inside a 25 km caldera, cut by the fault that broke in the 2016 Kumamoto earthquake.',
-    'Radar sees the ground day or night and through cloud, and it measures height to the millimetre. That matters here, because Aso’s eruptions have repeatedly been preceded by the caldera floor sinking as the magma source below it contracts.',
-    'Watch the dark patch around Nakadake crater spread pass after pass. Smooth fresh ash throws less signal back to the satellite than the rough ground it buries.',
-    'Past the "Now" mark the satellite has not flown yet. The map stops showing data and starts showing what the model expects.',
+    'An active volcano inside a 25 km caldera, on the fault that broke in the 2016 Kumamoto earthquake.',
+    'Radar measures ground height to the millimetre through cloud and darkness. Aso’s eruptions have repeatedly followed the caldera floor sinking — so there is a signal to watch.',
+    'Past "Now" the satellite has not flown yet, and the map switches from data to prediction.',
   ],
 }
