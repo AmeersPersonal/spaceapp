@@ -1,0 +1,489 @@
+/* Styles for the map explorer. Every class starts with "sx-" so nothing
+   here clashes with the rest of your site's CSS. */
+
+.sx {
+  --sx-surface: #2a1428;       /* deep blackberry surface */
+  --sx-border: #3d1f3a;        /* slightly lighter purple border */
+  --sx-text: #EBF5EE;          /* mint cream – primary text */
+  --sx-muted: #D8BFAA;         /* desert sand – secondary text */
+  --sx-accent: #542344;        /* blackberry cream – accent / buttons */
+  --sx-highlight: #BFD1E5;     /* pale sky – active states / links */
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  width: 100%;
+  color: var(--sx-text);
+  text-align: left;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.sx-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ---------- Map ---------- */
+
+.sx-mapwrap {
+  position: relative;
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sx-map {
+  width: 100%;
+  height: 560px;
+}
+
+.sx-datebadge,
+.sx-samplebadge {
+  position: absolute;
+  top: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.sx-datebadge {
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(42, 20, 40, 0.88);
+  color: #EBF5EE;
+  font-size: 1rem;
+}
+
+/* "Forecast" tag inside the date badge */
+.sx-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sx-highlight);
+  color: #2a1428;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sx-samplebadge {
+  left: 50%;
+  transform: translateX(-50%);
+  background: #D8BFAA;
+  color: #2a1428;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Controls ---------- */
+
+.sx-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--sx-surface);
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
+}
+
+.sx-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sx-wrap {
+  flex-wrap: wrap;
+}
+
+.sx-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---------- Timeline track: data on the left, prediction on the right ---------- */
+
+.sx-timeline {
+  position: relative;
+  display: flex;
+  height: 20px;
+  margin: 0 0 -4px 52px; /* line up with the slider, past the play button */
+  border-radius: 4px;
+  overflow: visible;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sx-tl-past,
+.sx-tl-future {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  border-radius: 4px;
+}
+
+.sx-tl-past {
+  background: rgba(191, 209, 229, 0.16);
+  color: var(--sx-highlight);
+  padding-left: 8px;
+}
+
+.sx-tl-future {
+  background: rgba(216, 191, 170, 0.14);
+  color: var(--sx-muted);
+  justify-content: flex-end;
+  padding-right: 8px;
+  /* hatching, so "future" reads as not-real-data */
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    rgba(216, 191, 170, 0.18) 5px 10px
+  );
+}
+
+.sx-tl-now {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--sx-highlight);
+  transform: translateX(-1px);
+}
+
+.sx-tl-now span {
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sx-highlight);
+  color: #2a1428;
+  font-size: 0.6rem;
+}
+
+.sx-slider {
+  accent-color: var(--sx-highlight);
+}
+
+.sx-slider-forecast {
+  accent-color: var(--sx-muted);
+}
+
+.sx-play {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--sx-accent);
+  color: #EBF5EE;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sx-play:hover {
+  background: #6b2c58;
+}
+
+.sx-date {
+  flex: none;
+  min-width: 108px;
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--sx-highlight);
+}
+
+.sx-date-forecast {
+  color: var(--sx-muted);
+  font-style: italic;
+}
+
+.sx-toggle {
+  display: inline-flex;
+  border: 1px solid var(--sx-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sx-toggle button {
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--sx-muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sx-toggle button.sx-active {
+  background: var(--sx-accent);
+  color: #EBF5EE;
+}
+
+.sx-toggle button:hover:not(.sx-active) {
+  background: #3d1f3a;
+  color: var(--sx-text);
+}
+
+.sx-toggle button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.sx-select {
+  padding: 7px 10px;
+  background: #1e0f1c;
+  color: var(--sx-text);
+  border: 1px solid var(--sx-border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.sx-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sx-muted);
+}
+
+/* ---------- Side panel ---------- */
+
+.sx-panel {
+  padding: 18px;
+  background: var(--sx-surface);
+  border: 1px solid var(--sx-border);
+  border-radius: 10px;
+  overflow-y: auto;
+  max-height: 690px;
+}
+
+.sx-eyebrow {
+  margin: 0 0 4px;
+  color: var(--sx-highlight);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sx-panel h2 {
+  margin: 0 0 10px;
+  font-size: 1.25rem;
+  line-height: 1.25;
+  color: var(--sx-text);
+}
+
+.sx-panel h3 {
+  margin: 20px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sx-border);
+  font-size: 0.95rem;
+  color: var(--sx-highlight);
+}
+
+.sx-text {
+  margin: 0 0 10px;
+  color: var(--sx-muted);
+}
+
+/* ---------- Prediction card ---------- */
+
+.sx-forecast {
+  margin: 0 0 16px;
+  padding: 14px;
+  border: 1px solid var(--sx-highlight);
+  border-radius: 10px;
+  background: rgba(191, 209, 229, 0.08);
+}
+
+.sx-forecast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.sx-forecast-title {
+  font-weight: 600;
+  color: var(--sx-text);
+}
+
+.sx-pill {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.sx-pill-high {
+  background: #e5484d;
+  color: #fff;
+}
+
+.sx-pill-medium {
+  background: #f5a524;
+  color: #2a1428;
+}
+
+.sx-pill-low {
+  background: #D8BFAA;
+  color: #2a1428;
+}
+
+.sx-prob {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(235, 245, 238, 0.14);
+  overflow: hidden;
+}
+
+.sx-prob-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(to right, #BFD1E5, #e5484d);
+  transition: width 0.25s;
+}
+
+.sx-prob-value {
+  margin: 8px 0 10px;
+  font-weight: 600;
+  color: var(--sx-text);
+}
+
+.sx-note {
+  margin: 6px 0 0;
+  color: var(--sx-muted);
+  font-size: 0.85rem;
+}
+
+.sx-error {
+  margin: 0 0 8px;
+  color: #ff6b6b;
+  font-size: 0.85rem;
+}
+
+.sx-ramp {
+  height: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--sx-border);
+  background: linear-gradient(to right, #000, #fff);
+}
+
+.sx-ramp-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--sx-muted);
+  font-size: 0.8rem;
+}
+
+.sx-ramp-labels span:last-child {
+  text-align: right;
+}
+
+.sx-legend-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--sx-muted);
+  font-size: 0.88rem;
+}
+
+.sx-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sx-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* ---------- Chart ---------- */
+
+.sx-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.sx-chart-grid {
+  stroke: var(--sx-border);
+  stroke-width: 1;
+}
+
+.sx-chart-label {
+  fill: var(--sx-muted);
+  font-size: 10px;
+}
+
+.sx-chart-line {
+  fill: none;
+  stroke: var(--sx-highlight);
+  stroke-width: 2;
+}
+
+/* The model's half of the curve: dashed, so it never reads as measured. */
+.sx-chart-line-forecast {
+  stroke: var(--sx-muted);
+  stroke-dasharray: 5 4;
+}
+
+/* Shaded block over everything later than "Now". */
+.sx-chart-future {
+  fill: rgba(216, 191, 170, 0.09);
+}
+
+.sx-chart-now {
+  stroke: var(--sx-highlight);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+.sx-chart-dot {
+  fill: var(--sx-highlight);
+}
+
+.sx-chart-dot-active {
+  fill: #EBF5EE;
+  stroke: var(--sx-highlight);
+  stroke-width: 2;
+}
+
+/* ---------- Small screens ---------- */
+
+@media (max-width: 900px) {
+  .sx {
+    grid-template-columns: 1fr;
+  }
+
+  .sx-map {
+    height: 420px;
+  }
+
+  .sx-panel {
+    max-height: none;
+  }
+}
