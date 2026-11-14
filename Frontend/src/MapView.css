@@ -9,53 +9,64 @@
   --sx-accent: #542344;        /* blackberry cream – accent / buttons */
   --sx-highlight: #BFD1E5;     /* pale sky – active states / links */
 
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 16px;
-  width: 100%;
+  /* The map fills the window; everything else floats on top of it. */
+  position: fixed;
+  inset: 0;
   color: var(--sx-text);
   text-align: left;
   font-size: 0.95rem;
   line-height: 1.5;
 }
 
-.sx-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
 /* ---------- Map ---------- */
 
-.sx-mapwrap {
-  position: relative;
-  border: 1px solid var(--sx-border);
-  border-radius: 10px;
-  overflow: hidden;
+.sx-map {
+  position: absolute;
+  inset: 0;
 }
 
-.sx-map {
-  width: 100%;
-  height: 560px;
+/* Keep the zoom buttons clear of the floating navbar, and out from under
+   the detail card when it is open. */
+.sx .maplibregl-ctrl-top-right {
+  top: 68px;
+  transition: margin-right 0.2s ease;
+}
+
+.sx-panel-open .maplibregl-ctrl-top-right,
+.sx-panel-open .maplibregl-ctrl-bottom-right {
+  margin-right: 376px;
+}
+
+/* Attribution has to stay readable over the map. */
+.sx .maplibregl-ctrl-bottom-right {
+  transition: margin-right 0.2s ease;
+}
+
+.sx-topleft {
+  position: absolute;
+  top: 70px;
+  left: 20px;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
 }
 
 .sx-datebadge,
 .sx-samplebadge {
-  position: absolute;
-  top: 12px;
   padding: 6px 12px;
   border-radius: 8px;
   font-weight: 600;
-  pointer-events: none;
 }
 
 .sx-datebadge {
-  left: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
   background: rgba(42, 20, 40, 0.88);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(191, 209, 229, 0.18);
   color: #EBF5EE;
   font-size: 1rem;
 }
@@ -73,8 +84,6 @@
 }
 
 .sx-samplebadge {
-  left: 50%;
-  transform: translateX(-50%);
   background: #D8BFAA;
   color: #2a1428;
   font-size: 0.8rem;
@@ -82,16 +91,61 @@
   letter-spacing: 0.06em;
 }
 
-/* ---------- Controls ---------- */
+/* ---------- "click the map" nudge, shown only while the card is closed ---------- */
+
+.sx-hint {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--sx-highlight);
+  color: #2a1428;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+  animation: sx-bob 2.6s ease-in-out infinite;
+}
+
+@keyframes sx-bob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50%      { transform: translate(-50%, -5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sx-hint { animation: none; }
+}
+
+/* ---------- Controls, floating along the bottom ---------- */
 
 .sx-controls {
+  position: absolute;
+  z-index: 9;
+  bottom: 20px;
+  left: 20px;
+  right: 20px;
+  max-width: 760px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 14px 16px;
-  background: var(--sx-surface);
+  background: rgba(42, 20, 40, 0.86);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--sx-border);
-  border-radius: 10px;
+  border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+  transition: right 0.2s ease;
+}
+
+/* Slide out of the way of the detail card. */
+.sx-controls-shift {
+  right: 396px;
 }
 
 .sx-row {
@@ -263,16 +317,55 @@
 /* ---------- Side panel ---------- */
 
 .sx-panel {
+  position: absolute;
+  z-index: 10;
+  top: 70px;
+  right: 20px;
+  bottom: 20px;
+  width: 356px;
   padding: 18px;
-  background: var(--sx-surface);
+  background: rgba(42, 20, 40, 0.92);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--sx-border);
-  border-radius: 10px;
+  border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   overflow-y: auto;
-  max-height: 690px;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+/* Kept mounted but out of the way, so scroll position survives a close. */
+.sx-panel-hidden {
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sx-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--sx-border);
+  border-radius: 8px;
+  background: rgba(84, 35, 68, 0.6);
+  color: var(--sx-muted);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sx-close:hover {
+  background: var(--sx-accent);
+  color: var(--sx-text);
 }
 
 .sx-eyebrow {
   margin: 0 0 4px;
+  padding-right: 36px; /* clear the close button */
   color: var(--sx-highlight);
   font-size: 0.78rem;
   font-weight: 600;
@@ -475,15 +568,38 @@
 /* ---------- Small screens ---------- */
 
 @media (max-width: 900px) {
-  .sx {
-    grid-template-columns: 1fr;
-  }
-
-  .sx-map {
-    height: 420px;
-  }
-
+  /* The card becomes a sheet across the top; controls keep the bottom. */
   .sx-panel {
-    max-height: none;
+    top: 64px;
+    left: 12px;
+    right: 12px;
+    bottom: auto;
+    width: auto;
+    max-height: 52vh;
+  }
+
+  .sx-panel-hidden {
+    transform: translateY(calc(-100% - 76px));
+  }
+
+  .sx-controls,
+  .sx-controls-shift {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+  }
+
+  .sx-panel-open .maplibregl-ctrl-top-right,
+  .sx-panel-open .maplibregl-ctrl-bottom-right {
+    margin-right: 0;
+  }
+
+  .sx-topleft {
+    top: 64px;
+    left: 12px;
+  }
+
+  .sx-hint {
+    top: 66px;
   }
 }

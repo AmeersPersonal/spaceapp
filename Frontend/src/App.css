@@ -13,41 +13,73 @@ a {
   color: #BFD1E5;
 }
 
+/* The navbar floats over whatever is underneath it — on the home page that
+   is the full-screen map. The bar itself ignores the mouse so you can drag
+   the map through the gap between the brand and the links; only the pills
+   are clickable. */
 .navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
-  background: #2a1428;
-  border-bottom: 1px solid #3d1f3a;
+  padding: 14px 20px;
+  background: none;
+  border: none;
+  pointer-events: none;
+}
+
+.navbar > * {
+  pointer-events: auto;
+}
+
+.brand,
+.nav-links a {
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(42, 20, 40, 0.82);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(191, 209, 229, 0.22);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
 }
 
 .brand {
   font-weight: 700;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   color: #EBF5EE;
-  text-decoration: none;
+}
+
+.brand:hover {
+  background: rgba(84, 35, 68, 0.92);
 }
 
 .nav-links {
   display: flex;
-  gap: 1.5rem;
+  gap: 10px;
 }
 
 .nav-links a {
-  text-decoration: none;
   color: #BFD1E5;
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .nav-links a:hover {
+  background: rgba(84, 35, 68, 0.92);
   color: #EBF5EE;
 }
 
+/* Used by the auth and 404 pages, which sit under the fixed navbar. */
 .page {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4rem 1rem;
+  padding: 6.5rem 1rem 4rem;
   text-align: center;
 }
 
@@ -63,7 +95,8 @@ a {
   border: none;
   border-radius: 6px;
   background: #BFD1E5;
-  color: #EBF5EE;
+  color: #2a1428; /* dark text: #EBF5EE on this background was unreadable */
+  font-weight: 600;
   font-size: 1rem;
   text-decoration: none;
   cursor: pointer;
@@ -71,7 +104,7 @@ a {
 }
 
 .button:hover {
-  background:#0b3d91;
+  background: #d4e2f0;
 }
 
 .button.secondary {

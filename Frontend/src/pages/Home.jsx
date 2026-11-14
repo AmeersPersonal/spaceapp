@@ -1,13 +1,8 @@
-import { Link } from 'react-router-dom'
 import MapView from '../mapview.jsx'
+
+// The map is the page: it fills the window and the navbar floats over it.
 function Home() {
-  return (
-    <section className="page">
-      <h1>Welcome to SpaceApp</h1>
-       <MapView />
-    
-    </section>
-  )
+  return <MapView />
 }
 
 export default Home
