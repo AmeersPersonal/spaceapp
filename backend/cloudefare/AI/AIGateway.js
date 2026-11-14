@@ -27,8 +27,8 @@ export async function runModel(env, model, inputs, options) {
 }
 
 /** Text generation; returns the response string. */
-export async function generateText(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl } = {}) {
-  const out = await runModel(env, env.LLM_MODEL, { messages, max_tokens: maxTokens, temperature }, { cacheTtl });
+export async function generateText(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl, skipCache } = {}) {
+  const out = await runModel(env, env.LLM_MODEL, { messages, max_tokens: maxTokens, temperature }, { cacheTtl, skipCache });
   const text = typeof out === 'string' ? out : out?.response;
   if (typeof text !== 'string' || !text.trim()) throw new AIError('Model returned an empty response');
   return text.trim();

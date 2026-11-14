@@ -1,11 +1,12 @@
 import { auth, callback, login, logout } from '@auth0/auth0-hono';
+import { sessionAccess } from './sessionManger.js';
 
 const middlewareByEnv = new WeakMap();
-const protectedPaths = new Set(['/api/ingest', '/api/events/earthquake', '/api/ask']);
 
 /** Only these operations require a user; catalog, tiles and replay remain public. */
 export async function authenticate(c, next) {
-  const protectedRequest = c.req.method === 'POST' && protectedPaths.has(c.req.path);
+  const access = sessionAccess(c.req.method, c.req.path);
+  const protectedRequest = access.required;
   const authRequest = c.req.path.startsWith('/auth/') || c.req.path === '/api/auth/me';
   if (!protectedRequest && !authRequest) return next();
   c.header('Cache-Control', 'no-store');
@@ -40,13 +41,15 @@ export async function authenticate(c, next) {
     c.set('auth0User', session?.user ?? null);
     if (protectedRequest) {
       if (!session?.user?.sub) return c.json({ error: 'unauthorized', message: 'Log in at /auth/login' }, 401);
+    }
+    if (protectedRequest && access.write) {
       // JSON plus an exact origin allowlist prevents cross-site form/cookie requests.
       const origin = c.req.header('origin');
       const allowed = [new URL(env.APP_BASE_URL).origin, ...((env.CORS_ORIGIN || '').split(',').map(s => s.trim()))];
       if ((origin && !allowed.includes(origin)) || (!origin && c.req.header('sec-fetch-site') === 'cross-site')) {
         return c.json({ error: 'forbidden', message: 'Request origin is not allowed' }, 403);
       }
-      if (c.req.header('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      if (['POST', 'PUT', 'PATCH'].includes(c.req.method) && c.req.header('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
         return c.json({ error: 'invalid_request', message: 'Content-Type must be application/json' }, 415);
       }
     }

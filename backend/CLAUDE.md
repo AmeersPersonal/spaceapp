@@ -12,6 +12,7 @@ Processing scenes into cloud-friendly outputs (COGs/tiles) and storing them.
 A catalog of events, areas of interest, scenes, polarizations and dates.
 A REST API and tile endpoints for the frontend to consume.
 Auth0-managed browser login/logout and user sessions for ingest and AI write operations; catalog browsing remains public.
+Persistent, owner-scoped D1 chats and message history, tied to the verified Auth0 subject across login sessions.
 AI-generated captions that hypothesize the physical driver of observed change, plus semantic search over them.
 Shared replay sessions: synchronized playback state over WebSockets.
 Scheduled polling for newly published NISAR scenes.
@@ -37,6 +38,11 @@ GET /auth/login (redirect to Auth0)
 GET /auth/callback (Auth0 authorization-code callback)
 GET /auth/logout (clear session and sign out through Auth0)
 GET /api/auth/me (signed-in profile; 401 when logged out)
+POST /api/chats {title?, eventId?} (create an owned chat; requires login)
+GET /api/chats?limit&page (list the signed-in user's chats)
+GET /api/chats/:id (owned chat metadata)
+GET /api/chats/:id/messages?limit&after (ordered owned message history)
+POST /api/chats/:id/messages {content} (append a user message; requires login and JSON)
 GET /api/events
 GET /api/events/:id (scenes, dates, polarizations)
 GET /tiles/:event/:layer/:date/:z/:x/:y.png
@@ -49,7 +55,7 @@ GET /api/datasets/:source?bbox&start&end&limit&page&runDate&cycle (CMR granule r
 GET /api/datasets/context?bbox&start&end&sources&limit&page&runDate&cycle (combined regional queries with per-source successes/errors)
 POST /api/ingest {aoi, dateRange, eventId?, name?, type?, products?, description?, watch?} (requires Auth0 session and JSON; starts a Workflow, returns an id; full payload in cloudefare/SPEC.md)
 GET /api/ingest/:id (status)
-POST /api/ask {eventId, question} (requires Auth0 session and JSON; AI answer)
+POST /api/ask {eventId, question, chatId?} (requires Auth0 session and JSON; optionally continue an owned, event-bound chat and persist the question/answer)
 WS /api/room/:code (replay sync)
 
 Changing any route or payload shape requires updating the owning folder's spec and this list in the same turn.
