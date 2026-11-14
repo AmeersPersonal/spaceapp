@@ -3,8 +3,8 @@
 // acquisition cadence. The forecaster agent only narrates those numbers. Output is always labeled
 // `modeled: true` so it is never mistaken for an observation.
 
-import { AGENTS, agentModel, systemPromptFor } from './agents.js';
-import { generateText } from './AIGateway.js';
+import { AGENTS, agentModel, agentPinned, systemPromptFor } from './agents.js';
+import { generateTextDetailed } from './AIGateway.js';
 import { DATA_CREDIT } from '../dataManger.js';
 
 export const PREDICTION_DISCLAIMER =
@@ -160,7 +160,11 @@ export async function forecastEvent(env, { event, scenes, sceneStats, captions, 
   };
   if (forecast.status !== 'ok') return { ...base, narrative: null, aiGenerated: false };
   const agent = AGENTS.forecaster;
-  const model = agentModel(env, agent);
-  const narrative = await generateText(env, buildForecastMessages(agent, event, forecast, captions, horizonDays), { model, maxTokens: 300 });
+  const { text: narrative, model } = await generateTextDetailed(env, buildForecastMessages(agent, event, forecast, captions, horizonDays), {
+    model: agentModel(env, agent),
+    pinned: agentPinned(env, agent),
+    useCase: 'forecast',
+    maxTokens: 300,
+  });
   return { ...base, narrative, agent: agent.id, model, aiGenerated: true };
 }
