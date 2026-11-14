@@ -15,6 +15,7 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `events.test.js` | USGS parsing/fetching, quake→ingest request, NISAR preview, Google geocoding (incl. key never leaked), event/batch/queue handlers, and the four discovery routes. |
 | `agents.test.js` | Agent routing and models, chat (consults, shared thread, failure and foreign-conversation paths), summary, forecast math, scene stats, and the `/api/agents`, `/api/chat`, summary and predict routes. |
 | `routing.test.js` | Per-use-case model chains, outside-provider calls through the AI Gateway (mocked fetch), fallback on errors/empty answers/missing keys, reasoning settings. |
+| `datasets.test.js` | Seven NASA source adapters, query validation, CMR pagination, FIRMS CSV parsing and key handling, GEOS initialization/valid-time filtering, response limits, partial context, generic event integration and API routes. Provider calls are mocked. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
 | `oAuth.test.js` | JWT expiry, Earthdata headers, the ingest key middleware and constant-time compare. |
@@ -40,5 +41,8 @@ Done.
 - 2026-11-14 - Added routing.test.js (13 tests); vitest.config.js blanks MODEL_* and provider keys so tests never route to outside providers unless a test opts in.
 - 2026-11-14 - Added agents.test.js (30 tests) and a stats assertion in ingest.test.js; `resetDb` also clears messages and conversations.
 - 2026-11-14 - Added main.test.js (entry-point re-exports).
+- 2026-11-14 - Removed the unshipped processor bridge test file at user request.
+- 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.
+- 2026-11-14 - Added supplementary NASA adapter and route tests; live checks are separate from automated suites and recorded in ../DATASET_ACCESS.md.
 - 2026-11-14 - Added events.test.js (35 tests).
 - 2026-11-14 - Initial suites for all Worker features.
