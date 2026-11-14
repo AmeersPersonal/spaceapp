@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "us6000u18k",
+      "properties": {
+        "mag": 7.7,
+        "place": "10 km WSW of Pitaloza Arriba, Panama",
+        "time": 1791568565537,
+        "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u18k",
+        "title": "M 7.7 - 10 km WSW of Pitaloza Arriba, Panama",
+        "type": "earthquake",
+        "status": "reviewed",
+        "tsunami": 0,
+        "alert": "orange",
+        "magType": "mww"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -80.7566,
+          7.6069,
+          10
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "us6000u43g",
+      "properties": {
+        "mag": 7,
+        "place": "189 km ENE of Nagqu, China",
+        "time": 1792679620289,
+        "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us6000u43g",
+        "title": "M 7.0 - 189 km ENE of Nagqu, China",
+        "type": "earthquake",
+        "status": "reviewed",
+        "tsunami": 0,
+        "alert": "orange",
+        "magType": "mww"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          93.7837,
+          32.3376,
+          18
+        ]
+      }
+    }
+  ]
+}

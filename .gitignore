@@ -1,0 +1,41 @@
+# Secrets / local env (keep the *.example templates)
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build output / caches
+dist/
+build/
+coverage/
+.wrangler/
+.cache/
+
+# Large geospatial / data files (e.g. NISAR .h5 downloads)
+*.h5
+*.hdf5
+*.tif
+*.tiff
+
+# Logs
+*.log
+npm-debug.log*
+
+# Tool / editor / OS files
+graphify-out/
+.claude/settings.local.json
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
