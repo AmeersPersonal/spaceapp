@@ -1,4 +1,4 @@
-// Credentials helpers. No user accounts (out of scope); this only covers:
+// External service credentials and legacy ingest-key helpers. Browser login lives in auth0.js:
 //  - Earthdata Login bearer token (EARTHDATA_TOKEN secret) for authenticated ASF requests,
 //  - an optional shared key guarding POST /api/ingest (INGEST_API_KEY secret),
 //  - a shared secret sent to the external processor (PROCESSOR_TOKEN secret).

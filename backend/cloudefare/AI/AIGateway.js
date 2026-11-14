@@ -68,7 +68,7 @@ function extractText(out) {
   return typeof out === 'string' ? out : (out?.response ?? out?.choices?.[0]?.message?.content);
 }
 
-async function callExternal(env, model, messages, { maxTokens, temperature, cacheTtl }) {
+async function callExternal(env, model, messages, { maxTokens, temperature, cacheTtl, skipCache }) {
   const { provider, name } = parseProviderModel(model);
   const keyName = PROVIDER_KEYS[provider];
   if (!keyName) throw new AIError(`Unknown AI provider "${provider}" in model ${model}`);
@@ -77,7 +77,8 @@ async function callExternal(env, model, messages, { maxTokens, temperature, cach
   const extra = reasoningParams(name);
   const headers = { 'content-type': 'application/json', authorization: `Bearer ${env[keyName]}` };
   if (env.CF_AIG_TOKEN) headers['cf-aig-authorization'] = `Bearer ${env.CF_AIG_TOKEN}`;
-  if (cacheTtl) headers['cf-aig-cache-ttl'] = String(cacheTtl);
+  if (skipCache) headers['cf-aig-skip-cache'] = 'true';
+  else if (cacheTtl) headers['cf-aig-cache-ttl'] = String(cacheTtl);
   let res;
   try {
     res = await fetch(`https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/compat/chat/completions`, {
@@ -98,15 +99,15 @@ async function callExternal(env, model, messages, { maxTokens, temperature, cach
  * that actually answered. `model` is the caller's default (e.g. the agent's); `pinned` makes it win over
  * MODEL_<USECASE> (used for an explicit AGENT_MODEL_<ID> override).
  */
-export async function generateTextDetailed(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl, model, useCase, pinned } = {}) {
+export async function generateTextDetailed(env, messages, { maxTokens = 400, temperature = 0.2, cacheTtl, skipCache, model, useCase, pinned } = {}) {
   const chain = modelChain(env, { useCase, model, pinned });
   if (!chain.length) throw new AIError('No model configured');
   let lastErr;
   for (const m of chain) {
     try {
       const out = isWorkersAiModel(m)
-        ? await runModel(env, m, { messages, max_tokens: maxTokens, temperature }, { cacheTtl })
-        : await callExternal(env, m, messages, { maxTokens, temperature, cacheTtl });
+        ? await runModel(env, m, { messages, max_tokens: maxTokens, temperature }, { cacheTtl, skipCache })
+        : await callExternal(env, m, messages, { maxTokens, temperature, cacheTtl, skipCache });
       const text = extractText(out);
       if (typeof text !== 'string' || !text.trim()) throw new AIError('Model returned an empty response');
       return { text: text.trim(), model: m };

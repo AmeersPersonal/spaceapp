@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { applyMessage, generateRoomCode, initialState, normalizeRoomCode, parseClientMessage } from '../sessionManger.js';
+import { applyMessage, generateRoomCode, initialState, normalizeRoomCode, parseClientMessage, sessionAccess } from '../sessionManger.js';
+
+describe('user-session access policy', () => {
+  it('protects all chat operations while keeping public reads and replay independent', () => {
+    for (const method of ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE']) {
+      expect(sessionAccess(method, '/api/chats').required).toBe(true);
+      expect(sessionAccess(method, '/api/chats/chat_1/messages').required).toBe(true);
+    }
+    expect(sessionAccess('POST', '/api/ask')).toEqual({ required: true, write: true });
+    expect(sessionAccess('GET', '/api/chats')).toEqual({ required: true, write: false });
+    for (const path of ['/api/events', '/tiles/event/layer/date/0/0/0.png', '/api/room/ABCD', '/api/chats-not-a-route']) expect(sessionAccess('GET', path).required).toBe(false);
+  });
+});
 
 describe('room codes', () => {
   it('normalizes valid codes and rejects bad ones', () => {

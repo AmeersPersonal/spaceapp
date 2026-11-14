@@ -7,6 +7,11 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | Path | Description |
 |---|---|
 | `worker.js` | Entry point. Hono app with all routes, plus the `queue`/`scheduled` handlers; re-exports `IngestWorkflow` and `ReplayRoom`. |
+| `auth0.js` | Auth0 SDK setup, browser login/callback/logout/profile, session protection for writes, origin and JSON checks, secure-cookie enforcement. |
+| `chats.js` | Owner-scoped D1 chat/message queries, bounded history, atomic message saves and authenticated chat routes. |
+| `CHAT_STORAGE.md` | Chat API contract, continuation behavior, pagination and rollout limitations. |
+| `AUTH0.md` | Local credentials, Auth0 tenant/application, frontend cookie contract, deployment steps and verification limitations. |
+| `.gitignore` | Ignores Auth0 helper credentials, state and write audit logs. |
 | `workFlowManger.js` | Ingest request validation, `IngestWorkflow`, queue consumer + DLQ handler, cron poller. |
 | `dataManger.js` | D1 catalog queries, R2 key layout/manifest reads, KV cache helpers, `DATA_CREDIT`. |
 | `events.js` | USGS, NISAR, geocoding, seven supplementary NASA dataset adapters, and event/batch/queue handlers. |
@@ -16,7 +21,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `asf.js` | ASF DAAC search client and NISAR GeoJSON normalizer (metadata only). |
 | `cloudflare.md` | Step-by-step setup and deploy guide: account login, resource creation, secrets, deploy, troubleshooting. |
 | `oAuth.js` | Earthdata token helpers, optional ingest API key middleware, processor auth header. |
-| `sessionManger.js` | Room-code validation and the pure replay-state reducer. |
+| `sessionManger.js` | Room-code validation, replay-state reducer and HTTP session access policy. |
 | `replay.js` | `ReplayRoom` Durable Object (hibernating WebSockets). |
 | `bench/` | Developer-only benchmark of Gemini and Groq models on the real AI prompts. See [bench/SPEC.md](bench/SPEC.md). |
 | `AI/` | Workers AI via AI Gateway: captions, Vectorize search, `/api/ask`, the multi-agent chat, summaries and predictions. See [AI/SPEC.md](AI/SPEC.md). |
@@ -26,7 +31,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `vitest.config.js` | `@cloudflare/vitest-plugin` config (local bindings, D1 migrations, offline env). |
 | `package.json` / `.npmrc` | Deps and scripts. `.npmrc` sets `legacy-peer-deps` to work around an npm 10 peer-resolution crash with vitest 4. |
 | `.dev.vars.example` | Template for local secrets. |
-| `.env` | Local secrets for `wrangler dev` (gitignored, values blank). Wrangler ignores it if a `.dev.vars` exists. |
+| `.env.local` / `.dev.vars` | Ignored local Auth0 and service credentials, loaded explicitly by `npm run dev`. |
 
 ## Interfaces
 
@@ -36,25 +41,37 @@ All JSON responses from catalog/ingest routes include `credit` (NASA/JPL-Caltech
 | Route | Notes |
 |---|---|
 | `GET /` | Service info and route list. |
+| `GET /auth/login` | Redirect to Auth0 Universal Login using authorization code + PKCE; success lands on `/api/auth/me`. |
+| `GET /auth/callback` | Verify login transaction/code/ID token and establish encrypted HttpOnly session. |
+| `GET /auth/logout` | Clear local session and redirect through Auth0 logout to the API root. |
+| `GET /api/auth/me` | `{user:{sub,name?,email?,picture?}}` or 401. Never returns tokens; no-store. |
+| `POST /api/chats` | Login + JSON `{title?,eventId?}` → 201 `{chat:{id,eventId,title,createdAt,updatedAt}}`. Owner is verified Auth0 `sub`. Title 1–120 chars; event optional but must exist. |
+| `GET /api/chats?limit&page` | Owned chats only → `{chats,hasMore}`, newest updated first. Defaults 20/1; limit 1–100, page 1–10000. |
+| `GET /api/chats/:id` | `{chat}`; missing/other-user chats both return 404. |
+| `POST /api/chats/:id/messages` | JSON `{content}` → 201 `{message}` with server-controlled user role. Content 1–8000 chars. Assistant-role submissions are rejected. |
+| `GET /api/chats/:id/messages?limit&after` | Owned, ordered `{messages,nextAfter,hasMore}`. Each message has id, sequence, role, content, metadata and createdAt. Defaults limit 50/after 0; limit 1–100, after nonnegative safe integer. |
 | `GET /api/events` | `{events:[{id,name,type,bbox,products,startDate,endDate,watch,sceneCount,...}], credit}`. Cached in KV for 60 s. |
 | `GET /api/events/:id` | `{event, scenes[], dates[], polarizations[], layers[{layer,date,minZoom,maxZoom,bounds,units,tiles}], captions[], credit}`. Returns 404 for an unknown id. |
 | `GET /tiles/:event/:layer/:date/:z/:x/:y.png` | PNG from R2 at `tiles/{event}/{layer}/{date}/{z}/{x}/{y}.png`. Sends ETag and supports 304. Returns 404 if the tile is missing and 400 for bad coordinates (z ≤ 22, x,y < 2^z). |
 | `GET /api/discover/earthquakes` | Query `minMagnitude` (4.5–9.9, default 6), `days` (1–365, default 30), optional `bbox`. Returns `{earthquakes:[{sourceId,title,magnitude,time,latitude,longitude,depthKm,tsunami,alert,url,registered,suggested:{eventId,aoi,dateRange,products,...}}], credit}`. USGS data, cached 10 min, and quakes before 2025-07-30 are dropped. |
-| `POST /api/events/earthquake` | Body `{usgsId}`. Fetches the quake from USGS, creates event `usgs-<id>` if new, and starts a GUNW ingest (36 days before to 60 days after, clipped to launch/today). Returns 202 `{eventId, created, ingest:{id,status,dateRange,statusUrl}}`. Errors: 400, 404, 502, or 401 with `INGEST_API_KEY`. |
+| `POST /api/events/earthquake` | Body `{usgsId}`. Fetches the quake from USGS, creates event `usgs-<id>` if new, and starts a GUNW ingest (36 days before to 60 days after, clipped to launch/today). Returns 202 `{eventId, created, ingest:{id,status,dateRange,statusUrl}}`. Requires an Auth0 session and JSON; errors include 400, 401, 403, 404, 415, 502 and 503. |
 | `GET /api/nisar/search` | Query `bbox=w,s,e,n&start&end&products?`. Live ASF preview without cataloging: `{query,count,byProduct,dates,polarizations,scenes[],truncated,credit}`. |
 | `GET /api/geocode` | Query `q` (2–200 chars). Returns `{formattedAddress,location,bbox,aoi,credit}` where `aoi` is capped at 5° per side. 503 without `GOOGLE_MAPS_API_KEY`, 404 for no match. |
 | `GET /api/datasets` | `{sources:[{id,name,kind,configured,requiredSecret?,shortNames?,notes,credit,...}]}`. `configured` indicates whether required credentials exist, not provider health. Never returns keys. |
 | `GET /api/datasets/:source` | `source`: firms/gpm/smap/hls/geos/terrain/grace. Requires `bbox=w,s,e,n`, `start`, `end`; optional `limit` (1–50, default 10), `page` (1–10000, default 1), GEOS `runDate` (default start), `cycle` (00/06/12/18, default 00). Region ≤5° per side, range ≤366 days, independent of NISAR launch. Returns `{source,name,kind,query,credit,notes,measurementsRetrieved,items,count,total,nextPage,truncated,...}`. CMR returns granule metadata/download references; GEOS returns global forecast file references; FIRMS returns detections, requires `FIRMS_MAP_KEY` and ≤5 inclusive days. Errors: 400 invalid input, 503 missing key, 404 absent GEOS archive, 502 provider/network/size failure. |
 | `GET /api/datasets/context` | Same query plus optional comma-separated `sources` (default all seven). `{query,partial,results:{source:{ok,result? ,error?,message?,retryable?}}}`. Individual failures preserve successful results; valid queries return 200 even when some/all providers fail. |
-| `POST /api/ingest` | Body `{aoi, dateRange:{start,end}, eventId?, name?, type?, products?, description?, watch?}`. `aoi` is `[w,s,e,n]` or a GeoJSON Polygon of at most 5°×5°. Dates are `YYYY-MM-DD`, span ≤ 366 days, end on/after 2025-07-30 and start no later than today. `type` is one of earthquake, flood, wetland, forest, crop, glacier, soil_moisture, other. `products` is a subset of GCOV/GUNW/GOFF/SME2, defaulting by type (earthquake→GUNW, glacier→GOFF, soil_moisture→SME2, else GCOV). Returns 202 `{id, eventId, status:'queued', dateRange, statusUrl}`. If `INGEST_API_KEY` is set, a missing or wrong key returns 401. |
+| `POST /api/ingest` | Body `{aoi, dateRange:{start,end}, eventId?, name?, type?, products?, description?, watch?}`. `aoi` is `[w,s,e,n]` or a GeoJSON Polygon of at most 5°×5°. Dates are `YYYY-MM-DD`, span ≤ 366 days, end on/after 2025-07-30 and start no later than today. `type` is one of earthquake, flood, wetland, forest, crop, glacier, soil_moisture, other. `products` is a subset of GCOV/GUNW/GOFF/SME2, defaulting by type (earthquake→GUNW, glacier→GOFF, soil_moisture→SME2, else GCOV). Returns 202 `{id, eventId, status:'queued', dateRange, statusUrl}`. Requires an Auth0 session and JSON; missing login returns 401. |
 | `GET /api/ingest/:id` | `{id, eventId, dateRange, trigger, status, sceneCount, error, workflow:{status,error}, progress:{total, <sceneStatus>:n}, scenes[{id,product,acquiredAt,status,error,url}], credit}`. `status` is queued, searching, dispatched, complete or failed. It reads complete once all scenes are ready or failed. |
-| `POST /api/ask` | Body `{eventId, question}` (question 3–500 chars). Returns `{answer, sources[{captionId,sceneId,score}], sceneCount, model, aiGenerated:true, disclaimer, credit}`. Cached in KV for 1 h. Errors: 400, 404, or 502 `ai_unavailable`. |
+| `POST /api/ask` | Body `{eventId, question, chatId?}` (question 3–500 chars). With chatId, ownership and event must match; successful user/assistant turns persist atomically. Returns `{answer, sources[{captionId,sceneId,score}], sceneCount, model, aiGenerated:true, disclaimer, credit}`. Stateless answers are cached in KV for 1 h; private chat answers bypass shared caches. Chat responses additionally include chatId and messageIds. Errors: 400, 401, 404, 413, or 502 `ai_unavailable`. |
 | `GET /api/agents` | `{agents:[{id,name,expertise,eventTypes,model}]}`. |
 | `POST /api/chat` | Body `{eventId, message (2-1000 chars), conversationId?, agent?}`. Routes to a specialist (or the requested `agent`), who may consult up to 2 others. Returns `{conversationId, eventId, reply:{agent,name,model,text}, consults:[{agent,name,model,text}], consultsFailed[], sources[], aiGenerated:true, disclaimer, credit}`. Pass `conversationId` back to continue the shared thread. Errors: 400, 404 (event or conversation, including one from another event), 502 `ai_unavailable`. |
 | `GET /api/chat/:conversationId` | `{conversationId, eventId, createdAt, updatedAt, messages:[{id,role,agent,model,content,createdAt}], credit}` (role is user, consult or assistant). 404 if unknown. |
 | `GET /api/events/:id/summary` | `{eventId, summary, agent, name, model, coverage:{sceneCount,byStatus,byProduct,firstDate,lastDate,layers}, captionCount, aiGenerated:true, disclaimer, credit}`. Cached in KV for 1 h, keyed on scene/ready/caption counts. 404 or 502. |
 | `GET /api/events/:id/predict` | Query `horizonDays` (1-90, default 30). Returns `{eventId, modeled:true, horizonDays, status:'ok' or 'insufficient_data', observations:{count,firstDate,lastDate,cadenceDays,nextExpectedAcquisition}, metrics:[{key,product,metric,n,slopePerDay,r2,latest,projected:{date,value,low,high},direction,confidence}], skipped[], narrative, agent, model, aiGenerated, method, disclaimer, credit}`. A projection, never an observation. 400, 404 or 502. |
 | `WS /api/room/:code` | `code` is 4–12 alphanumerics, case-insensitive. A request without `Upgrade: websocket` gets 426. |
+
+### Browser authentication
+Browser authentication: `POST /api/ingest`, `POST /api/events/earthquake` and `POST /api/ask` require an Auth0 session cookie and JSON content type. All `/api/chats` routes require a user session, including reads; other listed data endpoints remain public. Chat and ask request bodies are limited to 32 KiB. Missing Auth0 configuration fails closed with 503; missing/invalid sessions return 401; disallowed write origins return 403; non-JSON writes return 415. Auth/profile and protected operations use no-store. Credentialed CORS requires exact origins in `CORS_ORIGIN`. Sessions have a fixed one-hour lifetime and HTTPS Secure/HttpOnly/SameSite=Lax cookies. See [AUTH0.md](AUTH0.md) for same-site frontend requirements and complete setup.
 
 ### Replay WebSocket protocol
 Client→server: `load {eventId, layer?}`, `play`, `pause {frame?}`, `seek {frame}`, `speed {speed 0.25–8}`, `layer {layer}`, `sync`, `ping`.
@@ -82,9 +99,11 @@ Params `{ingestId, eventId, wkt, start, end, products, maxScenes}`. Steps: `mark
 ### Env vars / secrets
 Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`, `FIRMS_MAP_KEY` (separate from Earthdata Login; see `.dev.vars.example`).
 
+Auth0 requires `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`, and secrets `AUTH0_CLIENT_SECRET`, `AUTH0_SESSION_ENCRYPTION_KEY` (32+ characters). `INGEST_API_KEY` is legacy and no longer grants write access. `npm run dev` explicitly loads `.dev.vars` then `.env.local` on port 8787. Never commit local credentials.
+
 ### Dataset handlers
 `listDatasets(env)`, `parseDatasetQuery(URLSearchParams)`, `fetchDataset(source, query, env, deps)`, and `datasetContext(query, env, deps)` are exported from `events.js`. All provider adapters support `deps.fetch`; query validation applies to direct callers too. Generic event messages support `{type:'dataset', source, bbox, start, end, ...}` and `{type:'dataset_context', sources?, bbox, start, end, ...}`. Results are returned to callers; no raster download, D1 persistence, R2 upload or AI prompt enrichment is triggered. Calls have a 10-second timeout and streamed response limits (2 MB, 4 MB for GEOS). CMR requests are anonymous; Earthdata credentials belong in the external download processor.
-Vars: `AGENT_MODEL_<ID>` (optional per-agent model override, e.g. `AGENT_MODEL_FORECASTER`), `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`.
+Additional AI routing configuration is described in [AI/SPEC.md](AI/SPEC.md). Vars: `AGENT_MODEL_<ID>` (optional per-agent model override, e.g. `AGENT_MODEL_FORECASTER`), `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`.
 
 ### Setup commands (one-time)
 ```sh
@@ -103,22 +122,30 @@ npm run db:migrate:remote
 ## Dependencies
 - Cloudflare: Workers, Workflows, Queues + DLQ, Durable Objects, R2 (+ event notifications), D1, KV, Workers AI, AI Gateway, Vectorize, Cron Triggers.
 - External: USGS FDSN event API; Google Geocoding API; ASF DAAC; NASA CMR `search/granules.json` (GPM, SMAP, HLS, NASADEM, GRACE); NCCS GEOS-FP forecast directory; NASA FIRMS area CSV API (separate key); the external Python processor (not in this folder).
-- npm: `hono`; dev: `wrangler`, `vitest` 4.1, `@cloudflare/vitest-plugin`.
+- npm: `hono`, `@auth0/auth0-hono` 1.2.6; dev: `wrangler`, `vitest` 4.1, `@cloudflare/vitest-plugin`, `@auth0/auth0-server-js` for real encrypted session fixtures.
 
 ## Tests
-`npm test` (from this folder) runs Vitest in workerd with local D1/R2/KV/Queues/DO/Workflows. Workers AI and Vectorize are replaced by in-memory fakes, and ASF uses a recorded fixture, so tests make no external calls. There are 141 tests across 10 files; see [tests/SPEC.md](tests/SPEC.md). Gaps: Google responses are shaped from its documentation (no key to record one); real Vectorize/AI behavior is untested, as is the R2 notification wiring itself (only the message handler is tested).
+Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/DO/Workflows, fake AI/Vectorize bindings and mocked external providers. The merged source passed 203 tests across 14 files on 2026-11-14. See [tests/SPEC.md](tests/SPEC.md).
+
+Real Auth0 browser login → saved AI conversation → logout → login → restored history has not been completed. The full local Worker startup failed because Wrangler did not receive `CLOUDFLARE_API_TOKEN` for the remote Workers AI binding. The configured Vectorize binding is not locally supported without remote access. Real model behavior, processor-to-R2 notification delivery and frontend cookie integration need separate live checks.
 
 ## Status
-Done: discovery/geocode/preview routes in events.js, every route in the contract, the ingest Workflow, queue/DLQ, cron, the replay DO, AI captions/ask, and KV caching.
-TODO:
-- Deployed via MCP to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; real D1/KV/account IDs are now in wrangler.jsonc. Gateway, Vectorize event metadata filter and R2 manifest notifications are configured; traces enabled. See ENDPOINT_REFERENCE.md for verification scope.
-- D1 and KV now have real IDs in wrangler.jsonc. Still to do before deploy: confirm the R2 bucket, queues and Vectorize index exist, apply the D1 migration remotely (`npm run db:migrate:remote`), and create the AI Gateway.
-- The Python processor (and an optional Container) does not exist yet. Scenes stay `awaiting_processor` until it does.
-- Supplementary NASA discovery is implemented; raster extraction, cross-source alignment, persistence, automatic `manifest.context` enrichment and predictive modeling are not. FIRMS live access requires a map key. JRC Surface Water/WorldPop/WorldCover connectors remain unimplemented.
-- `handleEventQueue` is not bound to a queue yet (events are handled inline by the routes).
-- `compatibility_date` is pinned to 2026-08-15 because the local workerd bundled with the test plugin does not support later dates.
+Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E remains pending.
+
+Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. No deployment or remote migration was performed during this documentation update. Both `0002_chats.sql` and `0002_chat_stats.sql` exist; inspect applied migrations before rollout. The owned-chat migration was previously verified locally.
+
+Remaining limitations:
+- The external Python processor is absent; scenes remain `awaiting_processor`, so successful raster/tile production is not verified.
+- Auth0 browser E2E needs real sign-in and Cloudflare credentials; use [AUTH0.md](AUTH0.md) and [CHAT_STORAGE.md](CHAT_STORAGE.md) for setup and acceptance checks.
+- `/api/chats` is owner-scoped; the separate `/api/chat` specialist thread is public and is not the private chat-storage contract.
+- Supplementary dataset adapters provide discovery, not automatic raster extraction, alignment, persistence or prompt enrichment. `handleEventQueue` is not bound to a queue.
+- `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
+- 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.
+- 2026-11-14 - Added owned chat/message storage, session policy, bounded AI continuation and atomic private turns, with migration and ownership/rollback/pagination tests.
+- 2026-11-14 - Added Auth0 browser login/logout/profile and encrypted sessions; protect ingest/AI writes, validate origins/JSON, enforce Secure auth cookies on HTTPS and document frontend/deployment setup.
 - 2026-11-14 - Per-use-case AI model routing with Groq and Gemini through AI Gateway (AI/AIGateway.js, wrangler.jsonc MODEL_* vars, cloudflare.md gateway guide, tests/routing.test.js).
 - 2026-11-14 - Added bench/ (manual Gemini and Groq model benchmark; no Worker changes).
 - 2026-11-14 - Verified existing production setup; reconciled resource IDs; deployed dataset adapters and local secrets through MCP while preserving Google key; configured Gateway/filter/manifest notifications; checked 34 HTTP requests and three WebSocket interactions and documented every endpoint.

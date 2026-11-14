@@ -7,4 +7,5 @@ __pycache__/
 .env
 .env.*
 !.env.example
+.auth0-mcp-writes.log
 wrangler.jsonc

@@ -74,6 +74,18 @@ describe('generateTextDetailed', () => {
     expect(env.AI.calls).toHaveLength(0);
   });
 
+  it('bypasses gateway caches for private generations across provider fallback', async () => {
+    const calls = mockFetch(() => new Response('{}', { status: 503 }));
+    const ai = fakeAI();
+    const out = await generateTextDetailed({ ...base, AI: ai, MODEL_ASK: 'groq/openai/gpt-oss-20b' }, msgs, {
+      useCase: 'ask', skipCache: true,
+    });
+    expect(calls[0].headers['cf-aig-skip-cache']).toBe('true');
+    expect(calls[0].headers['cf-aig-cache-ttl']).toBeUndefined();
+    expect(out.model).toBe(base.LLM_MODEL);
+    expect(ai.calls[0].options.gateway.skipCache).toBe(true);
+  });
+
   it('uses the Gemini key for google-ai-studio models', async () => {
     const calls = mockFetch(() => ok('hello'));
     await generateText({ ...base, MODEL_SUMMARY: 'google-ai-studio/gemini-3.1-flash-lite' }, msgs, { useCase: 'summary' });

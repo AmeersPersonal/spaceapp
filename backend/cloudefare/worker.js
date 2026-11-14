@@ -17,7 +17,9 @@ import {
   listScenesForEvent,
   tileKey,
 } from './dataManger.js';
-import { requireIngestKey } from './oAuth.js';
+import { authenticate, mountAuthRoutes } from './auth0.js';
+import { HTTPException } from 'hono/http-exception';
+import { chatHistory, getChat, limitChatBody, mountChatRoutes, saveChatMessages } from './chats.js';
 import { normalizeRoomCode } from './sessionManger.js';
 import { answerQuestion, hashQuestion, validateAskRequest } from './AI/AIManger.js';
 import { AIError } from './AI/AIGateway.js';
@@ -54,10 +56,25 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const app = new Hono();
 
-app.use('/api/*', async (c, next) => cors({ origin: c.env.CORS_ORIGIN || '*' })(c, next));
+app.use('/api/*', async (c, next) => {
+  const origins = (c.env.CORS_ORIGIN || '*').split(',').map(s => s.trim());
+  return cors({
+    origin: origins.includes('*') ? '*' : origins,
+    credentials: !origins.includes('*'),
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type'],
+  })(c, next);
+});
 app.use('/tiles/*', async (c, next) => cors({ origin: c.env.CORS_ORIGIN || '*' })(c, next));
+app.use('*', authenticate);
+mountAuthRoutes(app);
+mountChatRoutes(app);
 
 app.onError((err, c) => {
+  if (c.req.path.startsWith('/auth/')) {
+    return c.json({ error: 'authentication_failed', message: 'Login could not be completed; start again at /auth/login' }, 400);
+  }
+  if (err instanceof HTTPException) return c.json({ error: 'unauthorized' }, err.status);
   console.error('unhandled error', err);
   return c.json({ error: 'internal_error', message: 'Unexpected server error' }, 500);
 });
@@ -77,6 +94,15 @@ app.get('/', (c) =>
   c.json({
     service: 'earth-replay-api',
     routes: [
+      'GET /auth/login',
+      'GET /auth/callback',
+      'GET /auth/logout',
+      'GET /api/auth/me',
+      'POST /api/chats',
+      'GET /api/chats',
+      'GET /api/chats/:id',
+      'GET /api/chats/:id/messages',
+      'POST /api/chats/:id/messages',
       'GET /api/events',
       'GET /api/events/:id',
       'GET /tiles/:event/:layer/:date/:z/:x/:y.png',
@@ -170,7 +196,7 @@ function newEventId(name) {
   return `${slug}-${crypto.randomUUID().slice(0, 6)}`;
 }
 
-app.post('/api/ingest', requireIngestKey(), async (c) => {
+app.post('/api/ingest', async (c) => {
   const body = await readJson(c);
   const parsed = parseIngestRequest(body);
   if (parsed.errors) return badRequest(c, parsed.errors);
@@ -232,7 +258,7 @@ app.get('/api/discover/earthquakes', async (c) => {
   }
 });
 
-app.post('/api/events/earthquake', requireIngestKey(), async (c) => {
+app.post('/api/events/earthquake', async (c) => {
   const body = await readJson(c);
   if (typeof body?.usgsId !== 'string') return badRequest(c, ['usgsId is required (e.g. "us6000u18k")']);
   try {
@@ -286,14 +312,32 @@ app.get('/api/datasets/:source', async (c) => {
 
 // ---------- AI ----------
 
-app.post('/api/ask', async (c) => {
+app.post('/api/ask', limitChatBody, async (c) => {
   const parsed = validateAskRequest(await readJson(c));
   if (parsed.errors) return badRequest(c, parsed.errors);
-  const { eventId, question } = parsed.value;
+  const { eventId, question, chatId } = parsed.value;
   if (!SAFE_ID_RE.test(eventId)) return badRequest(c, ['invalid eventId']);
+  const owner = c.get('auth0User').sub;
+  if (chatId) {
+    const chat = await getChat(c.env.DB, owner, chatId);
+    if (!chat) return c.json({ error: 'not_found', message: 'Chat not found' }, 404);
+    if (chat.eventId !== eventId) return badRequest(c, ['eventId must match the chat event']);
+  }
   const event = await getEvent(c.env.DB, eventId);
   if (!event) return c.json({ error: 'not_found', message: `event ${eventId} not found` }, 404);
   try {
+    if (chatId) {
+      const [history, scenes] = await Promise.all([
+        chatHistory(c.env.DB, owner, chatId), listScenesForEvent(c.env.DB, eventId),
+      ]);
+      const result = await answerQuestion(c.env, { event, scenes, question, history, privateConversation: true });
+      const messages = await saveChatMessages(c.env.DB, owner, chatId, [
+        { role: 'user', content: question },
+        { role: 'assistant', content: result.answer, metadata: result },
+      ]);
+      if (!messages || messages.length !== 2) return c.json({ error: 'not_found', message: 'Chat not found' }, 404);
+      return c.json({ ...result, chatId, messageIds: { user: messages[0].id, assistant: messages[1].id } });
+    }
     const key = cacheKeys.answer(eventId, await hashQuestion(question));
     const result = await cached(c.env.CACHE, key, ANSWER_CACHE_TTL, async () => {
       const scenes = await listScenesForEvent(c.env.DB, eventId);

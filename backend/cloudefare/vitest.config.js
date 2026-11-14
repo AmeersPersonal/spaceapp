@@ -14,10 +14,14 @@ export default defineConfig({
           // Force unauthenticated, offline defaults regardless of local .dev.vars.
           EARTHDATA_TOKEN: '',
           INGEST_API_KEY: '',
+          AUTH0_DOMAIN: '',
+          AUTH0_CLIENT_ID: '',
+          AUTH0_CLIENT_SECRET: '',
+          AUTH0_SESSION_ENCRYPTION_KEY: '',
+          APP_BASE_URL: '',
           FIRMS_MAP_KEY: '',
           GOOGLE_MAPS_API_KEY: '',
           PROCESSOR_URL: '',
-          GOOGLE_MAPS_API_KEY: '',
           // Per-use-case model routing is configured in wrangler.jsonc; tests start with it off and opt in per test.
           MODEL_CAPTION: '',
           MODEL_ASK: '',

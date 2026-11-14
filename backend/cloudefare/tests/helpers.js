@@ -1,6 +1,7 @@
 // Shared test helpers: fake Workers AI / Vectorize bindings (never call the real services),
 // database reset and seed data.
 import { env } from 'cloudflare:test';
+import { authEnv } from './auth0-helpers.js';
 import { insertEvent, upsertScenes } from '../dataManger.js';
 import fixture from './fixtures/asf-search-nisar.json';
 import { parseSearchResponse } from '../asf.js';
@@ -9,7 +10,7 @@ export const asfFixture = fixture;
 export const fixtureScenes = () => parseSearchResponse(structuredClone(fixture));
 
 export async function resetDb() {
-  await env.DB.batch(['messages', 'conversations', 'captions', 'layers', 'scenes', 'ingests', 'events'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  await env.DB.batch(['chat_messages', 'chats', 'messages', 'conversations', 'captions', 'layers', 'scenes', 'ingests', 'events'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
   const listed = await env.CACHE.list();
   await Promise.all(listed.keys.map((k) => env.CACHE.delete(k.name)));
   const objects = await env.TILES.list();
@@ -47,7 +48,7 @@ export function fakeVectors() {
   };
 }
 
-export const testEnv = (overrides = {}) => ({ ...env, AI: fakeAI(), VECTORS: fakeVectors(), ...overrides });
+export const testEnv = (overrides = {}) => ({ ...env, ...authEnv, AI: fakeAI(), VECTORS: fakeVectors(), ...overrides });
 
 export const SAMPLE_EVENT = {
   id: 'baja-test',
