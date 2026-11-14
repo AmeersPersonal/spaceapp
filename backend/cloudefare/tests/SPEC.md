@@ -13,8 +13,11 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `helpers.js` | Fake Workers AI and Vectorize, `testEnv()`, `resetDb()` (clears D1, KV and R2), and seed helpers. |
 | `api.test.js` | Every HTTP route: events, event detail, tiles (304/404/400), ingest create/status/validation/auth, ask (cache/400/404/502), root. |
 | `ingest.test.js` | AOI and ingest validation, `IngestWorkflow` happy path and ASF failure, failure to create the workflow, queue consumer (dispatch, retry backoff, 4xx, manifest→ready+caption, idempotency, invalid manifests), DLQ, cron. |
+| `main.test.js` | `backend/main.js` re-exports the Worker handlers, `IngestWorkflow` and `ReplayRoom`. |
 | `replay.test.js` | `ReplayRoom` over real WebSockets: join state, presence, broadcast, errors, sync/ping, persistence, room isolation, cleanup alarm. |
 | `events.test.js` | USGS parsing/fetching, quake→ingest request, NISAR preview, Google geocoding (incl. key never leaked), event/batch/queue handlers, and the four discovery routes. |
+| `agents.test.js` | Agent routing and models, chat (consults, shared thread, failure and foreign-conversation paths), summary, forecast math, scene stats, and the `/api/agents`, `/api/chat`, summary and predict routes. |
+| `routing.test.js` | Per-use-case model chains, outside-provider calls through the AI Gateway (mocked fetch), fallback on errors/empty answers/missing keys, reasoning settings. |
 | `datasets.test.js` | Seven NASA source adapters, query validation, CMR pagination, FIRMS CSV parsing and key handling, GEOS initialization/valid-time filtering, response limits, partial context, generic event integration and API routes. Provider calls are mocked. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
@@ -29,17 +32,23 @@ Run `npm test` from `backend/cloudefare/`. The vitest config blanks local servic
 `../vitest.config.js`, `../wrangler.jsonc` and `../migrations/`.
 
 ## Tests
-The suite includes 157 tests in 11 files, including chat persistence and HTTP session policy. Known gaps:
+The merged suite passed 203 tests across 14 files on 2026-11-14. It covers both storage schemas and private cache bypass across provider fallback. Known gaps:
 - The `getQueueResult()` helper does not record `delaySeconds`, so the backoff check spies on `msg.retry`.
 - `mockStepError` makes the Workflows engine log "uncaught exception" lines. This is expected.
-- Real Workers AI, Vectorize and R2 notification delivery are untested.
+- Automated tests mock Workers AI, Vectorize and external providers; historical live checks are separate evidence.
+- Real browser sign-in, saved AI chat, logout, rejected logged-out access, re-login and restored history remain unverified. Local Worker startup requires Cloudflare credentials for its remote AI binding.
 
 ## Status
-Done.
+Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. Real browser E2E remains pending.
 
 ## Changelog
+- 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
+- 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.
 - 2026-11-14 - Added ten persistent-chat tests plus session access-policy coverage; reset chat tables before parent events to preserve foreign keys.
 - 2026-11-14 - Added 14 Auth0 security/integration tests and authenticated existing write-route tests without adding a production bypass.
+- 2026-11-14 - Added routing.test.js (13 tests); vitest.config.js blanks MODEL_* and provider keys so tests never route to outside providers unless a test opts in.
+- 2026-11-14 - Added agents.test.js (30 tests) and a stats assertion in ingest.test.js; `resetDb` also clears messages and conversations.
+- 2026-11-14 - Added main.test.js (entry-point re-exports).
 - 2026-11-14 - Removed the unshipped processor bridge test file at user request.
 - 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.
 - 2026-11-14 - Added supplementary NASA adapter and route tests; live checks are separate from automated suites and recorded in ../DATASET_ACCESS.md.
