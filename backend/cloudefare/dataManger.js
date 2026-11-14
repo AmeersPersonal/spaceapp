@@ -282,6 +282,56 @@ function captionFromRow(r) {
   return { id: r.id, eventId: r.event_id, sceneId: r.scene_id, text: r.text, model: r.model, createdAt: r.created_at, aiGenerated: true };
 }
 
+// ---------- scene stats (for predictive analysis) ----------
+
+/** Store the processor's manifest.stats on a scene. Non-object stats are ignored. */
+export async function setSceneStats(db, sceneId, stats) {
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) return false;
+  await db.prepare('UPDATE scenes SET stats = ? WHERE id = ?').bind(json(stats), sceneId).run();
+  return true;
+}
+
+/** Ready scenes that have stats, oldest first: [{sceneId, product, acquiredAt, stats}]. */
+export async function listSceneStats(db, eventId) {
+  const { results } = await db
+    .prepare(`SELECT id, product, acquired_at, stats FROM scenes WHERE event_id = ? AND status = 'ready' AND stats IS NOT NULL ORDER BY acquired_at`)
+    .bind(eventId)
+    .all();
+  return results.map((r) => ({ sceneId: r.id, product: r.product, acquiredAt: r.acquired_at, stats: parse(r.stats, {}) }));
+}
+
+// ---------- conversations ----------
+
+export async function createConversation(db, { id, eventId }) {
+  await db.prepare('INSERT INTO conversations (id, event_id) VALUES (?, ?)').bind(id, eventId).run();
+  return { id, eventId };
+}
+
+export async function getConversation(db, id) {
+  const row = await db.prepare('SELECT * FROM conversations WHERE id = ?').bind(id).first();
+  return row ? { id: row.id, eventId: row.event_id, createdAt: row.created_at, updatedAt: row.updated_at } : null;
+}
+
+/** Append messages [{role, agent?, model?, content}] in order and bump the conversation. */
+export async function addMessages(db, conversationId, messages) {
+  if (!messages.length) return;
+  const insert = db.prepare('INSERT INTO messages (conversation_id, role, agent, model, content) VALUES (?, ?, ?, ?, ?)');
+  const touch = db.prepare(`UPDATE conversations SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`);
+  await db.batch([
+    ...messages.map((m) => insert.bind(conversationId, m.role, m.agent ?? null, m.model ?? null, m.content)),
+    touch.bind(conversationId),
+  ]);
+}
+
+/** The latest `limit` messages of a conversation, oldest first. */
+export async function listMessages(db, conversationId, limit = 100) {
+  const { results } = await db
+    .prepare('SELECT * FROM (SELECT * FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id')
+    .bind(conversationId, limit)
+    .all();
+  return results.map((r) => ({ id: r.id, role: r.role, agent: r.agent, model: r.model, content: r.content, createdAt: r.created_at }));
+}
+
 // ---------- R2 ----------
 
 export const tileKey = (eventId, layer, date, z, x, y) => `tiles/${eventId}/${layer}/${date}/${z}/${x}/${y}.png`;

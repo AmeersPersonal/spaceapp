@@ -33,3 +33,7 @@ Concurrent requests save whole user/assistant pairs atomically in completion ord
 ## Verification
 
 All 157 backend tests passed across 11 files on 2026-11-14. The deployment dry run built successfully. Local migrations 0001 and 0002 applied successfully; production was not changed. Independent review found no blocking security/correctness issues.
+
+## Current E2E gap (2026-11-14)
+
+Real Auth0 login → AI chat → logout → re-login → restored messages remains pending; see [AUTH0.md](AUTH0.md#browser-e2e-verification-status-2026-11-14) for acceptance steps. The latest successful 157-test run predates the current merge and used mocked providers. The merge is now resolved and its combined suite passes 203 tests across 14 files. The full local Worker could not establish its remote AI proxy because Wrangler lacked `CLOUDFLARE_API_TOKEN`. No production rollout or remote migration was performed during that check.

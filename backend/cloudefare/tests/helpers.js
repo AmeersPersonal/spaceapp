@@ -10,7 +10,7 @@ export const asfFixture = fixture;
 export const fixtureScenes = () => parseSearchResponse(structuredClone(fixture));
 
 export async function resetDb() {
-  await env.DB.batch(['chat_messages', 'chats', 'captions', 'layers', 'scenes', 'ingests', 'events'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  await env.DB.batch(['chat_messages', 'chats', 'messages', 'conversations', 'captions', 'layers', 'scenes', 'ingests', 'events'].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
   const listed = await env.CACHE.list();
   await Promise.all(listed.keys.map((k) => env.CACHE.delete(k.name)));
   const objects = await env.TILES.list();

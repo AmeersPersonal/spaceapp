@@ -10,7 +10,7 @@ import {
   startIngest,
   validateManifest,
 } from '../workFlowManger.js';
-import { getEvent, getIngest, getScene, listLayersForEvent, listScenesForIngest, manifestKey } from '../dataManger.js';
+import { getEvent, getIngest, getScene, listLayersForEvent, listSceneStats, listScenesForIngest, manifestKey } from '../dataManger.js';
 import { fakeAI, fixtureScenes, resetDb, SAMPLE_EVENT, seedEvent, seedScenes, testEnv } from './helpers.js';
 
 beforeEach(resetDb);
@@ -158,6 +158,7 @@ describe('queue consumer', () => {
     expect((await getScene(env.DB, scene.id)).status).toBe('ready');
     expect(await listLayersForEvent(env.DB, SAMPLE_EVENT.id)).toMatchObject([{ layer: 'vv-backscatter', maxZoom: 10 }]);
     expect(e.VECTORS.store.size).toBe(1);
+    expect(await listSceneStats(env.DB, SAMPLE_EVENT.id)).toMatchObject([{ sceneId: scene.id, stats: { meanChangeDb: -4 } }]);
 
     // A duplicate notification does not caption twice.
     await runBatch('earth-replay-ingest', [msg({ action: 'PutObject', object: { key } })], e);

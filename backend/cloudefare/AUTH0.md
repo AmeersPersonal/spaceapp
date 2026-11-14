@@ -66,3 +66,19 @@ Run `npm test`. Auth tests use the actual SDK, encrypted cookies and an RSA-sign
 `npm audit` reports two high-severity entries for the SDK's transitive Zod 3 dependency (GHSA-mrhx-c7xc-m3w5), with no compatible fix available. The affected schema validation here processes server-owned SDK configuration, not user-supplied collections. Revisit when Auth0 publishes an SDK with a patched dependency; do not force a breaking Zod major upgrade.
 
 Client secrets are redacted from MCP responses. View the full secret in [Auth0 application settings](https://manage.auth0.com/dashboard/us/dev-8j8602hv217j1z36/applications/NEQOILq4iAhXRzN15kDBsrM8weJg6tgp/settings), or through authenticated `GET https://dev-8j8602hv217j1z36.us.auth0.com/api/v2/clients/NEQOILq4iAhXRzN15kDBsrM8weJg6tgp`. Do not paste secrets into chat or commit env files.
+
+## Browser E2E verification status (2026-11-14)
+
+The pre-merge automated suite passed 157 tests in 11 files. It uses mocked Auth0 endpoints and AI services; it does not establish real end-user sign-in or real AI chat persistence. The main/Auth0 merge is now resolved; its combined automated suite passes 203 tests across 14 files. Real browser E2E remains pending.
+
+The attempted full local startup failed because Wrangler did not receive `CLOUDFLARE_API_TOKEN` for its remote AI proxy. Auth0 client credentials do not authenticate Wrangler to Cloudflare. Configure Cloudflare credentials securely outside chat before retrying. The Vectorize binding also needs supported remote access for live retrieval. No deployment was performed during this check.
+
+After starting the complete Worker, verify in the same browser:
+
+1. Visit `/auth/login`, complete real Auth0 login, and confirm `/api/auth/me` returns the signed-in profile.
+2. Select an existing event, create an event-bound chat with `POST /api/chats`, and send `/api/ask` with its `chatId`. Confirm both user and assistant messages appear in its message history.
+3. Visit `/auth/logout`; confirm `/api/auth/me` and owned chat reads return 401 after logout.
+4. Log in again to the same account; confirm the Auth0 subject is unchanged and the same chat and messages are restored.
+5. Send a follow-up using the same `chatId`; confirm the history grows and continuation succeeds.
+
+This sequence remains pending. A deployed environment is additionally required to verify deployed secrets, HTTPS cookie behavior and actual frontend/API origin integration. The public specialist `/api/chat` thread is separate from owner-scoped `/api/chats` and does not verify private chat access controls.

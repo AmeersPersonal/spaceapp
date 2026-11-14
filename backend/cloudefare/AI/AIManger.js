@@ -1,7 +1,7 @@
 // AI features: scene captions that hypothesize the physical driver of observed change,
 // Vectorize-backed semantic search over captions, and grounded answers for POST /api/ask.
 
-import { embed, generateText } from './AIGateway.js';
+import { AIError, embed, generateTextDetailed } from './AIGateway.js';
 import { DATA_CREDIT, getCaptionsByIds, insertCaption, listCaptionsForEvent } from '../dataManger.js';
 
 export const AI_DISCLAIMER =
@@ -57,8 +57,8 @@ export function buildCaptionMessages(event, scene, manifest) {
  * Returns the stored caption.
  */
 export async function captionScene(env, { event, scene, manifest }) {
-  const text = await generateText(env, buildCaptionMessages(event, scene, manifest), { maxTokens: 220 });
-  const caption = { id: `cap_${crypto.randomUUID()}`, eventId: event.id, sceneId: scene.id, text, model: env.LLM_MODEL };
+  const { text, model } = await generateTextDetailed(env, buildCaptionMessages(event, scene, manifest), { maxTokens: 220, useCase: 'caption' });
+  const caption = { id: `cap_${crypto.randomUUID()}`, eventId: event.id, sceneId: scene.id, text, model };
   const [vector] = await embed(env, [text]);
   await insertCaption(env.DB, caption);
   await env.VECTORS.upsert([
@@ -78,8 +78,9 @@ export async function searchCaptions(env, eventId, query, topK = 5) {
   return matches.filter((m) => byId.has(m.id)).map((m) => ({ ...byId.get(m.id), score: m.score }));
 }
 
-export function buildAnswerMessages(event, scenes, captions, question, history = []) {
-  const context = {
+/** Grounding facts shared by ask, chat, summary and forecast prompts. */
+export function buildEventContext(event, scenes, captions) {
+  return {
     event: { id: event.id, name: event.name, type: event.type, bbox: event.bbox, startDate: event.startDate, endDate: event.endDate },
     scenes: scenes.slice(0, 30).map((s) => ({
       id: s.id,
@@ -92,6 +93,21 @@ export function buildAnswerMessages(event, scenes, captions, question, history =
     sceneCaptions: captions.map((c) => ({ sceneId: c.sceneId, caption: c.text })),
     productNotes: PRODUCT_NOTES,
   };
+}
+
+/** Captions most relevant to a query (Vectorize), falling back to the latest ones. */
+export async function retrieveCaptions(env, eventId, query, topK = 5) {
+  let captions = [];
+  try {
+    captions = await searchCaptions(env, eventId, query, topK);
+  } catch (err) {
+    if (!(err instanceof AIError)) throw err; // search is best-effort: fall back to recency
+  }
+  return captions.length ? captions : listCaptionsForEvent(env.DB, eventId, topK);
+}
+
+export function buildAnswerMessages(event, scenes, captions, question, history = []) {
+  const context = buildEventContext(event, scenes, captions);
   return [
     {
       role: 'system',
@@ -107,10 +123,9 @@ export function buildAnswerMessages(event, scenes, captions, question, history =
 
 /** Answer a question about an event, grounded in its scenes and the most relevant captions. */
 export async function answerQuestion(env, { event, scenes, question, history = [], privateConversation = false }) {
-  let captions = await searchCaptions(env, event.id, question);
-  if (!captions.length) captions = await listCaptionsForEvent(env.DB, event.id, 5);
-  const answer = await generateText(env, buildAnswerMessages(event, scenes, captions, question, history), {
-    maxTokens: 350, ...(privateConversation ? { skipCache: true } : { cacheTtl: 3600 }),
+  const captions = await retrieveCaptions(env, event.id, question);
+  const { text: answer, model } = await generateTextDetailed(env, buildAnswerMessages(event, scenes, captions, question, history), {
+    maxTokens: 350, useCase: 'ask', ...(privateConversation ? { skipCache: true } : { cacheTtl: 3600 }),
   });
   return {
     eventId: event.id,
@@ -118,7 +133,7 @@ export async function answerQuestion(env, { event, scenes, question, history = [
     answer,
     sources: captions.map((c) => ({ captionId: c.id, sceneId: c.sceneId, score: c.score ?? null })),
     sceneCount: scenes.length,
-    model: env.LLM_MODEL,
+    model,
     aiGenerated: true,
     disclaimer: AI_DISCLAIMER,
     credit: DATA_CREDIT,

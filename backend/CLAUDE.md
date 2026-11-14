@@ -30,7 +30,7 @@ Success criteria: The frontend can list events, fetch scene metadata and tiles, 
 
 Stack
 API: Cloudflare Worker (Hono).
-Cloudflare services: Workers, Workflows (durable ingest pipeline), Queues + DLQ (per-scene processing), Durable Objects (shared replay rooms over WebSockets), R2 (COGs/tiles), D1 (event/scene/caption catalog), KV (manifests/cache), Workers AI + Vectorize (captions, semantic search) behind AI Gateway, Cron Triggers (poll for new NISAR scenes), Containers (Python h5py/rasterio processing, if enabled).
+Cloudflare services: Workers, Workflows (durable ingest pipeline), Queues + DLQ (per-scene processing), Durable Objects (shared replay rooms over WebSockets), R2 (COGs/tiles), D1 (event/scene/caption catalog), KV (manifests/cache), Workers AI + Vectorize (captions, semantic search) behind AI Gateway; per-use-case chat models can also be Groq or Google AI Studio models called through AI Gateway (see cloudefare/AI/SPEC.md), Cron Triggers (poll for new NISAR scenes), Containers (Python h5py/rasterio processing, if enabled).
 Data: NISAR L2 GCOV, GUNW, GOFF, L3 SME2 via ASF DAAC (asf_search, earthaccess, Earthdata Login token). Supplementary context: Sentinel-1/2, USGS earthquakes, NASA FIRMS, JRC Surface Water, ESA WorldCover, WorldPop.
 Constraint: Do not parse NISAR HDF5 inside a Worker (memory/CPU limits). Precompute tiles with Python (local or Container) and serve from R2.
 API surface (contract with the frontend)
@@ -56,6 +56,11 @@ GET /api/datasets/context?bbox&start&end&sources&limit&page&runDate&cycle (combi
 POST /api/ingest {aoi, dateRange, eventId?, name?, type?, products?, description?, watch?} (requires Auth0 session and JSON; starts a Workflow, returns an id; full payload in cloudefare/SPEC.md)
 GET /api/ingest/:id (status)
 POST /api/ask {eventId, question, chatId?} (requires Auth0 session and JSON; optionally continue an owned, event-bound chat and persist the question/answer)
+GET /api/agents (specialist roster)
+POST /api/chat {eventId, message, conversationId?, agent?} (multi-agent chat; specialists share one thread and consult each other)
+GET /api/chat/:conversationId (stored thread)
+GET /api/events/:id/summary (AI briefing per event)
+GET /api/events/:id/predict?horizonDays (modeled projection from NISAR-derived stats)
 WS /api/room/:code (replay sync)
 
 Changing any route or payload shape requires updating the owning folder's spec and this list in the same turn.

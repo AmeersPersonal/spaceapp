@@ -21,6 +21,7 @@ import {
   listScenesForIngest,
   listWatchedEvents,
   manifestKey,
+  setSceneStats,
   markEventPolled,
   parseManifestKey,
   readManifest,
@@ -295,6 +296,7 @@ export async function handleManifestNotification(env, body) {
   if (!scene || !event || scene.eventId !== event.id) throw new PermanentError(`manifest for unknown scene ${ref.sceneId}`);
 
   await upsertLayers(env.DB, event.id, scene.id, manifest.layers);
+  await setSceneStats(env.DB, scene.id, manifest.stats);
   const wasReady = scene.status === 'ready';
   await setSceneStatus(env.DB, scene.id, 'ready');
   await invalidateEvent(env.CACHE, event.id);
