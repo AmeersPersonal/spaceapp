@@ -9,7 +9,8 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `worker.js` | Entry point. Hono app with all routes, plus the `queue`/`scheduled` handlers; re-exports `IngestWorkflow` and `ReplayRoom`. |
 | `workFlowManger.js` | Ingest request validation, `IngestWorkflow`, queue consumer + DLQ handler, cron poller. |
 | `dataManger.js` | D1 catalog queries, R2 key layout/manifest reads, KV cache helpers, `DATA_CREDIT`. |
-| `events.js` | Event discovery and external fetchers: USGS earthquakes, NISAR scene preview, Google geocoding, plus generic `handleEvent`/batch/queue handlers. |
+| `events.js` | USGS, NISAR, geocoding, seven supplementary NASA dataset adapters, and event/batch/queue handlers. |
+| `DATASET_ACCESS.md` | Dataset integration scope, query examples, credentials, live checks and limitations. |
 | `asf.js` | ASF DAAC search client and NISAR GeoJSON normalizer (metadata only). |
 | `oAuth.js` | Earthdata token helpers, optional ingest API key middleware, processor auth header. |
 | `sessionManger.js` | Room-code validation and the pure replay-state reducer. |
@@ -38,6 +39,9 @@ All JSON responses from catalog/ingest routes include `credit` (NASA/JPL-Caltech
 | `POST /api/events/earthquake` | Body `{usgsId}`. Fetches the quake from USGS, creates event `usgs-<id>` if new, and starts a GUNW ingest (36 days before to 60 days after, clipped to launch/today). Returns 202 `{eventId, created, ingest:{id,status,dateRange,statusUrl}}`. Errors: 400, 404, 502, or 401 with `INGEST_API_KEY`. |
 | `GET /api/nisar/search` | Query `bbox=w,s,e,n&start&end&products?`. Live ASF preview without cataloging: `{query,count,byProduct,dates,polarizations,scenes[],truncated,credit}`. |
 | `GET /api/geocode` | Query `q` (2–200 chars). Returns `{formattedAddress,location,bbox,aoi,credit}` where `aoi` is capped at 5° per side. 503 without `GOOGLE_MAPS_API_KEY`, 404 for no match. |
+| `GET /api/datasets` | `{sources:[{id,name,kind,configured,requiredSecret?,shortNames?,notes,credit,...}]}`. `configured` indicates whether required credentials exist, not provider health. Never returns keys. |
+| `GET /api/datasets/:source` | `source`: firms/gpm/smap/hls/geos/terrain/grace. Requires `bbox=w,s,e,n`, `start`, `end`; optional `limit` (1–50, default 10), `page` (1–10000, default 1), GEOS `runDate` (default start), `cycle` (00/06/12/18, default 00). Region ≤5° per side, range ≤366 days, independent of NISAR launch. Returns `{source,name,kind,query,credit,notes,measurementsRetrieved,items,count,total,nextPage,truncated,...}`. CMR returns granule metadata/download references; GEOS returns global forecast file references; FIRMS returns detections, requires `FIRMS_MAP_KEY` and ≤5 inclusive days. Errors: 400 invalid input, 503 missing key, 404 absent GEOS archive, 502 provider/network/size failure. |
+| `GET /api/datasets/context` | Same query plus optional comma-separated `sources` (default all seven). `{query,partial,results:{source:{ok,result? ,error?,message?,retryable?}}}`. Individual failures preserve successful results; valid queries return 200 even when some/all providers fail. |
 | `POST /api/ingest` | Body `{aoi, dateRange:{start,end}, eventId?, name?, type?, products?, description?, watch?}`. `aoi` is `[w,s,e,n]` or a GeoJSON Polygon of at most 5°×5°. Dates are `YYYY-MM-DD`, span ≤ 366 days, end on/after 2025-07-30 and start no later than today. `type` is one of earthquake, flood, wetland, forest, crop, glacier, soil_moisture, other. `products` is a subset of GCOV/GUNW/GOFF/SME2, defaulting by type (earthquake→GUNW, glacier→GOFF, soil_moisture→SME2, else GCOV). Returns 202 `{id, eventId, status:'queued', dateRange, statusUrl}`. If `INGEST_API_KEY` is set, a missing or wrong key returns 401. |
 | `GET /api/ingest/:id` | `{id, eventId, dateRange, trigger, status, sceneCount, error, workflow:{status,error}, progress:{total, <sceneStatus>:n}, scenes[{id,product,acquiredAt,status,error,url}], credit}`. `status` is queued, searching, dispatched, complete or failed. It reads complete once all scenes are ready or failed. |
 | `POST /api/ask` | Body `{eventId, question}` (question 3–500 chars). Returns `{answer, sources[{captionId,sceneId,score}], sceneCount, model, aiGenerated:true, disclaimer, credit}`. Cached in KV for 1 h. Errors: 400, 404, or 502 `ai_unavailable`. |
@@ -67,7 +71,10 @@ Params `{ingestId, eventId, wkt, start, end, products, maxScenes}`. Steps: `mark
 `DB` (D1 `earth-replay`), `TILES` (R2 `earth-replay-tiles`), `CACHE` (KV), `INGEST_QUEUE` (Queue), `INGEST_WORKFLOW` (Workflow), `REPLAY_ROOM` (DO, SQLite), `AI` (Workers AI), `VECTORS` (Vectorize `earth-replay-captions`, 768-dim cosine).
 
 ### Env vars / secrets
-Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`.
+Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`, `FIRMS_MAP_KEY` (separate from Earthdata Login; see `.dev.vars.example`).
+
+### Dataset handlers
+`listDatasets(env)`, `parseDatasetQuery(URLSearchParams)`, `fetchDataset(source, query, env, deps)`, and `datasetContext(query, env, deps)` are exported from `events.js`. All provider adapters support `deps.fetch`; query validation applies to direct callers too. Generic event messages support `{type:'dataset', source, bbox, start, end, ...}` and `{type:'dataset_context', sources?, bbox, start, end, ...}`. Results are returned to callers; no raster download, D1 persistence, R2 upload or AI prompt enrichment is triggered. Calls have a 10-second timeout and streamed response limits (2 MB, 4 MB for GEOS). CMR requests are anonymous; Earthdata credentials belong in the external download processor.
 
 ### Setup commands (one-time)
 ```sh
@@ -85,22 +92,24 @@ npm run db:migrate:remote
 
 ## Dependencies
 - Cloudflare: Workers, Workflows, Queues + DLQ, Durable Objects, R2 (+ event notifications), D1, KV, Workers AI, AI Gateway, Vectorize, Cron Triggers.
-- External: USGS FDSN event API (`earthquake.usgs.gov/fdsnws/event/1/query`, no key); Google Geocoding API (optional key); ASF DAAC search API (`dataset=NISAR`, `processingLevel` GCOV/GUNW/GOFF/SME2, `output=geojson`); the external Python processor (not in this folder).
+- External: USGS FDSN event API; Google Geocoding API; ASF DAAC; NASA CMR `search/granules.json` (GPM, SMAP, HLS, NASADEM, GRACE); NCCS GEOS-FP forecast directory; NASA FIRMS area CSV API (separate key); the external Python processor (not in this folder).
 - npm: `hono`; dev: `wrangler`, `vitest` 4.1, `@cloudflare/vitest-plugin`.
 
 ## Tests
-`npm test` (from this folder) runs Vitest in workerd with local D1/R2/KV/Queues/DO/Workflows. Workers AI and Vectorize are replaced by in-memory fakes, and ASF uses a recorded fixture, so tests make no external calls. There are 109 tests across 8 files; see [tests/SPEC.md](tests/SPEC.md). Gaps: Google responses are shaped from its documentation (no key to record one); real Vectorize/AI behavior is untested, as is the R2 notification wiring itself (only the message handler is tested).
+`npm test` (from this folder) runs Vitest in workerd with local D1/R2/KV/Queues/DO/Workflows. Workers AI and Vectorize are replaced by in-memory fakes, and external provider calls are mocked, so tests make no external calls. All 132 tests passed across 9 files on 2026-11-14; see [tests/SPEC.md](tests/SPEC.md). Gaps: Google and FIRMS live credentialed access are unverified; real Vectorize/AI behavior is untested, as is the R2 notification wiring itself (only the message handler is tested). Supplementary NASA live catalog checks are documented separately in DATASET_ACCESS.md.
 
 ## Status
 Done: discovery/geocode/preview routes in events.js, every route in the contract, the ingest Workflow, queue/DLQ, cron, the replay DO, AI captions/ask, and KV caching.
 TODO:
 - Create real resource IDs (D1, KV) and the AI Gateway before deploy.
 - The Python processor (and an optional Container) does not exist yet. Scenes stay `awaiting_processor` until it does.
-- Only USGS is integrated as a supplementary source. FIRMS, JRC Surface Water, etc. are only passed through `manifest.context`.
+- Supplementary NASA discovery is implemented; raster extraction, cross-source alignment, persistence, automatic `manifest.context` enrichment and predictive modeling are not. FIRMS live access requires a map key. JRC Surface Water/WorldPop/WorldCover connectors remain unimplemented.
 - `handleEventQueue` is not bound to a queue yet (events are handled inline by the routes).
 - `compatibility_date` is pinned to 2026-08-15 because the local workerd bundled with the test plugin does not support later dates.
 
 ## Changelog
+- 2026-11-14 - Isolated tests from local FIRMS and Google credentials; prevents missing-key cases from accessing live APIs.
+- 2026-11-14 - Added seven NASA dataset adapters, bounded regional queries, combined partial results, API routes, credential template, tests and live access notes.
 - 2026-11-14 - Implemented events.js: USGS earthquake discovery/registration, NISAR preview, Google geocoding, event handlers; four new routes; fixture and 35 tests.
 - 2026-11-14 - Added gitignored `.env` for local secrets and ignored `.env*` in backend/.gitignore.
 - 2026-11-14 - Initial Worker: Hono API, IngestWorkflow, ingest queue + DLQ, cron poller, ReplayRoom DO, AI captions/ask with Vectorize, D1 schema, tests. Validated ASF NISAR field names against live search responses.
