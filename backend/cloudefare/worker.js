@@ -22,6 +22,10 @@ import { answerQuestion, hashQuestion, validateAskRequest } from './AI/AIManger.
 import { AIError } from './AI/AIGateway.js';
 import {
   EventError,
+  datasetContext,
+  fetchDataset,
+  listDatasets,
+  parseDatasetQuery,
   SUPPLEMENTARY_CREDIT,
   fetchEarthquakes,
   googleMapApi,
@@ -74,6 +78,9 @@ app.get('/', (c) =>
       'POST /api/events/earthquake',
       'GET /api/nisar/search',
       'GET /api/geocode',
+      'GET /api/datasets',
+      'GET /api/datasets/context',
+      'GET /api/datasets/:source',
       'POST /api/ingest',
       'GET /api/ingest/:id',
       'POST /api/ask',
@@ -246,6 +253,24 @@ app.get('/api/geocode', async (c) => {
   } catch (err) {
     return eventErrorResponse(c, err);
   }
+});
+
+// ---------- supplementary NASA datasets ----------
+
+app.get('/api/datasets', (c) => c.json({ sources: listDatasets(c.env) }));
+
+app.get('/api/datasets/context', async (c) => {
+  const parsed = parseDatasetQuery(new URL(c.req.url).searchParams);
+  if (parsed.errors) return badRequest(c, parsed.errors);
+  try { return c.json(await datasetContext(parsed.value, c.env)); }
+  catch (err) { return eventErrorResponse(c, err); }
+});
+
+app.get('/api/datasets/:source', async (c) => {
+  const parsed = parseDatasetQuery(new URL(c.req.url).searchParams);
+  if (parsed.errors) return badRequest(c, parsed.errors);
+  try { return c.json(await fetchDataset(c.req.param('source'), parsed.value, c.env)); }
+  catch (err) { return eventErrorResponse(c, err); }
 });
 
 // ---------- AI ----------
