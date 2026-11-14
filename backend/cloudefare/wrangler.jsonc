@@ -1,0 +1,61 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "earth-replay-api",
+  "account_id": "a56b8c1d989e04efda18a227e54673bd",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "traces": { "enabled": true } },
+
+  // Non-secret configuration. Secrets (EARTHDATA_TOKEN, INGEST_API_KEY, PROCESSOR_TOKEN)
+  // go in .dev.vars locally and `wrangler secret put` in production.
+  "vars": {
+    "AI_GATEWAY_ID": "earth-replay",
+    "LLM_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "EMBEDDING_MODEL": "@cf/baai/bge-base-en-v1.5",
+    "ASF_SEARCH_URL": "https://api.daac.asf.alaska.edu/services/search/param",
+    "PROCESSOR_URL": "",
+    "MAX_SCENES_PER_INGEST": "25",
+    "CORS_ORIGIN": "*"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earth-replay",
+      "database_id": "febe4577-968a-48dc-8cc4-e6136d8e965b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "TILES", "bucket_name": "earth-replay-tiles" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "8a8fcf0bbdbc4c499c7dcd7a0a0cab3a" }],
+
+  "queues": {
+    "producers": [{ "binding": "INGEST_QUEUE", "queue": "earth-replay-ingest" }],
+    "consumers": [
+      {
+        "queue": "earth-replay-ingest",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "earth-replay-ingest-dlq"
+      },
+      { "queue": "earth-replay-ingest-dlq", "max_batch_size": 10, "max_retries": 1 }
+    ]
+  },
+
+  "workflows": [
+    { "name": "earth-replay-ingest", "binding": "INGEST_WORKFLOW", "class_name": "IngestWorkflow" }
+  ],
+
+  "durable_objects": {
+    "bindings": [{ "name": "REPLAY_ROOM", "class_name": "ReplayRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ReplayRoom"] }],
+
+  "ai": { "binding": "AI" },
+  "vectorize": [{ "binding": "VECTORS", "index_name": "earth-replay-captions" }],
+
+  // Poll ASF for newly published NISAR scenes over watched events every 6 hours.
+  "triggers": { "crons": ["0 */6 * * *"] }
+}

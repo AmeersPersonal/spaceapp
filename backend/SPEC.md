@@ -13,6 +13,7 @@ Scope summary (the source of truth is [CLAUDE.md](CLAUDE.md)):
 | [cloudefare/](cloudefare/SPEC.md) | The Cloudflare Worker: API, Workflow, Queues, Durable Object, AI and D1 schema. |
 | `main.js` | Backend entry point: re-exports the Worker (`fetch`/`queue`/`scheduled`), `IngestWorkflow` and `ReplayRoom` from `cloudefare/`. Wrangler still deploys `cloudefare/worker.js` directly. |
 | `CLAUDE.md` | Project scope and working rules. |
+| `AGENTS.md` | Backend-scoped Codex instructions that refer to CLAUDE.md. |
 | `prompt.md` | A pointer to Cloudflare's agent-setup prompt. |
 | `.gitignore` | Ignores `node_modules`, `.wrangler`, `.dev.vars` and build output. |
 
@@ -53,9 +54,13 @@ Cloudflare account resources (see the setup commands in `cloudefare/SPEC.md`), A
 `cd cloudefare && npm test` (Vitest + `@cloudflare/vitest-plugin`).
 
 ## Status
-The Worker is done and its tests pass. Planned: the Python processor (local or Container), plus production resource IDs and the deploy itself.
+The Worker is deployed with supplementary NASA discovery adapters for FIRMS, GPM, SMAP, HLS, GEOS-FP, NASADEM and GRACE/GRACE-FO. These expose bounded metadata/file references and FIRMS detections, not raster analysis or predictions. Production resource IDs, secrets, AI Gateway, Vectorize filter and R2 manifest notifications are configured. Endpoint contracts, live verification and limitations are in [cloudefare/ENDPOINT_REFERENCE.md](cloudefare/ENDPOINT_REFERENCE.md). The external Python processor (local or Container) remains absent; real scene jobs stop at `awaiting_processor`.
 
 ## Changelog
+- 2026-11-14 - Removed the unshipped processor work at user request; existing dataset discovery and deployed API remain unchanged.
+- 2026-11-14 - Deployed and verified the Worker via Cloudflare MCP; linked production endpoint documentation and recorded the remaining processor gap.
+- 2026-11-14 - Scoped Codex instructions to the backend with AGENTS.md referencing CLAUDE.md.
+- 2026-11-14 - Added regional NASA dataset discovery and partial-result context API; documented live provider checks and remaining processing requirements.
 - 2026-11-14 - Added the multi-agent AI chat, per-event summaries and predictive analysis to the Worker (see cloudefare/AI/SPEC.md). Needs `npm run db:migrate:remote` for migration 0002.
 - 2026-11-14 - Finished main.js as the backend entry point re-exporting the Worker, Workflow and Durable Object.
 - 2026-11-14 - Added event discovery (USGS), NISAR preview and geocoding routes to the Worker.
