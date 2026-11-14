@@ -15,6 +15,7 @@ export default defineConfig({
           EARTHDATA_TOKEN: '',
           INGEST_API_KEY: '',
           PROCESSOR_URL: '',
+          GOOGLE_MAPS_API_KEY: '',
           ASF_SEARCH_URL: 'https://asf.test/services/search/param',
         },
       },

@@ -11,7 +11,7 @@ Scope summary (the source of truth is [CLAUDE.md](CLAUDE.md)):
 | Path | Description |
 |---|---|
 | [cloudefare/](cloudefare/SPEC.md) | The Cloudflare Worker: API, Workflow, Queues, Durable Object, AI and D1 schema. |
-| `main.js` | Empty placeholder that predates the Worker and isn't used by it. |
+| `main.js` | Backend entry point: re-exports the Worker (`fetch`/`queue`/`scheduled`), `IngestWorkflow` and `ReplayRoom` from `cloudefare/`. Wrangler still deploys `cloudefare/worker.js` directly. |
 | `CLAUDE.md` | Project scope and working rules. |
 | `prompt.md` | A pointer to Cloudflare's agent-setup prompt. |
 | `.gitignore` | Ignores `node_modules`, `.wrangler`, `.dev.vars` and build output. |
@@ -37,7 +37,7 @@ flowchart LR
   C -->|embedding| V[(Vectorize)]
   Q -.->|exhausted retries| DLQ[[DLQ]] -.-> D1
   W -->|tiles| R2
-  W -->|/api/ask| AI
+  W -->|/api/ask, /api/chat, summary, predict| AI
   W --> V
   W <-->|cache| KV[(KV)]
 ```
@@ -56,5 +56,7 @@ Cloudflare account resources (see the setup commands in `cloudefare/SPEC.md`), A
 The Worker is done and its tests pass. Planned: the Python processor (local or Container), plus production resource IDs and the deploy itself.
 
 ## Changelog
+- 2026-11-14 - Added the multi-agent AI chat, per-event summaries and predictive analysis to the Worker (see cloudefare/AI/SPEC.md). Needs `npm run db:migrate:remote` for migration 0002.
+- 2026-11-14 - Finished main.js as the backend entry point re-exporting the Worker, Workflow and Durable Object.
 - 2026-11-14 - Added event discovery (USGS), NISAR preview and geocoding routes to the Worker.
 - 2026-11-14 - Created the root spec, the architecture diagram and .gitignore, and added the cloudefare Worker.

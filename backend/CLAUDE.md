@@ -42,6 +42,11 @@ GET /api/geocode?q (place name to AOI, needs GOOGLE_MAPS_API_KEY)
 POST /api/ingest {aoi, dateRange, eventId?, name?, type?, products?, description?, watch?} (starts a Workflow, returns an id; full payload in cloudefare/SPEC.md)
 GET /api/ingest/:id (status)
 POST /api/ask {eventId, question} (AI answer)
+GET /api/agents (specialist roster)
+POST /api/chat {eventId, message, conversationId?, agent?} (multi-agent chat; specialists share one thread and consult each other)
+GET /api/chat/:conversationId (stored thread)
+GET /api/events/:id/summary (AI briefing per event)
+GET /api/events/:id/predict?horizonDays (modeled projection from NISAR-derived stats)
 WS /api/room/:code (replay sync)
 
 Changing any route or payload shape requires updating the owning folder's spec and this list in the same turn.
