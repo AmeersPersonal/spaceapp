@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createExecutionContext, env, introspectWorkflow, waitOnExecutionContext } from 'cloudflare:test';
 import worker from '../worker.js';
+import { sessionCookie } from './auth0-helpers.js';
 import {
   EventError,
   bboxAround,
@@ -258,6 +259,7 @@ describe('HTTP routes', () => {
     });
   }
   async function call(path, init, e = testEnv()) {
+    if (init?.method === 'POST') init = { ...init, headers: { cookie: await sessionCookie(), ...init.headers } };
     const ctx = createExecutionContext();
     const res = await worker.fetch(new Request(`https://api.test${path}`, init), e, ctx);
     await waitOnExecutionContext(ctx);
@@ -295,12 +297,12 @@ describe('HTTP routes', () => {
     expect(out.ingest.statusUrl).toBe(`/api/ingest/${out.ingest.id}`);
     await (await wf.get())[0].waitForStatus('complete');
   });
-  it('POST /api/events/earthquake handles bad input, unknown ids and the ingest key', async () => {
+  it('POST /api/events/earthquake handles bad input, unknown ids and missing login', async () => {
     expect((await post('/api/events/earthquake', {})).status).toBe(400);
     expect((await post('/api/events/earthquake', { usgsId: '../x' })).status).toBe(400);
     mockUpstreams({ usgs: () => new Response('', { status: 404 }) });
     expect((await post('/api/events/earthquake', { usgsId: 'us0000none' })).status).toBe(404);
-    expect((await post('/api/events/earthquake', { usgsId: 'us6000u18k' }, testEnv({ INGEST_API_KEY: 'k' }))).status).toBe(401);
+    expect((await call('/api/events/earthquake', { method: 'POST', headers: { 'content-type': 'application/json', cookie: '' }, body: JSON.stringify({ usgsId: 'us6000u18k' }) })).status).toBe(401);
   });
 
   it('GET /api/nisar/search previews scenes and validates input', async () => {

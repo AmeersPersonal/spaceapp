@@ -1,5 +1,7 @@
 # Earth Replay: deployed API and endpoint checks
 
+Source update: Auth0 login/logout/profile and session-protected ingest/AI writes are now implemented locally; see [AUTH0.md](AUTH0.md). They have not been deployed. The authentication descriptions and verification evidence below describe the earlier production deployment, not the current source contract.
+
 Verified November 14, 2026. Base URL:
 
 `https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`

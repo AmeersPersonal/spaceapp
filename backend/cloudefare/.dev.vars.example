@@ -4,8 +4,16 @@ EARTHDATA_TOKEN=
 # Separate free FIRMS key: https://firms.modaps.eosdis.nasa.gov/api/map_key/
 # Needed only for /api/datasets/firms; never substitute an Earthdata token.
 FIRMS_MAP_KEY=
-# When set, POST /api/ingest requires `Authorization: Bearer <INGEST_API_KEY>`.
-INGEST_API_KEY=
+# Auth0 browser login (use a Regular Web Application with client_secret_post).
+# The MCP credential helper writes domain/client credentials to .env.local;
+# `npm run dev` loads that file after .dev.vars, preserving other service secrets.
+AUTH0_DOMAIN=
+AUTH0_CLIENT_ID=
+AUTH0_CLIENT_SECRET=
+AUTH0_SESSION_ENCRYPTION_KEY=
+APP_BASE_URL=http://localhost:8787
+# Optional exact frontend origin(s), comma-separated. Never use * with credentials.
+# CORS_ORIGIN=http://localhost:5173
 # Shared secret sent to the Python processor as a bearer token.
 PROCESSOR_TOKEN=
 
