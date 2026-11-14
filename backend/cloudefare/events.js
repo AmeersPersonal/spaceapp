@@ -2,6 +2,7 @@
 //   - USGS earthquakes (real, no key)  -> candidate events with a suggested NISAR AOI + date window
 //   - NISAR scene preview (ASF DAAC)   -> what coverage exists before committing to an ingest
 //   - Google Geocoding API (optional key GOOGLE_MAPS_API_KEY) -> place name to AOI
+                                                                                                                                                                                                                                                  //   - NASA supplementary datasets: CMR granules, GEOS forecast files, FIRMS detections
 // Every fetcher takes `deps.fetch` so tests never touch the network.
 
 import { AsfError, searchNisar } from './asf.js';
@@ -88,7 +89,9 @@ export function limitBbox([w, s, e, n]) {
 
 /** Parse "w,s,e,n" from a query string. */
 export function parseBboxParam(value) {
-  const parts = String(value ?? '').split(',').map(Number);
+  const raw = String(value ?? '').split(',');
+  if (raw.some((s) => !s.trim())) return { error: 'bbox must be "west,south,east,north"' };
+  const parts = raw.map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return { error: 'bbox must be "west,south,east,north"' };
   const aoi = parseAoi(parts);
   return aoi.error ? { error: aoi.error } : { bbox: aoi.bbox };
@@ -332,6 +335,8 @@ export const handleGoogleMapApi = async (event, env, deps) => googleMapApi(event
  *   { type: 'geocode', query }                      geocode a place
  */
 export async function handleEvent(event, env, deps = {}) {
+  if (event?.type === 'dataset') return fetchDataset(event.source, event, env, deps);
+  if (event?.type === 'dataset_context') return datasetContext(event, env, deps);
   if (event?.source === 'usgs') {
     const quake = await fetchEarthquakeById(event.usgsId, deps);
     if (!quake) throw new EventError(`USGS event ${event.usgsId} not found`, { code: 'not_found' });
@@ -340,6 +345,228 @@ export async function handleEvent(event, env, deps = {}) {
   if (event?.type === 'nisar') return nisarData(event, env, deps);
   if (event?.type === 'geocode') return googleMapApi(event, env, deps);
   throw new EventError(`unsupported event: ${JSON.stringify(event)?.slice(0, 100)}`, { code: 'invalid_request' });
+}
+
+// ---------- NASA supplementary sources ----------
+
+const CMR_GRANULES_URL = 'https://cmr.earthdata.nasa.gov/search/granules.json';
+const GEOS_FORECAST_URL = 'https://portal.nccs.nasa.gov/datashare/gmao/geos-fp/forecast/';
+const FIRMS_AREA_URL = 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/';
+// Short names verified against NASA CMR collections on 2026-11-14.
+export const NASA_DATASETS = Object.freeze({
+  firms: { name: 'FIRMS / VIIRS NOAA-20 active fires', kind: 'fire_detections', credit: 'NASA LANCE FIRMS; NOAA-20 VIIRS.', requiredSecret: 'FIRMS_MAP_KEY', notes: 'Thermal detections, not confirmed wildfire perimeters or ignition forecasts. Query at most five inclusive days.' },
+  gpm: { name: 'GPM IMERG Early daily precipitation', kind: 'granule_catalog', credit: 'NASA GPM / GES DISC.', shortNames: ['GPM_3IMERGDE'], notes: 'Daily precipitation estimates, not future rainfall forecasts.' },
+  smap: { name: 'SMAP enhanced daily soil moisture', kind: 'granule_catalog', credit: 'NASA SMAP / NSIDC DAAC.', shortNames: ['SPL3SMP_E'], notes: 'Soil moisture; apply retrieval flags. Not direct vegetation fuel moisture.' },
+  hls: { name: 'Harmonized Landsat Sentinel-2', kind: 'granule_catalog', credit: 'NASA HLS / USGS Landsat / ESA Sentinel-2 / LP DAAC.', shortNames: ['HLSL30', 'HLSS30'], notes: 'Optical reflectance; clouds and shadows require masking.' },
+  geos: { name: 'GEOS-FP surface meteorology forecasts', kind: 'forecast_file_catalog', credit: 'NASA GMAO / NCCS GEOS-FP.', notes: 'Global tavg1_2d_slv_Nx NetCDF files; initialization is runDate (default start) and cycle (default 00). Archive retention is limited. Variable extraction needs a processor.' },
+  terrain: { name: 'NASADEM elevation', kind: 'granule_catalog', credit: 'NASA / JPL / USGS / LP DAAC.', shortNames: ['NASADEM_HGT'], static: true, notes: 'Static terrain; requested dates do not filter this source. Coverage is not all latitudes.' },
+  grace: { name: 'GRACE / GRACE-FO JPL mascon water storage', kind: 'granule_catalog', credit: 'NASA / JPL / PO.DAAC GRACE and GRACE-FO.', shortNames: ['TELLUS_GRAC-GRFO_MASCON_CRI_GRID_RL06.3_V4'], notes: 'Regional total water-storage anomalies, not parcel-scale groundwater. A granule can contain a multi-month time series; slice by date in a processor.' },
+});
+
+export function listDatasets(env = {}) {
+  return Object.entries(NASA_DATASETS).map(([id, source]) => ({
+    id, ...source, configured: !source.requiredSecret || Boolean(env[source.requiredSecret]),
+    measurementsRetrieved: false,
+  }));
+}
+
+const validDatasetDate = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) &&
+  Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
+
+/** Common regional query, independent of NISAR launch date. */
+export function parseDatasetQuery(params) {
+  const errors = [];
+  const region = parseBboxParam(params.get('bbox'));
+  if (region.error) errors.push(region.error);
+  const start = params.get('start');
+  const end = params.get('end');
+  if (!validDatasetDate(start) || !validDatasetDate(end)) errors.push('start and end must be YYYY-MM-DD dates');
+  else if (start > end || Date.parse(end) - Date.parse(start) > 366 * DAY_MS) errors.push('date range must be ordered and span at most 366 days');
+  const limit = params.has('limit') ? Number(params.get('limit')) : 10;
+  const page = params.has('page') ? Number(params.get('page')) : 1;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 50) errors.push('limit must be an integer from 1 to 50');
+  if (!Number.isInteger(page) || page < 1 || page > 10000) errors.push('page must be an integer from 1 to 10000');
+  const sources = params.has('sources') ? [...new Set(params.get('sources').split(','))] : Object.keys(NASA_DATASETS);
+  if (!sources.length || sources.some((s) => !Object.hasOwn(NASA_DATASETS, s))) errors.push('sources must contain supported dataset IDs');
+  const runDate = params.get('runDate') ?? start;
+  if (!validDatasetDate(runDate)) errors.push('runDate must be a YYYY-MM-DD date');
+  const cycle = params.get('cycle') ?? '00';
+  if (!['00', '06', '12', '18'].includes(cycle)) errors.push('cycle must be 00, 06, 12 or 18');
+  return errors.length ? { errors } : { value: { bbox: region.bbox, start, end, limit, page, sources, runDate, cycle } };
+}
+
+function validateDatasetInput(query) {
+  const params = new URLSearchParams();
+  for (const key of ['bbox', 'start', 'end', 'limit', 'page', 'sources', 'runDate', 'cycle']) {
+    if (query?.[key] !== undefined) params.set(key, Array.isArray(query[key]) ? query[key].join(',') : String(query[key]));
+  }
+  const parsed = parseDatasetQuery(params);
+  if (parsed.errors) throw new EventError(parsed.errors.join('; '), { code: 'invalid_request' });
+  return parsed.value;
+}
+
+/** Bound both transferred bytes and duration. Never expose provider error text or credential-bearing URLs. */
+async function datasetResponse(url, label, deps, maxBytes = 2_000_000) {
+  let res;
+  let reader;
+  try {
+    res = await (deps.fetch ?? fetch)(url, { headers: { accept: '*/*' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new EventError(`${label} returned HTTP ${res.status}`, {
+        status: res.status, code: res.status === 404 ? 'not_found' : 'upstream_error', retryable: res.status === 429 || res.status >= 500,
+      });
+    }
+    if (Number(res.headers.get('content-length')) > maxBytes) {
+      await res.body?.cancel();
+      throw new EventError(`${label} response exceeds size limit`, { code: 'upstream_error' });
+    }
+    const decoder = new TextDecoder();
+    let text = '';
+    let bytes = 0;
+    reader = res.body?.getReader();
+    if (reader) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > maxBytes) {
+          await reader.cancel();
+          throw new EventError(`${label} response exceeds size limit`, { code: 'upstream_error' });
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    }
+    return { text, headers: res.headers };
+  } catch (err) {
+    if (err instanceof EventError) throw err;
+    throw new EventError(`${label} request failed`, { code: 'upstream_unreachable', retryable: true });
+  } finally {
+    reader?.releaseLock();
+  }
+}
+
+async function fetchCmrDataset(source, q, deps) {
+  const spec = NASA_DATASETS[source];
+  const url = new URL(CMR_GRANULES_URL);
+  for (const name of spec.shortNames) url.searchParams.append('short_name[]', name);
+  url.searchParams.set('bounding_box', q.bbox.join(','));
+  if (!spec.static) url.searchParams.set('temporal', `${q.start}T00:00:00Z,${q.end}T23:59:59Z`);
+  url.searchParams.set('page_size', String(q.limit));
+  url.searchParams.set('page_num', String(q.page));
+  url.searchParams.append('sort_key[]', 'start_date');
+  url.searchParams.append('sort_key[]', 'producer_granule_id');
+  const { text, headers } = await datasetResponse(url.toString(), 'NASA CMR', deps);
+  let body;
+  try { body = JSON.parse(text); } catch { throw new EventError('NASA CMR returned invalid JSON', { code: 'upstream_error', retryable: true }); }
+  if (!Array.isArray(body?.feed?.entry)) throw new EventError('NASA CMR response missing granules', { code: 'upstream_error', retryable: true });
+  const items = body.feed.entry.map((g) => ({
+    id: g.id, title: g.title, start: g.time_start ?? null, end: g.time_end ?? null,
+    collectionId: g.collection_concept_id ?? null, sizeMB: g.granule_size ?? null,
+    boxes: g.boxes ?? [], polygons: g.polygons ?? [],
+    downloads: (g.links ?? []).filter((l) => !l.inherited && l.rel?.endsWith('/data#') && /^https:\/\//.test(l.href)).map((l) => l.href),
+  }));
+  const rawTotal = headers.get('CMR-Hits');
+  const total = rawTotal !== null && /^\d+$/.test(rawTotal) ? Number(rawTotal) : null;
+  const more = total === null ? items.length === q.limit : q.page * q.limit < total;
+  return {
+    items, total, nextPage: more ? q.page + 1 : null, truncated: more,
+    temporalFilterApplied: !spec.static, spatialSubsetApplied: false,
+    access: 'Catalog references only. File downloads generally require Earthdata Login; raster extraction needs the external processor.',
+  };
+}
+
+// FIRMS CSV contains quoted fields; do not split a CSV row on commas alone.
+function parseFirmsCsv(text) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  text = text.replace(/^\uFEFF/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (quoted && text[i + 1] === '"') { field += '"'; i++; }
+      else quoted = !quoted;
+    } else if (!quoted && (c === ',' || c === '\n')) {
+      row.push(field.replace(/\r$/, '')); field = '';
+      if (c === '\n') { rows.push(row); row = []; }
+    } else field += c;
+  }
+  if (quoted) throw new EventError('FIRMS returned malformed CSV', { code: 'upstream_error' });
+  if (field || row.length) { row.push(field.replace(/\r$/, '')); rows.push(row); }
+  const header = rows.shift() ?? [];
+  if (!['latitude', 'longitude', 'acq_date', 'acq_time'].every((k) => header.includes(k)))
+    throw new EventError('FIRMS returned an invalid detection table; check the map key and product availability', { code: 'upstream_error' });
+  const numeric = (v) => v?.trim() && Number.isFinite(Number(v)) ? Number(v) : null;
+  return rows.flatMap((r) => {
+    const v = Object.fromEntries(header.map((k, i) => [k, r[i] ?? '']));
+    const lat = numeric(v.latitude), lon = numeric(v.longitude);
+    const time = v.acq_time.padStart(4, '0');
+    if (lat === null || lon === null || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !validDatasetDate(v.acq_date) || !/^([01]\d|2[0-3])[0-5]\d$/.test(time)) return [];
+    return [{ latitude: lat, longitude: lon, acquiredAt: `${v.acq_date}T${time.slice(0, 2)}:${time.slice(2)}:00Z`,
+      confidence: v.confidence || null, frpMW: numeric(v.frp), satellite: v.satellite || null,
+      daynight: v.daynight || null, instrument: v.instrument || 'VIIRS' }];
+  });
+}
+
+async function fetchFirmsDataset(q, env, deps) {
+  if (!env.FIRMS_MAP_KEY) throw new EventError('FIRMS_MAP_KEY is required; an Earthdata token is not a FIRMS map key', { code: 'not_configured' });
+  const days = (Date.parse(q.end) - Date.parse(q.start)) / DAY_MS + 1;
+  if (days > 5) throw new EventError('FIRMS date range must contain at most five inclusive days', { code: 'invalid_request' });
+  const url = `${FIRMS_AREA_URL}${encodeURIComponent(env.FIRMS_MAP_KEY)}/VIIRS_NOAA20_NRT/${q.bbox.join(',')}/${days}/${q.start}`;
+  const { text } = await datasetResponse(url, 'NASA FIRMS', deps);
+  const detections = parseFirmsCsv(text).filter((d) => d.longitude >= q.bbox[0] && d.longitude <= q.bbox[2] && d.latitude >= q.bbox[1] && d.latitude <= q.bbox[3] && d.acquiredAt.slice(0, 10) >= q.start && d.acquiredAt.slice(0, 10) <= q.end);
+  const offset = (q.page - 1) * q.limit;
+  return { items: detections.slice(offset, offset + q.limit), total: detections.length,
+    nextPage: offset + q.limit < detections.length ? q.page + 1 : null,
+    truncated: offset + q.limit < detections.length, measurementsRetrieved: true, spatialSubsetApplied: true,
+  };
+}
+
+async function fetchGeosDataset(q, deps) {
+  const [year, month, day] = q.runDate.split('-');
+  const root = `${GEOS_FORECAST_URL}Y${year}/M${month}/D${day}/H${q.cycle}/`;
+  const { text } = await datasetResponse(root, 'NASA GEOS-FP', deps, 4_000_000);
+  const files = new Map();
+  const pattern = /href="(GEOS\.fp\.fcst\.tavg1_2d_slv_Nx\.(\d{8})_(\d{2})(?:%2[Bb]|\+)(\d{8})_(\d{4})\.V\d+\.nc4)"/g;
+  const date = (d) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+  for (const match of text.matchAll(pattern)) {
+    const [, filename, initDate, hour, validDate, validTime] = match;
+    const initializedAt = `${date(initDate)}T${hour}:00:00Z`;
+    if (date(initDate) !== q.runDate || hour !== q.cycle) continue;
+    files.set(filename, { id: decodeURIComponent(filename), url: new URL(filename, root).toString(), initializedAt,
+      validAt: `${date(validDate)}T${validTime.slice(0, 2)}:${validTime.slice(2)}:00Z`, coverage: 'global' });
+  }
+  if (!files.size) throw new EventError('GEOS-FP listing contains no recognized surface meteorology files', { code: 'upstream_error' });
+  const matching = [...files.values()].filter((f) => f.validAt.slice(0, 10) >= q.start && f.validAt.slice(0, 10) <= q.end).sort((a, b) => a.validAt.localeCompare(b.validAt));
+  const offset = (q.page - 1) * q.limit;
+  return { items: matching.slice(offset, offset + q.limit), total: matching.length,
+    nextPage: offset + q.limit < matching.length ? q.page + 1 : null,
+    truncated: offset + q.limit < matching.length, spatialSubsetApplied: false,
+    access: 'Global NetCDF file references only; bbox is not applied to forecast grids. Crop and extract weather variables in the processor. Forecasts are model outputs, not observations.',
+  };
+}
+
+/** Retrieve bounded metadata or detections. Large raster payloads stay outside the Worker. */
+export async function fetchDataset(source, query, env = {}, deps = {}) {
+  if (!Object.hasOwn(NASA_DATASETS, source)) throw new EventError('Unsupported NASA dataset source', { code: 'invalid_request' });
+  const q = validateDatasetInput(query);
+  const spec = NASA_DATASETS[source];
+  const result = source === 'firms' ? await fetchFirmsDataset(q, env, deps)
+    : source === 'geos' ? await fetchGeosDataset(q, deps) : await fetchCmrDataset(source, q, deps);
+  return { source, name: spec.name, kind: spec.kind, query: q, credit: spec.credit, notes: spec.notes,
+    measurementsRetrieved: false, ...result, count: result.items.length };
+}
+
+/** Query independent providers concurrently; one failure does not erase the other sources. */
+export async function datasetContext(query, env = {}, deps = {}) {
+  const q = validateDatasetInput(query);
+  const settled = await Promise.allSettled(q.sources.map((source) => fetchDataset(source, q, env, deps)));
+  const results = Object.fromEntries(settled.map((r, i) => [q.sources[i], r.status === 'fulfilled'
+    ? { ok: true, result: r.value }
+    : { ok: false, error: r.reason instanceof EventError ? r.reason.code : 'upstream_error',
+      message: r.reason instanceof EventError ? r.reason.message : 'Dataset request failed', retryable: r.reason?.retryable ?? false }]));
+  return { query: q, partial: settled.some((r) => r.status === 'rejected'), results };
 }
 
 /** Handle many events; failures are reported per event rather than aborting the batch. */
