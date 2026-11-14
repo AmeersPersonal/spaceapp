@@ -35,6 +35,7 @@ On 2026-11-14 all 132 tests passed in 9 files. Known gaps:
 Done.
 
 ## Changelog
+- 2026-11-14 - Removed the unshipped processor bridge test file at user request.
 - 2026-11-14 - Explicitly blank FIRMS and Google keys in the test environment after local credentials caused two missing-key tests to call real providers and fail.
 - 2026-11-14 - Added supplementary NASA adapter and route tests; live checks are separate from automated suites and recorded in ../DATASET_ACCESS.md.
 - 2026-11-14 - Added events.test.js (35 tests).

@@ -2,6 +2,8 @@
 
 Implemented in `events.js`, exposed by `worker.js`. These adapters supplement the existing NISAR/ASF and USGS earthquake integrations. They discover real data and return source references; they do not implement raster processing, hazard predictions, or global archive ingestion.
 
+Subsequent production deployment on November 14, 2026 configured the FIRMS key and verified every adapter, including successful empty FIRMS tables. See [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md) for current production status. The initial checks below describe the earlier local implementation stage.
+
 ## Sources and retrieval scope
 
 | Source ID | Product | Returned information | Credentials / limitations |
@@ -47,7 +49,7 @@ The context route returns HTTP 200 for a valid request even if individual source
 
 Copy `.dev.vars.example` to `.dev.vars` and configure `FIRMS_MAP_KEY` locally for FIRMS. Obtain a free key from [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov/api/map_key/). It is separate from both the Earthdata bearer token and api.nasa.gov keys. No registration was performed and no new credential was created during this implementation.
 
-CMR and GEOS discovery do not need the root `NASA_TOKEN`. Large Earthdata file downloads still belong in the external processor, with Earthdata Login configured there. The existing root token has not been copied into backend files or sent to the supplementary discovery endpoints. Nothing was deployed to Cloudflare.
+CMR and GEOS discovery do not need the root `NASA_TOKEN`. Large Earthdata file downloads still belong in the external processor, with Earthdata Login configured there. The root token was not copied into source files or sent to the supplementary discovery endpoints. The initial implementation was checked locally; the subsequent deployment is documented in ENDPOINT_REFERENCE.md.
 
 ## Live verification
 

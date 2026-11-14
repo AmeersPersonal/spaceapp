@@ -54,9 +54,11 @@ Cloudflare account resources (see the setup commands in `cloudefare/SPEC.md`), A
 `cd cloudefare && npm test` (Vitest + `@cloudflare/vitest-plugin`).
 
 ## Status
-The Worker includes supplementary NASA discovery adapters for FIRMS, GPM, SMAP, HLS, GEOS-FP, NASADEM and GRACE/GRACE-FO. These expose bounded metadata/file references and FIRMS detections, not raster analysis or predictions. Live catalog checks and limitations are in [cloudefare/DATASET_ACCESS.md](cloudefare/DATASET_ACCESS.md). Planned: the Python processor (local or Container), plus production resource IDs and the deploy itself.
+The Worker is deployed with supplementary NASA discovery adapters for FIRMS, GPM, SMAP, HLS, GEOS-FP, NASADEM and GRACE/GRACE-FO. These expose bounded metadata/file references and FIRMS detections, not raster analysis or predictions. Production resource IDs, secrets, AI Gateway, Vectorize filter and R2 manifest notifications are configured. Endpoint contracts, live verification and limitations are in [cloudefare/ENDPOINT_REFERENCE.md](cloudefare/ENDPOINT_REFERENCE.md). The external Python processor (local or Container) remains absent; real scene jobs stop at `awaiting_processor`.
 
 ## Changelog
+- 2026-11-14 - Removed the unshipped processor work at user request; existing dataset discovery and deployed API remain unchanged.
+- 2026-11-14 - Deployed and verified the Worker via Cloudflare MCP; linked production endpoint documentation and recorded the remaining processor gap.
 - 2026-11-14 - Scoped Codex instructions to the backend with AGENTS.md referencing CLAUDE.md.
 - 2026-11-14 - Added regional NASA dataset discovery and partial-result context API; documented live provider checks and remaining processing requirements.
 - 2026-11-14 - Added event discovery (USGS), NISAR preview and geocoding routes to the Worker.
