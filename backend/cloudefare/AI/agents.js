@@ -98,6 +98,12 @@ export function agentModel(env, agent) {
   return agent.model === PRIMARY_MODEL ? env.LLM_MODEL : agent.model;
 }
 
+/** True when AGENT_MODEL_<ID> is set: that explicit choice beats the per-use-case MODEL_<USECASE> routing. */
+export function agentPinned(env, agent) {
+  const override = env?.[`AGENT_MODEL_${agent.id.toUpperCase()}`];
+  return typeof override === 'string' && override.trim() !== '';
+}
+
 /** Public description of the roster (for GET /api/agents). */
 export function describeAgents(env) {
   return Object.values(AGENTS).map((a) => ({

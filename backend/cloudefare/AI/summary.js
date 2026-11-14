@@ -1,7 +1,7 @@
 // Per-event summary written by the specialist that matches the event type.
 
-import { agentForEventType, agentModel, systemPromptFor } from './agents.js';
-import { generateText } from './AIGateway.js';
+import { agentForEventType, agentModel, agentPinned, systemPromptFor } from './agents.js';
+import { generateTextDetailed } from './AIGateway.js';
 import { AI_DISCLAIMER, buildEventContext } from './AIManger.js';
 import { DATA_CREDIT } from '../dataManger.js';
 
@@ -42,9 +42,13 @@ export function buildSummaryMessages(agent, event, scenes, captions, coverage) {
 
 export async function summarizeEvent(env, { event, scenes, captions, layers }) {
   const agent = agentForEventType(event.type);
-  const model = agentModel(env, agent);
   const coverage = buildCoverage(scenes, layers);
-  const summary = await generateText(env, buildSummaryMessages(agent, event, scenes, captions, coverage), { model, maxTokens: 450 });
+  const { text: summary, model } = await generateTextDetailed(env, buildSummaryMessages(agent, event, scenes, captions, coverage), {
+    model: agentModel(env, agent),
+    pinned: agentPinned(env, agent),
+    useCase: 'summary',
+    maxTokens: 450,
+  });
   return {
     eventId: event.id,
     summary,
