@@ -1,0 +1,522 @@
+[
+  {
+    "id": "gw:google-ai-studio/gemini-2.5-flash-lite",
+    "mode": "gateway",
+    "rows": [
+      {
+        "task": "caption",
+        "ok": false,
+        "error": "404 [{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use"
+      },
+      {
+        "task": "caption",
+        "ok": false,
+        "error": "404 [{\"error\":{\"code\":404,\"message\":\"This model models/gemini-2.5-flash-lite is no longer available to new users. Please update your code to use"
+      }
+    ]
+  },
+  {
+    "id": "gw:google-ai-studio/gemini-3.1-flash-lite",
+    "mode": "gateway",
+    "rows": [
+      {
+        "task": "caption",
+        "ms": 1191.776,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=53",
+        "inTok": 256,
+        "outTok": 77,
+        "thinkTok": 0,
+        "sample": "The NISAR data indicates a mean backscatter decrease of 1.8 dB across the affected area, with 22.4% of pixels showing a reduction in signal intensity. This change, coupled with a maximum line-of-sight displacement of 41.5 cm, is consistent with surface deformation and structural disturbance likely driven by coseismic ground rupture and mass wasting."
+      },
+      {
+        "task": "chat",
+        "ms": 2494.2596000000003,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=92 badNums=",
+        "inTok": 1469,
+        "outTok": 262,
+        "thinkTok": 0,
+        "sample": "The 1.8 dB decrease in backscatter observed in the March 16 GCOV product (NISAR_L2_GCOV_002) is likely driven by significant surface modification following the earthquake. My colleague, a geomorphologist, notes that this drop is consistent with widespread landscape instability, specifically landslide-induced vegetation removal and increased surface roughness across the affected area. \n\nThese struc"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 865.2916000000005,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 606,
+        "outTok": 22,
+        "thinkTok": 0,
+        "sample": "The provided context does not contain information regarding the number of casualties or the insured economic loss resulting from the earthquake."
+      },
+      {
+        "task": "summary",
+        "ms": 1652.0667000000003,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=165 badNums=",
+        "inTok": 759,
+        "outTok": 276,
+        "thinkTok": 0,
+        "sample": "**What happened**\nA M7.4 earthquake occurred in the Kaikoura region starting March 2, 2026, causing significant surface deformation and landscape alteration.\n\n**What NISAR sees**\nThe NISAR interferogram (GUNW) from March 4, 2026, reveals up to 41.5 cm of line-of-sight surface displacement. Subsequent backscatter data (GCOV) from March 16 shows a 1.8 dB average decrease in signal return.\n\n**Likely "
+      },
+      {
+        "task": "forecast",
+        "ms": 1384.9980000000005,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 346,
+        "outTok": 145,
+        "thinkTok": 0,
+        "sample": "The next NISAR acquisition is scheduled for 2026-04-21. Based on the current data, the mean backscatter change is projected to follow a recovering trend, moving from -1.8 dB on 2026-03-28 to a projected value of -1.3 dB by 2026-05-04. This projection carries low confidence, with an uncertainty band ranging from -2.1 dB to -0.5 dB. This recovery is consistent with the hypothesis that surface roughn"
+      },
+      {
+        "task": "caption",
+        "ms": 1012.5455000000002,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=57",
+        "inTok": 256,
+        "outTok": 84,
+        "thinkTok": 0,
+        "sample": "The NISAR GCOV data indicates a mean backscatter decrease of -1.8 dB across the affected region, with 22.4% of pixels showing a reduction in signal intensity. This surface change, coupled with a maximum line-of-sight displacement of 41.5 cm, is consistent with earthquake-induced ground deformation and surface rupture likely causing significant changes to local topography and vegetation structure."
+      },
+      {
+        "task": "chat",
+        "ms": 2509.918599999999,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=106 badNums=",
+        "inTok": 1473,
+        "outTok": 281,
+        "thinkTok": 0,
+        "sample": "The 1.8 dB drop in backscatter observed in the March 16th GCOV product (`NISAR_L2_GCOV_002`) is likely driven by significant surface modification following the earthquake. My colleague, a geomorphologist, suggests this reduction is consistent with landslide-induced scarring and increased surface roughness within the rupture zone. \n\nThe interferogram from `NISAR_L2_GUNW_001` confirms coseismic disp"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 702.0681000000004,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 606,
+        "outTok": 22,
+        "thinkTok": 0,
+        "sample": "The provided context does not contain information regarding the number of casualties or the insured economic loss resulting from the earthquake."
+      },
+      {
+        "task": "summary",
+        "ms": 1556.2032,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=159 badNums=",
+        "inTok": 759,
+        "outTok": 259,
+        "thinkTok": 0,
+        "sample": "**What happened**\nA M7.4 earthquake occurred in the Kaikoura region, with activity spanning from March 2 to April 20, 2026.\n\n**What NISAR sees**\nInterferometric data (GUNW) from March 4 reveals up to 41.5 cm of line-of-sight surface displacement. Subsequent backscatter data (GCOV) from March 16 shows a 1.8 dB average decrease in signal return.\n\n**Likely drivers (hypotheses)**\nThe observed displace"
+      },
+      {
+        "task": "forecast",
+        "ms": 1393.8099000000002,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 346,
+        "outTok": 148,
+        "thinkTok": 0,
+        "sample": "The next NISAR acquisition is scheduled for 2026-04-21. Based on the current data, the mean backscatter change is projected to follow a recovering trend, moving from a value of -1.8 dB on 2026-03-28 to -1.3 dB by 2026-05-04. This projection carries low confidence, with an uncertainty band ranging from -2.1 dB to -0.5 dB. This recovery is consistent with the hypothesis that surface roughness change"
+      }
+    ]
+  },
+  {
+    "id": "gw:google-ai-studio/gemini-3.8-flash",
+    "mode": "gateway low",
+    "rows": [
+      {
+        "task": "caption",
+        "ms": 2800.5150999999987,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=66",
+        "inTok": 256,
+        "outTok": 100,
+        "thinkTok": 0,
+        "sample": "Based on the GCOV polarimetric backscatter data, the region experienced a mean backscatter change of -1.8 dB, with 22.4% of pixels showing a decrease alongside a maximum line-of-sight displacement of 41.5 cm. This localized reduction in backscatter and associated ground displacement are consistent with surface disturbance from the M7.4 earthquake, likely driven by ground deformation, surface ruptu"
+      },
+      {
+        "task": "chat",
+        "ms": 3391.8979999999974,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=27 badNums=",
+        "inTok": 1378,
+        "outTok": 51,
+        "thinkTok": 0,
+        "sample": "Based on scene `NISAR_L2_GCOV_002`, backscatter fell by about 1.8 dB on average. This drop is likely driven by landslide scarring and surface roughness changes following the earthquake."
+      },
+      {
+        "task": "unanswerable",
+        "ms": 1380.0794999999998,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 606,
+        "outTok": 14,
+        "thinkTok": 0,
+        "sample": "The provided context does not contain information about casualties or insured economic losses."
+      },
+      {
+        "task": "summary",
+        "ms": 4642.798300000002,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=157 badNums=",
+        "inTok": 759,
+        "outTok": 365,
+        "thinkTok": 0,
+        "sample": "**What happened**  \nA magnitude 7.4 earthquake occurred within the bounding box [172.5, -42.6, 174.5, -41.4] during the event period spanning 2026-03-02 to 2026-04-20.\n\n**What NISAR sees**  \nAn unwrapped interferogram (NISAR_L2_GUNW_001) shows up to 41.5 cm of line-of-sight surface displacement. Additionally, radar imagery (NISAR_L2_GCOV_002) reveals an average backscatter drop of about 1.8 dB.\n\n*"
+      },
+      {
+        "task": "forecast",
+        "ms": 2932.248599999999,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 346,
+        "outTok": 147,
+        "thinkTok": 0,
+        "sample": "The expected next NISAR acquisition date is 2026-04-21. For the mean change metric, the latest value of -1.8 dB from 2026-03-28 shows a recovering trend, likely consistent with post-earthquake surface stabilization following initial landslide scarring and roughness changes. Based on statistical fitting, the projection for 2026-05-04 is -1.3 dB, with an uncertainty band ranging from a low of -2.1 d"
+      },
+      {
+        "task": "caption",
+        "ms": 2550.4194000000025,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=63",
+        "inTok": 256,
+        "outTok": 97,
+        "thinkTok": 0,
+        "sample": "Following the M7.4 earthquake, NISAR GCOV data indicates a mean backscatter change of -1.8 dB, with 22.4% of pixels showing a decrease and a maximum line-of-sight displacement of 41.5 cm. This reduction in radar backscatter is likely consistent with earthquake-induced surface disturbance, such as the disruption of vegetation structure, widespread landsliding, or changes in surface roughness and so"
+      },
+      {
+        "task": "chat",
+        "ms": 4323.6273,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=31 badNums=",
+        "inTok": 1378,
+        "outTok": 55,
+        "thinkTok": 0,
+        "sample": "Based on scene NISAR_L2_GCOV_002, polarimetric backscatter dropped by an average of about 1.8 dB. This reduction is likely driven by landslide scarring and changes in surface roughness resulting from the earthquake."
+      },
+      {
+        "task": "unanswerable",
+        "ms": 1850.9472000000023,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 606,
+        "outTok": 14,
+        "thinkTok": 0,
+        "sample": "The provided context does not contain information about casualties or insured economic loss."
+      },
+      {
+        "task": "summary",
+        "ms": 4457.692499999997,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=156 badNums=",
+        "inTok": 759,
+        "outTok": 390,
+        "thinkTok": 0,
+        "sample": "**What happened**  \nA magnitude 7.4 earthquake occurred within the bounding box [172.5, -42.6, 174.5, -41.4], starting on 2026-03-02.\n\n**What NISAR sees**  \nProcessed scene NISAR_L2_GUNW_001 reveals up to 41.5 cm of line-of-sight surface displacement. Additionally, imagery from scene NISAR_L2_GCOV_002 shows an average backscatter drop of about 1.8 dB.\n\n**Likely drivers (hypotheses)**  \nThe observe"
+      },
+      {
+        "task": "forecast",
+        "ms": 3400.1156000000046,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 346,
+        "outTok": 157,
+        "thinkTok": 0,
+        "sample": "The expected next NISAR acquisition date is 2026-04-21 following the M7.4 earthquake event. Based on statistical trends, the mean change in backscatter shows a recovering direction, moving from a latest value of -1.8 dB on 2026-03-28 to a projection of -1.3 dB by 2026-05-04, with an uncertainty band between -2.1 dB and -0.5 dB at low confidence. Physical drivers for the initial backscatter drop ar"
+      }
+    ]
+  },
+  {
+    "id": "gw:groq/qwen/qwen3.8-27b",
+    "mode": "gateway",
+    "rows": [
+      {
+        "task": "caption",
+        "ms": 429.91389999999956,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=52",
+        "inTok": 274,
+        "outTok": 83,
+        "thinkTok": 0,
+        "sample": "The NISAR GCOV data reveals a mean backscatter decrease of -1.8 dB across 22.4% of the pixels, which is consistent with increased surface roughness or structural disruption caused by the M7.4 earthquake. This scattering change is likely driven by co-seismic ground deformation, as supported by the maximum line-of-sight displacement of 41.5 cm."
+      },
+      {
+        "task": "chat",
+        "ms": 1073.5390000000043,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=60 badNums=",
+        "inTok": 1470,
+        "outTok": 157,
+        "thinkTok": 0,
+        "sample": "Based on scene NISAR_L2_GCOV_002, the average backscatter decreased by approximately 1.8 dB. This is likely driven by coseismic surface roughness changes, such as landslide scarring. These alterations modify surface texture and vegetation structure, which the GCOV product is sensitive to. While the data confirms the magnitude of this change, it does not isolate specific physical drivers beyond the"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 486.7219999999943,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 618,
+        "outTok": 39,
+        "thinkTok": 0,
+        "sample": "The provided JSON context does not contain information regarding the number of fatalities or the insured economic loss. It only includes data on the earthquake event, NISAR radar scenes, and product descriptions."
+      },
+      {
+        "task": "summary",
+        "ms": 833.801999999996,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=152 badNums=",
+        "inTok": 775,
+        "outTok": 248,
+        "thinkTok": 0,
+        "sample": "**What happened**\nA magnitude 7.4 earthquake struck the region on March 2, 2026. This significant seismic event triggered widespread ground deformation and surface changes across the affected area.\n\n**What NISAR sees**\nSatellite data reveals up to 41.5 cm of line-of-sight surface displacement, consistent with coseismic slip. Additionally, radar backscatter decreased by an average of 1.8 dB, indica"
+      },
+      {
+        "task": "forecast",
+        "ms": 1127.7671000000119,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 359,
+        "outTok": 139,
+        "thinkTok": 0,
+        "sample": "The next NISAR acquisition is scheduled for 2026-04-21, following a median revisit interval of 12 days. The mean backscatter change is projected to recover from -1.8 dB to -1.3 dB by 2026-05-04, with a low-confidence uncertainty band ranging from -2.1 dB to -0.5 dB. This trend is consistent with the healing of surface roughness changes likely caused by landslide scarring, though the low confidence"
+      },
+      {
+        "task": "caption",
+        "ms": 425.9189999999944,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=54",
+        "inTok": 274,
+        "outTok": 83,
+        "thinkTok": 0,
+        "sample": "The NISAR GCOV data reveals a mean backscatter decrease of -1.8 dB, with 22.4% of pixels showing reduced signal, which is consistent with increased surface roughness or structural disruption caused by the M7.4 earthquake. The maximum line-of-sight displacement of 41.5 cm further supports the hypothesis that significant ground deformation occurred within the bounding box."
+      },
+      {
+        "task": "chat",
+        "ms": 1279.9554999999818,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=65 badNums=",
+        "inTok": 1467,
+        "outTok": 160,
+        "thinkTok": 0,
+        "sample": "The ~1.8 dB backscatter decrease observed in NISAR_L2_GCOV_002 is likely driven by coseismic surface roughness changes. As noted by my colleague, this timing and magnitude align best with immediate topographic disruption, such as landslide scarring, which alters radar scattering geometry and reduces signal return. While vegetation or soil moisture shifts could contribute, the rapid onset following"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 483.09520000001066,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 618,
+        "outTok": 48,
+        "thinkTok": 0,
+        "sample": "The provided JSON context does not contain information regarding the number of fatalities or the insured economic loss. It only includes technical details about the NISAR radar scenes, the earthquake event metadata (magnitude, location, dates), and product descriptions."
+      },
+      {
+        "task": "summary",
+        "ms": 1274.8531000000075,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=194 badNums=",
+        "inTok": 775,
+        "outTok": 324,
+        "thinkTok": 0,
+        "sample": "**What happened**\nA magnitude 7.4 earthquake, comparable to the Kaikoura event, struck the region between March 2 and April 20, 2026. The seismic activity is centered within a bounding box spanning 172.5° to 174.5° East and 42.6° to 41.4° South.\n\n**What NISAR sees**\nSatellite data reveals significant surface changes. An interferogram from March 4 shows up to 41.5 cm of line-of-sight displacement, "
+      },
+      {
+        "task": "forecast",
+        "ms": 683.3132999999798,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "date=true projWord=true badNums=",
+        "inTok": 359,
+        "outTok": 150,
+        "thinkTok": 0,
+        "sample": "The next NISAR acquisition is scheduled for 2026-04-21, following a median revisit interval of 12 days. Based on the available data, the mean backscatter change is projected to recover from -1.8 dB to -1.3 dB by 2026-05-04, with an uncertainty band ranging from -2.1 dB to -0.5 dB. This projection, which carries low confidence, is likely consistent with gradual surface stabilization following the i"
+      }
+    ]
+  },
+  {
+    "id": "gw:groq/openai/gpt-oss-20b",
+    "mode": "gateway low",
+    "rows": [
+      {
+        "task": "caption",
+        "ms": 420.6658999999927,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=52",
+        "inTok": 313,
+        "outTok": 143,
+        "thinkTok": 47,
+        "sample": "The NISAR backscatter change indicates a mean decrease of 1.8 dB, with 22.4 % of pixels showing reduced backscatter and a maximum line‑of‑sight displacement of 41.5 cm. This pattern is consistent with a surface roughening or compaction event that reduces radar return, likely driven by the shaking from the Kaikoura‑style M7.4 earthquake."
+      },
+      {
+        "task": "chat",
+        "ms": 1553.9820999999647,
+        "ok": false,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=false words=75 badNums=",
+        "inTok": 1425,
+        "outTok": 149,
+        "thinkTok": 17,
+        "sample": "**Backscatter drop (≈ 1.8 dB)**  \nThe GCOV_002 interferogram shows a systematic reduction in backscatter after the event. This is consistent with a change in surface roughness or texture caused by the earthquake‑induced landslide and scarring of the ground. The loss of coherent, smooth surfaces (e.g., fresh landslide deposits, broken vegetation, or altered soil moisture) reduces the radar return p"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 532.8778000000166,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 629,
+        "outTok": 38,
+        "thinkTok": 4,
+        "sample": "The provided context does not contain information about casualties or insured economic loss for the Kaikoura-style M7.4 earthquake."
+      },
+      {
+        "task": "summary",
+        "ms": 872.610400000005,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=183 badNums=",
+        "inTok": 778,
+        "outTok": 360,
+        "thinkTok": 4,
+        "sample": "**What happened**  \nA 7.4‑magnitude earthquake struck the Kaikoura‑style fault zone (March 2 – April 20 2026), producing coseismic slip and associated surface deformation.\n\n**What NISAR sees**  \n- *GUNW_001* (March 4) shows up to 41.5 cm line‑of‑sight displacement, matching expected coseismic slip.  \n- *GCOV_002* (March 16) records an average backscatter drop of ~1.8 dB, likely due to landslide sc"
+      },
+      {
+        "task": "forecast",
+        "ms": 494.50820000001113,
+        "ok": false,
+        "truncated": false,
+        "empty": false,
+        "note": "date=false projWord=true badNums=68",
+        "inTok": 411,
+        "outTok": 192,
+        "thinkTok": 22,
+        "sample": "**Projection (30‑day horizon)**  \nThe next NISAR acquisition is scheduled for **2026‑04‑21**.  \nThe mean backscatter change (meanChangeDb) shows a **recovering** trend: it fell to –1.8 dB on 2026‑03‑28 and is projected to rise to –1.3 dB by 2026‑05‑04, with a 68 % confidence band of –2.1 dB to –0.5 dB.  \nThis modest rebound is **likely** driven by gradual surface roughness recovery after the cosei"
+      },
+      {
+        "task": "caption",
+        "ms": 704.6806000000215,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "hedged=true badNums= words=67",
+        "inTok": 313,
+        "outTok": 163,
+        "thinkTok": 47,
+        "sample": "The NISAR backscatter change indicates a mean decrease of 1.8 dB, with 22.4 % of pixels showing reduced backscatter and a maximum line‑of‑sight displacement of 41.5 cm. This pattern is consistent with a sudden increase in surface roughness and/or soil moisture changes caused by the 7.4‑magnitude Kaikoura‑style earthquake. The most likely physical driver is the seismic shaking that altered the grou"
+      },
+      {
+        "task": "chat",
+        "ms": 1008.4146000000183,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "cites=true words=56 badNums=",
+        "inTok": 1494,
+        "outTok": 199,
+        "thinkTok": 22,
+        "sample": "The ~1.8 dB drop in backscatter seen in the GCOV_002 image is most consistent with a change in surface roughness and vegetation structure caused by landslides and debris flows triggered by the earthquake. The GCOV product is sensitive to such changes, so the reduction likely reflects the new, rougher terrain and altered moisture distribution. (Scene NISAR_L2_GCOV_002)"
+      },
+      {
+        "task": "unanswerable",
+        "ms": 329.67660000000615,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "refused=true",
+        "inTok": 629,
+        "outTok": 50,
+        "thinkTok": 7,
+        "sample": "I’m sorry, but the provided context does not contain information about the number of casualties or the insured economic loss for the Kaikoura-style M7.4 earthquake."
+      },
+      {
+        "task": "summary",
+        "ms": 794.9589000000269,
+        "ok": true,
+        "truncated": false,
+        "empty": false,
+        "note": "sections=5/5 words=225 badNums=",
+        "inTok": 778,
+        "outTok": 414,
+        "thinkTok": 4,
+        "sample": "**What happened**  \nOn 2 March 2026 a 7.4‑magnitude, Kaikoura‑style earthquake struck the region bounded by 172.5–174.5 E, 42.6–41.4 S. The rupture produced coseismic slip and triggered surface deformation and landslides.\n\n**What NISAR sees**  \n- *GUNW_001* (interferogram, 4 March) shows up to 41.5 cm line‑of‑sight displacement, consistent with the expected coseismic slip.  \n- *GCOV_002* (backscat"
+      },
+      {
+        "task": "forecast",
+        "ms": 516.2804999999935,
+        "ok": false,
+        "truncated": false,
+        "empty": false,
+        "note": "date=false projWord=true badNums=",
+        "inTok": 411,
+        "outTok": 158,
+        "thinkTok": 23,
+        "sample": "**Projection for the next 30 days**\n\nThe next NISAR acquisition is scheduled for 2026‑04‑21. The mean backscatter change trend is recovering, with the latest value at –1.8 dB on 2026‑03‑28 and a projected value of –1.3 dB on 2026‑05‑04, bounded by –2.1 dB (low) and –0.5 dB (high). This trend has low confidence, indicating that the projected range is highly uncertain. No other quantitative trends c"
+      }
+    ]
+  }
+]
