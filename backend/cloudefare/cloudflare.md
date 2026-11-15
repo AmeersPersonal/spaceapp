@@ -1,10 +1,14 @@
 # Cloudflare setup and deploy guide
 
-Deploys the Earth Replay API (worker name `earth-replay-api`). Run every command from `backend/cloudefare`, the folder that holds `wrangler.jsonc`. Running them from anywhere else fails with "Required Worker name missing".
+Deploys the Earth Replay API (worker name `earth-replay-api`). Run every command
+from `backend/cloudefare`. `wrangler.jsonc` is for local development;
+`npm run deploy` explicitly selects `wrangler.production.jsonc`. Create the latter
+from the tracked `wrangler.production.example.jsonc` using
+[setup.md](../../setup.md#create-your-own-production-configuration).
 
 ## 0. Prerequisites
 
-- Node.js 20 or newer and npm.
+- Node.js 22.12 or newer and npm.
 - A Cloudflare account. Queues may need the Workers Paid plan ($5/month) on some accounts.
 - A payment method on file, which R2 requires (the free tier is enough for development).
 
@@ -16,7 +20,7 @@ npm install
 ## 1. Log in to the right account
 
 ```
-npx wrangler login
+npx wrangler login --device
 npx wrangler whoami
 ```
 
@@ -24,10 +28,13 @@ Check that the account ID matches the account you mean to use. To switch account
 
 ```
 npx wrangler logout
-npx wrangler login
+npx wrangler login --device
 ```
 
-Use an incognito window if the browser signs you straight back into the old account. If the login has several accounts, pin one with `$env:CLOUDFLARE_ACCOUNT_ID = "<id>"` (PowerShell) or `"account_id"` in `wrangler.jsonc`. Delete `backend/.wrangler/cache` after switching so the old account ID isn't reused.
+Approve the device code in the intended Cloudflare account. If the login has
+several accounts, set `account_id` in both Wrangler configs to the intended
+account and use its resource IDs. See [setup.md](../../setup.md#4-authenticate-wrangler-with-cloudflare)
+for login reset instructions.
 
 For CI, skip the browser: set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
@@ -60,9 +67,11 @@ npx wrangler queues list
 npx wrangler vectorize list
 ```
 
-## 4. Put the IDs in `wrangler.jsonc`
+## 4. Put production IDs in `wrangler.production.jsonc`
 
-Only D1 and KV need IDs. Replace whatever is there:
+D1 and KV need IDs. Replace their placeholders in the production config;
+update `wrangler.jsonc` separately if local development should use the same
+account/resource definitions:
 
 ```jsonc
 "d1_databases": [
@@ -78,7 +87,7 @@ Leave the all-zeros placeholder IDs out of any deploy. They cause error 10041 (K
 
 ## 5. Create the AI Gateway
 
-In the dashboard go to **AI → AI Gateway → Create Gateway** and name it `earth-replay`. The name must match `AI_GATEWAY_ID` in `wrangler.jsonc`.
+In the dashboard go to **AI → AI Gateway → Create Gateway** and name it `earth-replay`. The name must match `AI_GATEWAY_ID` in `wrangler.production.jsonc` for deployment, or `wrangler.jsonc` for local development.
 
 ### Using the gateway for outside models (Groq, Gemini)
 
@@ -86,7 +95,7 @@ The Worker calls Workers AI models through the `AI` binding and every other mode
 
 1. Create the gateway (above). Under **Settings** you can turn on **Authenticated Gateway**. If you do, create a token (**AI Gateway → your gateway → Create token**) and set it as `CF_AIG_TOKEN`; the Worker then sends it as `cf-aig-authorization`. An unauthenticated call to an authenticated gateway returns `401 {"code":2009}`.
 2. Set the secrets (step 7): `CF_ACCOUNT_ID` (from `npx wrangler whoami`), `GROQ_API_KEY` (console.groq.com) and `GEMINI_API_KEY`. The Gemini key must be a Google AI Studio key (starts with `AIza`) from aistudio.google.com. A Vertex AI key (starts with `AQ.`) does not work with the `google-ai-studio` provider.
-3. Pick a model per use case in `wrangler.jsonc`. Model ids are `@cf/...` for Workers AI or `<provider>/<model>` for outside models (`groq/qwen/qwen3.8-27b`, `google-ai-studio/gemini-3.1-flash-lite`). Each use case takes a comma-separated list: the first is tried first and the next ones are used if it errors or returns nothing; `MODEL_FALLBACK` and `LLM_MODEL` (Workers AI) are always the last resort.
+3. Pick a model per use case in `wrangler.production.jsonc` for deployment (`wrangler.jsonc` for local development). Model ids are `@cf/...` for Workers AI or `<provider>/<model>` for outside models (`groq/qwen/qwen3.8-27b`, `google-ai-studio/gemini-3.1-flash-lite`). Each use case takes a comma-separated list: the first is tried first and the next ones are used if it errors or returns nothing; `MODEL_FALLBACK` and `LLM_MODEL` (Workers AI) are always the last resort.
 
 | Use case | Setting | Default chain | Why |
 |---|---|---|---|
@@ -98,7 +107,7 @@ The Worker calls Workers AI models through the `AI` binding and every other mode
 | Forecast narrative | `MODEL_FORECAST` | Gemini 3.1 Flash-Lite, then Groq qwen3.8-27b | Only narrates computed numbers |
 
 A single agent can still be pinned with `AGENT_MODEL_<ID>` (for example `AGENT_MODEL_HYDROLOGIST`); that wins over the use-case setting. Set a use case to an empty string to go back to `LLM_MODEL`.
-4. Check it works: `npx wrangler tail` while calling `POST /api/chat`, then open **AI Gateway → earth-replay → Logs**. Each call shows its provider, model, tokens and latency. The `model` field in API responses and stored captions/messages is the model that actually answered, so a fallback shows up there.
+4. Check it works: `npx wrangler tail --config wrangler.production.jsonc` while calling `POST /api/chat`, then open **AI Gateway → earth-replay → Logs**. Each call shows its provider, model, tokens and latency. The `model` field in API responses and stored captions/messages is the model that actually answered, so a fallback shows up there.
 
 Embeddings (`bge-base-en-v1.5`) stay on Workers AI because the Vectorize index is 768-dimensional.
 
@@ -108,7 +117,9 @@ Embeddings (`bge-base-en-v1.5`) stay on Workers AI because the Vectorize index i
 npm run db:migrate:remote
 ```
 
-This runs `migrations/0001_init.sql` against the remote D1 database. A new database shows `num_tables: 0` until you do. For local development use `npm run db:migrate:local`.
+This applies pending files from `migrations/` against the `DB` binding in
+`wrangler.production.jsonc`. For local development, `npm run db:migrate:local`
+uses `wrangler.jsonc` and local storage instead.
 
 ## 7. Get and set the secrets
 
@@ -128,27 +139,42 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 Set each one in production:
 
 ```
-npx wrangler secret put EARTHDATA_TOKEN
-npx wrangler secret put INGEST_API_KEY
-npx wrangler secret put PROCESSOR_TOKEN
-npx wrangler secret put GOOGLE_MAPS_API_KEY
-npx wrangler secret put CF_ACCOUNT_ID
-npx wrangler secret put GROQ_API_KEY
-npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put CF_AIG_TOKEN   # only if the gateway is authenticated
+npx wrangler secret put EARTHDATA_TOKEN --config wrangler.production.jsonc
+npx wrangler secret put INGEST_API_KEY --config wrangler.production.jsonc
+npx wrangler secret put PROCESSOR_TOKEN --config wrangler.production.jsonc
+npx wrangler secret put GOOGLE_MAPS_API_KEY --config wrangler.production.jsonc
+npx wrangler secret put CF_ACCOUNT_ID --config wrangler.production.jsonc
+npx wrangler secret put GROQ_API_KEY --config wrangler.production.jsonc
+npx wrangler secret put GEMINI_API_KEY --config wrangler.production.jsonc
+npx wrangler secret put CF_AIG_TOKEN --config wrangler.production.jsonc   # only if the gateway is authenticated
 ```
 
 If the worker doesn't exist yet, Wrangler may offer to create it. You can also deploy first (step 8) and set secrets afterwards.
 
-Never put secrets in `wrangler.jsonc`. It is committed to git.
+Never put secrets in either Wrangler configuration. Both `wrangler.jsonc`
+and `wrangler.production.jsonc` are local, Git-ignored files.
 
 ## 8. Deploy
 
+Obtain the configured `wrangler.production.jsonc` before deploying. It holds
+production bindings and non-secret variables separately from local development.
+See [the production configuration instructions](../../setup.md#production-deployment-configuration).
+For a new processor or a Python processor update, use the separate
+[container release steps](../../setup.md#first-processor-deployment-or-a-processor-update)
+instead of the routine deployment command below.
+
 ```
-npm run deploy
+npm run deploy:check  # frontend build and Worker dry run; publishes nothing
+npm run deploy        # publish when ready
 ```
 
-This publishes the worker, the Durable Object (`ReplayRoom`), the Workflow (`IngestWorkflow`), the queue producer and consumers, and the cron trigger (every 6 hours). The output ends with the URL:
+This publishes the Worker and built frontend, its Durable Objects (`ReplayRoom`
+and `Processor`), the Workflow (`IngestWorkflow`), queue producer/consumers and
+cron trigger (every 6 hours). `--keep-vars` retains additional remote variables;
+values listed in the config still override production. Existing secrets remain.
+`--containers-rollout none` retains the deployed Python processor image and
+container settings; processor code changes require a separate container release.
+The output ends with the URL:
 
 ```
 https://earth-replay-api.<your-subdomain>.workers.dev
@@ -157,7 +183,7 @@ https://earth-replay-api.<your-subdomain>.workers.dev
 ## 9. Verify
 
 ```
-npx wrangler tail
+npx wrangler tail --config wrangler.production.jsonc
 ```
 
 In another terminal or the browser:
@@ -181,8 +207,11 @@ npm test
 ## Before you go to production
 
 - `CORS_ORIGIN` is `"*"`. Set it to the frontend's origin.
-- `PROCESSOR_URL` is empty. Until the Python processor is hosted and the URL set, scenes stay `awaiting_processor`.
-- `worker.js` exports `scheduled` but no `queue` handler. Check that queue messages are consumed before relying on ingest.
+- Production has a `PROCESSOR` container binding, so an empty `PROCESSOR_URL`
+  is expected there. Local development omits that binding and scenes can remain
+  `awaiting_processor` until a processor is configured and the jobs requeued.
+- `worker.js` exports both `scheduled` and `queue` handlers. A dry run checks
+  configuration and bundling; verify queue processing and rendered tiles separately.
 
 ## Troubleshooting
 

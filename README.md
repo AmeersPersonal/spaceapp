@@ -54,17 +54,7 @@ Local D1, R2, KV, queues, workflows and replay rooms are separate from productio
 
 ### Hosting
 
-The deployed Worker serves the built app as static assets, so the app, `/api`, `/auth` and `/tiles` share one origin: <https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev>. `npm run deploy` in `backend/cloudefare` builds `Frontend/dist` and deploys both. It needs the `assets` block and `"keep_vars": true` in the local, untracked `wrangler.jsonc`:
-
-```jsonc
-"keep_vars": true,
-"assets": {
-  "directory": "../../Frontend/dist",
-  "binding": "ASSETS",
-  "not_found_handling": "single-page-application",
-  "run_worker_first": ["/", "/api/*", "/auth/*", "/tiles/*"]
-}
-```
+The deployed Worker serves the built app as static assets, so the app, `/api`, `/auth` and `/tiles` share one origin: <https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev>. `npm run deploy` in `backend/cloudefare` builds `Frontend/dist` and deploys both using the ignored `wrangler.production.jsonc`. Start from the tracked [production example](backend/cloudefare/wrangler.production.example.jsonc) and follow [setup.md](setup.md#production-deployment-configuration). `npm run deploy:check` validates without publishing; routine deployment preserves additional remote variables, existing secrets and the running processor container.
 
 Browsers on `/` get the app and API clients still get the JSON service description. A finished sign-in returns to `/`.
 

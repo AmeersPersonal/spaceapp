@@ -32,6 +32,8 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `migrations/` | D1 schema. See [migrations/SPEC.md](migrations/SPEC.md). |
 | `tests/` | Vitest suites + fixtures. See [tests/SPEC.md](tests/SPEC.md). |
 | `wrangler.jsonc` (local, ignored) | Bindings, vars, queues, workflow, DO and cron; removed from versioned history. Preserve locally when refreshing the clone. |
+| `wrangler.production.jsonc` (local, ignored) | Production resource bindings, model routing, `Processor` DO migration and pinned existing container image; selected explicitly by deployment scripts. |
+| `wrangler.production.example.jsonc` | Tracked production config template with account/Auth0/resource/image placeholders; copy locally and reconcile before deploying. |
 | `vitest.config.js` | `@cloudflare/vitest-plugin` config (local bindings, D1 migrations, offline env). |
 | `package.json` / `.npmrc` | Deps and scripts. `.npmrc` sets `legacy-peer-deps` to work around an npm 10 peer-resolution crash with vitest 4. |
 | `.dev.vars.example` | Template for local secrets. |
@@ -102,6 +104,24 @@ Params `{ingestId, eventId, wkt, start, end, products, maxScenes}`. Steps: `mark
 
 ### Bindings
 `DB` (D1 `earth-replay`), `TILES` (R2 `earth-replay-tiles`), `CACHE` (KV), `INGEST_QUEUE` (Queue), `INGEST_WORKFLOW` (Workflow), `REPLAY_ROOM` (DO, SQLite), `AI` (Workers AI), `VECTORS` (Vectorize `earth-replay-captions`, 768-dim cosine).
+Production additionally has `ASSETS` (built frontend) and `PROCESSOR` (the
+`Processor` container DO). Local development has `ASSETS` but omits `PROCESSOR`
+so starting the API does not require Docker.
+
+### Deployment commands
+`npm run deploy:check` builds the frontend and dry-runs the deployment.
+`npm run deploy` builds and publishes with the explicitly required ignored
+`wrangler.production.jsonc`, `--keep-vars`, and `--containers-rollout none`.
+Both use production resource IDs, `v1`/`v2` DO migrations and the existing
+seven `MODEL_*` routes. Additional remote variables and all secrets remain;
+explicit config variables override remote values. The live Python container
+image/settings are preserved; this command does not release processor changes.
+See [setup.md](../../setup.md#production-deployment-configuration).
+The tracked example documents recreating the ignored production file; setup
+also distinguishes the first processor release from routine container-preserving
+deployments.
+`npm run db:migrate:remote` explicitly selects the production config's `DB`
+binding; `npm run db:migrate:local` continues using the local config/storage.
 
 ### Env vars / secrets
 Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`, `FIRMS_MAP_KEY` (separate from Earthdata Login; see `.dev.vars.example`).
@@ -134,9 +154,24 @@ npm run db:migrate:remote
 ## Tests
 Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/DO/Workflows, fake AI/Vectorize bindings and mocked external providers. The merged source passed 203 tests across 14 files on 2026-11-14. See [tests/SPEC.md](tests/SPEC.md).
 
+Production configuration: `npm run deploy:check` passed frontend compilation
+and Wrangler's dry run on 2026-11-15. All 17 plain-text variables and 10
+resource bindings matched the active deployment snapshot, along with asset
+routing, the migration tag and processor image/capacity. The active deployment
+remained unchanged; local frontend, backend and proxied catalog reads returned
+HTTP 200. These checks do not exercise live processor jobs or rendered tiles.
+Filling the tracked example's placeholders reproduced the reconciled config
+and passed a separate Wrangler dry run. The production-config `DB` binding
+resolved successfully; a remote migration list reported no pending migrations.
+
 The deployed browser E2E passed real Auth0 login, saved AI conversations, confirmed logout and rejected protected access, re-login to the same identity, exact history restoration and continued generation after reload. Workers AI returned real answers. Wrangler is now authenticated through browser OAuth; an API token is not required for this interactive deployment. The earlier unauthenticated local-startup failure does not describe current production status. Processor-to-R2 notification delivery and frontend cookie integration still need separate checks. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
 
 ## Status
+Production configuration was reconciled against active Worker version
+`33bf1c32-efe8-4412-81de-fd410c39c619` on 2026-11-15, including its `Processor`
+binding, `v2` migration tag, model routing and existing container image. This
+preparation does not publish a Worker version or change production resources.
+
 Local Ask and specialist chat tolerate unavailable Vectorize search, logging the failure and using recent event captions (or catalog metadata when none exist). No Cloudflare secret changes are required for this fallback.
 
 Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E passed against the deployed Worker.
@@ -144,13 +179,16 @@ Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chat
 Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. The merged backend is now deployed as version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`, with production Auth0 configuration/secrets. Both `0002_chats.sql` and `0002_chat_stats.sql` are applied remotely. Existing production vars/secrets were preserved. Live login redirects, anonymous-access rejection and browser conversation persistence across confirmed logout and re-login all passed.
 
 Remaining limitations:
-- The external Python processor is absent; scenes remain `awaiting_processor`, so successful raster/tile production is not verified.
+- Local development has no processor binding; scenes can remain
+  `awaiting_processor`. Production has an active processor container; configuration
+  reconciliation alone does not verify end-to-end raster/tile production.
 - Deployed Worker Auth0 browser E2E passed; frontend sign-in integration and credentialed cross-origin use remain unverified. See [AUTH0.md](AUTH0.md) and [CHAT_STORAGE.md](CHAT_STORAGE.md).
 - `/api/chats` is owner-scoped; the separate `/api/chat` specialist thread is public and is not the private chat-storage contract.
 - Supplementary dataset adapters provide discovery, not automatic raster extraction, alignment, persistence or prompt enrichment. `handleEventQueue` is not bound to a queue.
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-15 - Separated local and production Wrangler configs; deployment explicitly preserves remote vars/secrets and the existing processor container, with a tracked placeholder template, frontend-build/dry-run command and setup instructions for routine and first container releases.
 - 2026-11-15 - Fixed local event Ask HTTP 500 caused by uncaught Vectorize binding errors; shared caption retrieval now uses the existing D1 fallback. Added authenticated route regressions for events with and without captions.
 - 2026-11-15 - Added `GET /api/outlook` (`outlook.js`) and `GET /api/events/:id/media` (`media.js`); `/api/discover/earthquakes` accepts a `start`+`end` period in place of `days`. The Worker also serves the built frontend as static assets (`ASSETS` binding; `/` gives browsers the app and API clients the JSON description; a finished login returns to `/`). 241 tests pass. Outlook, media and the period query are deployed and checked live.
 - 2026-11-14 - Consolidated local Worker credentials into .dev.vars, configured frontend return URL, simplified local startup, and isolated test FRONTEND_URL from local credentials.
