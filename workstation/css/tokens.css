@@ -1,0 +1,322 @@
+/* tokens.css — workstation
+   Custom properties, global reset, base element styles and the three
+   utility classes (.visually-hidden, .skip-link, .meta).
+   This is the ONLY file allowed to contain colour literals. */
+
+/* ---------------------------------------------------------------------
+   1. Tokens (verbatim from css/spec.md §1)
+   --------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg-canvas:#07090E; --bg-hud-well:rgba(10,14,21,.92); --bg-hud-elevated:#111722; --bg-plot-recessed:#05070B;
+  /* Hairlines */
+  --border-hairline:rgba(235,245,238,.14); --border-strong:rgba(235,245,238,.32); --border-active:#BFD1E5;
+  /* Text */
+  --text-primary:#EBF5EE; --text-secondary:#9FB0C4; --text-muted:#64748B;
+  /* Brand (names preserved) */
+  --blackberry-cream:#07090E;           /* redefined per brief */
+  --blackberry-cream-legacy:#542344;    /* original brand value, kept on record */
+  --pale-sky:#BFD1E5; --mint-cream:#EBF5EE; --desert-sand:#D8BFAA; --grey:#6E7681;
+  /* Semantic, never decorative */
+  --risk-high:#E5484D; --risk-medium:#F5A524; --change-darker:#2B83FF; --change-brighter:#FF8C28; --error:#FF8F8F;
+  /* Spacing */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
+  /* Added for this build */
+  --font-wordmark:'Orbitron',sans-serif; --font-display:'Space Grotesk',sans-serif;
+  --font-body:'Inter',system-ui,sans-serif; --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  --dock-top:60px; --dock-gap:12px; --topbar-h:48px; --timeline-h:72px;
+  --controls-w:300px; --evidence-w:360px;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --hatch:repeating-linear-gradient(45deg,transparent 0 4px,rgba(191,209,229,.16) 4px 5px);
+}
+
+/* ---------------------------------------------------------------------
+   1b. Build extras. Kept in a separate block so the block above stays
+   verbatim. Every colour that any other stylesheet needs lives here.
+   --------------------------------------------------------------------- */
+:root {
+  /* Dark hatch for use OVER a pale-sky fill (the prob bar), where the
+     pale hatch would be invisible. Same geometry as --hatch. */
+  --hatch-ink:repeating-linear-gradient(45deg,transparent 0 4px,rgba(7,9,14,.45) 4px 5px);
+  /* Greyscale ramp for the radar legend: a data key, not decoration. */
+  --ramp-greyscale:linear-gradient(to right,#000,#fff);
+  /* Stroke of the SVG hatch pattern lines in the charts (css/spec.md §5.11). */
+  --chart-hatch-stroke:rgba(191,209,229,.18);
+  /* Flat dim behind open dialogs (css/spec.md §5.12). No blur. */
+  --backdrop-dim:rgba(7,9,14,.7);
+  /* Mobile handle / hit-area sizes (css/spec.md §4, §5.3). */
+  --hit-desktop:32px; --hit-mobile:44px; --drawer-handle-h:44px;
+  /* The one transition rule, written out in full where used (css/CLAUDE.md). */
+  --scrollbar-w:4px;
+}
+
+/* ---------------------------------------------------------------------
+   2. Reset and base
+   --------------------------------------------------------------------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  border-radius: 0;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+html {
+  background: var(--bg-canvas);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font: 400 12.5px/1.45 var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The hidden attribute always wins over any display value set below. */
+[hidden] {
+  display: none !important;
+}
+
+/* Focus: visible, 1px, the single interaction accent. Never removed. */
+:focus-visible {
+  outline: 1px solid var(--pale-sky);
+  outline-offset: 2px;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button, input, select, textarea, output {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+p {
+  margin: 0 0 var(--space-2);
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+figure {
+  margin: 0;
+}
+
+ul, ol, dl, dd {
+  margin: 0;
+  padding: 0;
+}
+
+img, svg, canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* ---------------------------------------------------------------------
+   3. Typography roles (css/spec.md §3)
+   --------------------------------------------------------------------- */
+
+/* Orbitron is used ONLY on these two selectors. */
+.wordmark {
+  font: 500 18px/1 var(--font-wordmark);
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.display-404 {
+  font: 500 clamp(64px, 18vw, 220px)/1 var(--font-wordmark);
+  letter-spacing: 0;
+  text-transform: lowercase;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+h1, h2, h3 {
+  font: 600 15px/1.25 var(--font-display);
+  letter-spacing: -0.02em;
+  margin: 0 0 var(--space-2);
+  color: var(--text-primary);
+}
+
+/* Hero metric: tabular so digits never jitter. */
+#forecast-prob {
+  font: 500 32px/1 var(--font-display);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* Metadata: mono, uppercase, tracked, tabular. */
+.meta,
+label,
+legend,
+summary,
+output,
+button,
+select,
+option,
+#target-cell,
+#mode-pill,
+#pass-index,
+#ticks,
+#timeline-date,
+#seg-observed,
+#seg-forecast,
+#now-tick,
+#opacity-readout,
+#point-coords,
+.level,
+figcaption {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta {
+  color: var(--text-secondary);
+}
+
+/* Numeric readouts everywhere are tabular. */
+#forecast-prob, #opacity-readout, #timeline-date, #target-coords, #target-footprint,
+#point-coords, #pass-date, #pass-index, #forecast-date, #observed-summary dd, #ticks {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long mono strings may break anywhere rather than overflow. */
+.meta, #target-cell, #provenance, #point-coords, #observed-summary {
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------------
+   4. Utilities
+   --------------------------------------------------------------------- */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.skip-link {
+  position: fixed;
+  top: -200px;
+  left: var(--space-2);
+  z-index: 40;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-hud-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--pale-sky);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: var(--space-2);
+  outline-offset: 0;
+}
+
+/* Thin scrollbars on every internal scroller. */
+.scroller,
+#controls-drawer,
+#evidence-drawer,
+#page,
+dialog {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.scroller::-webkit-scrollbar,
+#controls-drawer::-webkit-scrollbar,
+#evidence-drawer::-webkit-scrollbar,
+#page::-webkit-scrollbar,
+dialog::-webkit-scrollbar {
+  width: var(--scrollbar-w);
+  height: var(--scrollbar-w);
+}
+
+.scroller::-webkit-scrollbar-track,
+#controls-drawer::-webkit-scrollbar-track,
+#evidence-drawer::-webkit-scrollbar-track,
+#page::-webkit-scrollbar-track,
+dialog::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroller::-webkit-scrollbar-thumb,
+#controls-drawer::-webkit-scrollbar-thumb,
+#evidence-drawer::-webkit-scrollbar-thumb,
+#page::-webkit-scrollbar-thumb,
+dialog::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 0;
+}
+
+/* ---------------------------------------------------------------------
+   5. Motion. The only transition rule in the system, and the kill switch.
+   --------------------------------------------------------------------- */
+a,
+button,
+input,
+select,
+label,
+summary,
+#mode-pill,
+#timeline-date,
+.legend-mark,
+.chart-dot {
+  transition: border-color 120ms linear, color 120ms linear, opacity 150ms cubic-bezier(.16,1,.3,1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
