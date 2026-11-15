@@ -4,6 +4,7 @@ Backend for NASA Space Apps 2026, *Dancing with the SARs*. It tracks real surfac
 
 - Architecture and scope: [backend/SPEC.md](backend/SPEC.md)
 - Cloudflare Worker API: [backend/cloudefare/SPEC.md](backend/cloudefare/SPEC.md)
+- Local frontend/backend setup: [setup.md](setup.md)
 
 ```sh
 cd backend/cloudefare
