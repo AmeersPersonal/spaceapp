@@ -152,7 +152,7 @@ npm run db:migrate:remote
 - npm: `hono`, `@auth0/auth0-hono` 1.2.6; dev: `wrangler`, `vitest` 4.1, `@cloudflare/vitest-plugin`, `@auth0/auth0-server-js` for real encrypted session fixtures.
 
 ## Tests
-Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/DO/Workflows, fake AI/Vectorize bindings and mocked external providers. The merged source passed 203 tests across 14 files on 2026-11-14. See [tests/SPEC.md](tests/SPEC.md).
+Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/DO/Workflows, fake AI/Vectorize bindings and mocked external providers. Source `2047d80` passed 266 tests across 18 files on 2026-11-15 using `node node_modules/vitest/vitest.mjs run --no-file-parallelism`. See [tests/SPEC.md](tests/SPEC.md).
 
 Production configuration: `npm run deploy:check` passed frontend compilation
 and Wrangler's dry run on 2026-11-15. All 17 plain-text variables and 10
@@ -169,14 +169,23 @@ The deployed browser E2E passed real Auth0 login, saved AI conversations, confir
 ## Status
 Production configuration was reconciled against active Worker version
 `33bf1c32-efe8-4412-81de-fd410c39c619` on 2026-11-15, including its `Processor`
-binding, `v2` migration tag, model routing and existing container image. This
-preparation does not publish a Worker version or change production resources.
+binding, `v2` migration tag, model routing and existing container image. Source
+`2047d80` was then published to the existing production URL as version
+`6957adc2-26c2-475b-b0b1-83c71967f904` at 100% traffic. Live bindings, vars,
+secret binding names, DO namespaces and processor configuration were preserved.
+Frontend/API smoke checks and isolated desktop/mobile browser checks passed;
+see [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
 
 Local Ask and specialist chat tolerate unavailable Vectorize search, logging the failure and using recent event captions (or catalog metadata when none exist). No Cloudflare secret changes are required for this fallback.
 
 Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E passed against the deployed Worker.
 
-Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. The merged backend is now deployed as version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`, with production Auth0 configuration/secrets. Both `0002_chats.sql` and `0002_chat_stats.sql` are applied remotely. Existing production vars/secrets were preserved. Live login redirects, anonymous-access rejection and browser conversation persistence across confirmed logout and re-login all passed.
+Historical catalog/dataset/ingest checks and resource setup are recorded in
+[ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). Earlier Auth0-owned chat
+persistence checks against version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4` are
+recorded separately in the deployment verification history. Production currently
+has no pending database migrations. This release rechecked login redirects and
+anonymous-access rejection; it did not repeat signed-in chat persistence checks.
 
 Remaining limitations:
 - Local development has no processor binding; scenes can remain
@@ -188,6 +197,7 @@ Remaining limitations:
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-15 - Deployed source 2047d80 as version 6957adc2-26c2-475b-b0b1-83c71967f904 at the existing URL after 266 backend tests and frontend lint/build; verified preserved bindings/processor and live HTTP/browser behavior, retaining the known tile-template limitation.
 - 2026-11-15 - Separated local and production Wrangler configs; deployment explicitly preserves remote vars/secrets and the existing processor container, with a tracked placeholder template, frontend-build/dry-run command and setup instructions for routine and first container releases.
 - 2026-11-15 - Fixed local event Ask HTTP 500 caused by uncaught Vectorize binding errors; shared caption retrieval now uses the existing D1 fallback. Added authenticated route regressions for events with and without captions.
 - 2026-11-15 - Added `GET /api/outlook` (`outlook.js`) and `GET /api/events/:id/media` (`media.js`); `/api/discover/earthquakes` accepts a `start`+`end` period in place of `days`. The Worker also serves the built frontend as static assets (`ASSETS` binding; `/` gives browsers the app and API clients the JSON description; a finished login returns to `/`). 241 tests pass. Outlook, media and the period query are deployed and checked live.
