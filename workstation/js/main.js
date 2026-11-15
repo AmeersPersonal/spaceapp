@@ -21,10 +21,10 @@ import {
 import { TelemetryService, ERROR_COPY } from './telemetry.js';
 import { riskChart, pointChart } from './charts.js';
 import { createMap, styleBasemap, addLayers, applyMapState, refitCamera, hideDemoLayers, paddingFor } from './map.js';
-import { api, probe } from './api.js';
+import { api, probe, clearApiCache } from './api.js';
 import { addLiveLayers, applyLiveMap, outlookCellAt, fitBox } from './liveMap.js';
 import { loadBrowseImage } from './browse.js';
-import { RoomClient } from './room.js';
+import { RoomClient, replayFrameAt } from './room.js';
 import { simHazardFor, simFrame } from './simulate.js';
 import {
   liveTimeline,
@@ -169,7 +169,7 @@ const room = new RoomClient({
     state.live.room = { ...state.live.room, count };
     render();
   },
-  onState: (st) => applyRoomState(st),
+  onState: (st, serverTime) => applyRoomState(st, serverTime),
   onError: (message) => {
     state.live.room = { ...state.live.room, message };
     render();
@@ -184,6 +184,7 @@ let mapFatal = ''; // the library/constructor failure, which hazard switches mus
 let mapLastError = ''; // the last style/tile failure, also kept across hazard switches
 let playTimer = null;
 let loadToken = 0;
+let areaQueryTimer = null;
 let lastAnnounced = '';
 let lastRiskSvg = '';
 let lastPointSvg = '';
@@ -274,6 +275,9 @@ const el = {
   // Live channel
   liveControls: $('live-controls'),
   liveEvent: $('live-event'),
+  liveRefresh: $('live-refresh'),
+  liveStatus: $('live-status'),
+  liveLegendRaster: $('live-legend-raster'),
   liveEventsNote: $('live-events-note'),
   liveLayerWrap: $('live-layer-wrap'),
   liveLayer: $('live-layer'),
@@ -991,6 +995,11 @@ function renderLive() {
   const L = state.live;
   const v = liveView();
   const { tl, step, idx, len, event } = v;
+  if (!L.sim && tl.mode === 'preview') ensureBrowseImages(tl, idx);
+  el.liveRefresh.disabled = L.refreshing || L.events.status === 'loading' || L.detail.status === 'loading' || Boolean(L.busy) || L.ask.busy;
+  setText(el.liveStatus, L.actionError || L.notice || '');
+  setHidden(el.liveStatus, !L.actionError && !L.notice);
+  setAttr(el.liveStatus, 'class', L.actionError ? 'live-error' : 'meta');
   const stepDate = step ? formatDate(step.date) : '—';
   const signedIn = state.api.auth === 'signed-in';
   const hasEvent = !L.replay && L.detail.status === 'done';
@@ -1026,6 +1035,11 @@ function renderLive() {
     }
   }
   const simOn = Boolean(sim && simUrl);
+  setText(el.liveLegendRaster, simOn
+    ? 'Simulated illustration: fabricated imagery, not measured data'
+    : tl.mode === 'tiles'
+      ? `${layerLabel(L.layer)}${step?.tile?.units ? ` (${step.tile.units})` : ''}: processed NISAR layer; colours are scaled per scene`
+      : 'ASF preview: a real NISAR pass, quicklook only, not calibrated');
   setAttr(el.html, 'data-sim', simOn ? 'on' : 'off');
   setHidden(el.simBadge, !simOn);
   setHidden(el.provenanceSim, !simOn);
@@ -1091,7 +1105,7 @@ function renderLive() {
   setHidden(el.liveBrief, L.brief.status === 'loading' || L.brief.status === 'done');
   setText(el.liveBrief, L.brief.status === 'error' ? 'Try again' : 'Write a briefing');
   renderAskLog(el.liveAskLog, L.ask);
-  const askOff = !signedIn || L.ask.busy;
+  const askOff = !signedIn || L.ask.busy || L.ask.history === 'loading';
   if (el.liveAskInput.disabled !== askOff) el.liveAskInput.disabled = askOff;
   if (el.liveAskSubmit.disabled !== askOff) el.liveAskSubmit.disabled = askOff;
   setText(el.liveAskSubmit, L.ask.busy ? 'Asking…' : 'Ask');
@@ -1193,9 +1207,12 @@ function renderLive() {
   }
 }
 
-/** Load (once) every ASF preview a timeline needs; each finish re-renders. */
-function ensureBrowseImages(tl) {
-  for (const s of tl.steps.flatMap((x) => x.scenes)) {
+/** Load the current pass and its neighbours; avoid downloading the whole catalog. */
+function ensureBrowseImages(tl, index = state.live.idx ?? 0) {
+  if (tl.mode !== 'preview') return;
+  const current = Math.max(0, Math.min(tl.steps.length - 1, index ?? 0));
+  const needed = tl.steps.slice(Math.max(0, current - 1), current + 2).flatMap(x => x.scenes);
+  for (const s of needed) {
     const key = sceneKey(s);
     if (!key || cache.browse.has(key)) continue;
     cache.browse.set(key, { status: 'loading' });
@@ -1203,6 +1220,16 @@ function ensureBrowseImages(tl) {
       .then((r) => cache.browse.set(key, { status: 'ready', url: r.url, coordinates: r.coordinates }))
       .catch((err) => cache.browse.set(key, { status: 'error', message: err && err.message ? err.message : 'load failed' }))
       .finally(() => {
+        if (cache.browse.size > 64) {
+          const view = liveView();
+          const keep = new Set(view.tl.steps.slice(Math.max(0, (view.idx ?? 0) - 1), (view.idx ?? 0) + 2).flatMap(x => x.scenes).map(sceneKey));
+          for (const [oldKey, image] of cache.browse) {
+            if (cache.browse.size <= 64) break;
+            if (keep.has(oldKey) || image.status === 'loading') continue;
+            if (image.url) URL.revokeObjectURL(image.url);
+            cache.browse.delete(oldKey);
+          }
+        }
         if (state.source === 'live') render();
       });
   }
@@ -1223,13 +1250,14 @@ function markSignedOut() {
   state.api = { ...state.api, auth: 'signed-out', user: null };
 }
 
-async function loadLiveEvents(selectId, stub = null) {
+async function loadLiveEvents(selectId, stub = null, { fresh = false } = {}) {
   const L = state.live;
   L.events = { ...L.events, status: 'loading', message: '' };
   render();
   try {
-    const d = await api.events();
-    let list = Array.isArray(d.events) ? d.events : [];
+    const d = await api.events({ fresh });
+    if (!Array.isArray(d.events)) throw new Error('The catalog response was incomplete. Refresh to try again.');
+    let list = d.events;
     // The catalog list is cached for ~60 s, so a just-tracked event may be
     // missing: list it from what we know until the cache catches up.
     if (stub && !list.some((e) => e.id === stub.id)) list = [stub, ...list];
@@ -1241,9 +1269,37 @@ async function loadLiveEvents(selectId, stub = null) {
       return;
     }
   } catch (err) {
-    L.events = { status: 'error', list: [], message: err && err.message ? err.message : 'Could not load events' };
+    L.events = { status: 'error', list: L.events.list, message: err && err.message ? err.message : 'Could not load events' };
   }
   render();
+}
+
+async function refreshLiveCatalog() {
+  const L = state.live;
+  if (L.refreshing || L.events.status === 'loading' || L.detail.status === 'loading' || L.ask.busy || L.busy) return;
+  const id = L.eventId;
+  L.refreshing = true;
+  L.actionError = '';
+  L.notice = '';
+  render();
+  try {
+    clearApiCache();
+    await loadLiveEvents(undefined, null, { fresh: true });
+    if (L.events.status !== 'done' || !id || L.eventId !== id || L.replay || L.detail.status !== 'done') return;
+    const seq = liveSeq;
+    const data = await api.event(id, { fresh: true });
+    if (seq !== liveSeq || L.eventId !== id) return;
+    if (!data.event || !Array.isArray(data.scenes) || !Array.isArray(data.layers)) throw new Error('The event response was incomplete.');
+    L.detail = st('done', { data });
+    const timeline = liveTimeline(data, L.layer);
+    L.idx = timeline.steps.length ? Math.min(L.idx ?? 0, timeline.steps.length - 1) : null;
+    L.notice = 'Catalog refreshed.';
+  } catch (err) {
+    L.actionError = err?.message || 'Could not refresh this event. Try again.';
+  } finally {
+    L.refreshing = false;
+    render();
+  }
 }
 
 async function selectLiveEvent(id, { fromRoom = false } = {}) {
@@ -1267,17 +1323,24 @@ async function selectLiveEvent(id, { fromRoom = false } = {}) {
   try {
     const data = await api.event(id);
     if (seq !== liveSeq) return;
+    if (!data.event || !Array.isArray(data.scenes) || !Array.isArray(data.layers)) throw new Error('The event response was incomplete. Refresh to try again.');
     L.detail = st('done', { data });
     const tl = liveTimeline(data, L.layer);
     const pending = L.pendingFrame;
-    L.idx = tl.steps.length ? (Number.isInteger(pending) ? Math.min(tl.steps.length - 1, Math.max(0, pending)) : tl.steps.length - 1) : null;
+    const playback = L.room.playback;
+    const shared = room.open && playback?.eventId === id;
+    L.idx = tl.steps.length
+      ? shared
+        ? replayFrameAt(playback, tl.steps.length, playback.serverTime + performance.now() - playback.receivedAt)
+        : Number.isInteger(pending) ? Math.min(tl.steps.length - 1, Math.max(0, pending)) : tl.steps.length - 1
+      : null;
     L.pendingFrame = null;
     ensureBrowseImages(tl);
     if (state.source === 'live') fitLive();
     loadInto('context', () => api.context(id), seq);
     loadInto('media', () => api.media(id), seq);
     if (state.api.auth === 'signed-in') loadChatHistory(id, seq);
-    if (L.pendingPlay) {
+    if (shared ? playback.playing : L.pendingPlay) {
       L.pendingPlay = false;
       render();
       startPlaying();
@@ -1339,7 +1402,7 @@ async function askQuestion(text) {
   const L = state.live;
   const id = L.eventId;
   const q = String(text || '').trim();
-  if (!id || L.replay || L.ask.busy) return;
+  if (!id || L.replay || L.ask.busy || L.ask.history === 'loading') return;
   if (q.length < 3) {
     L.ask = { ...L.ask, error: 'Questions need at least 3 characters.' };
     render();
@@ -1392,6 +1455,7 @@ function exploreAt(lng, lat) {
 }
 
 function runAreaQueries() {
+  clearTimeout(areaQueryTimer);
   const L = state.live;
   const area = L.area;
   if (!area) return;
@@ -1407,14 +1471,23 @@ function runAreaQueries() {
         state.live.results = { ...state.live.results, [key]: r };
         render();
       });
-  track('nisar', api.nisarSearch(area.bbox, start, end));
-  track('quakes', api.quakes(area.bbox, start, end));
-  track('context', api.datasetContext(area.bbox, start, end));
+  areaQueryTimer = setTimeout(() => {
+    if (state.source !== 'live' || state.live.area?.id !== area.id || state.live.results.nisar.period !== period) return;
+    track('nisar', api.nisarSearch(area.bbox, start, end));
+    track('quakes', api.quakes(area.bbox, start, end));
+    track('context', api.datasetContext(area.bbox, start, end));
+  }, 350);
   render();
 }
 
 async function liveAction(action, id) {
   const L = state.live;
+  if (L.busy) return;
+  if (action.startsWith('track-') && state.api.auth !== 'signed-in') {
+    L.actionError = 'Sign in to track this place.';
+    render();
+    return;
+  }
   const fail = (err) => {
     if (err && err.status === 401) {
       markSignedOut();
@@ -1432,13 +1505,15 @@ async function liveAction(action, id) {
     return;
   }
   if (action === 'track-area' && L.area) {
+    const area = L.area;
+    const dateRange = { ...L.range };
     L.busy = 'area';
     render();
     try {
-      const name = `Area near ${formatLngLat(L.area.lng, L.area.lat)}`;
-      const out = await api.trackArea({ aoi: L.area.bbox, dateRange: { ...L.range }, name, type: 'other' });
+      const name = `Area near ${formatLngLat(area.lng, area.lat)}`;
+      const out = await api.trackArea({ aoi: area.bbox, dateRange, name, type: 'other' });
       L.busy = '';
-      await loadLiveEvents(out.eventId, { id: out.eventId, name, type: 'other', bbox: L.area.bbox, sceneCount: 0 });
+      await loadLiveEvents(out.eventId, { id: out.eventId, name, type: 'other', bbox: area.bbox, sceneCount: 0 });
       watchNewEvent(out.eventId);
       return;
     } catch (err) {
@@ -1490,22 +1565,24 @@ async function liveAction(action, id) {
 
 /**
  * A just-tracked event has no scenes until the backend's ingest finds them.
- * Re-check its detail every 10 s for ~2 minutes and fill the scenes in place
+ * Re-check its detail at most five times over ~2 minutes and fill the scenes in place
  * (without resetting the panel) as soon as they appear.
  */
 async function watchNewEvent(id) {
-  for (let attempt = 0; attempt < 12; attempt++) {
-    await new Promise((r) => setTimeout(r, 10000));
+  const seq = liveSeq;
+  for (const delay of [5000, 10000, 20000, 30000, 45000]) {
+    await new Promise((r) => setTimeout(r, delay));
     const L = state.live;
-    if (L.eventId !== id || L.replay) return;
+    if (seq !== liveSeq || L.eventId !== id || L.replay || state.source !== 'live' || document.hidden) return;
     if (L.detail.status === 'done' && L.detail.data.scenes.length > 0) return;
     let data;
     try {
-      data = await api.event(id);
+      data = await api.event(id, { fresh: true });
     } catch {
       continue;
     }
-    if (state.live.eventId !== id || !data.scenes.length) continue;
+    if (seq !== liveSeq || state.live.eventId !== id) return;
+    if (!Array.isArray(data.scenes) || !data.scenes.length) continue;
     L.detail = st('done', { data });
     const tl = liveTimeline(data, L.layer);
     L.idx = tl.steps.length ? tl.steps.length - 1 : null;
@@ -1513,6 +1590,10 @@ async function watchNewEvent(id) {
     if (state.source === 'live') fitLive();
     render();
     return;
+  }
+  if (seq === liveSeq) {
+    state.live.notice = 'The ingest is still running. Refresh the catalog to check again.';
+    render();
   }
 }
 
@@ -1587,9 +1668,11 @@ function selectCell(cellId) {
 
 /* Replay room */
 
-function applyRoomState(rs) {
+function applyRoomState(rs, serverTime) {
   const L = state.live;
   if (state.source !== 'live' || !rs) return;
+  const clock = Number.isFinite(serverTime) ? serverTime : Date.now();
+  L.room.playback = { ...rs, serverTime: clock, receivedAt: performance.now() };
   // Remote state is applied without sending anything back: only explicit
   // user actions (seek, play, pause, choosing an event) are sent to the room.
   {
@@ -1608,7 +1691,7 @@ function applyRoomState(rs) {
       return;
     }
     const v = liveView();
-    if (v.len && Number.isInteger(rs.frame)) L.idx = Math.min(v.len - 1, Math.max(0, rs.frame));
+    if (v.len) L.idx = replayFrameAt(rs, v.len, clock);
     if (rs.playing && !state.playing) startPlaying();
     else if (!rs.playing && state.playing) stopPlaying();
     render();
@@ -1659,6 +1742,7 @@ function enterDemo(hazardId) {
     return;
   }
   render();
+  if (!cache.rasters.has(state.hazard)) loadHazard(state.hazard);
   if (map) refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), true);
 }
 
@@ -1745,12 +1829,15 @@ function startPlaying() {
     // Wraps from the last forecast back to the first observed pass; the
     // observed behaviour is restored by render() because every lock is derived.
     if (state.source === 'live') {
-      state.live.idx = ((state.live.idx === null ? -1 : state.live.idx) + 1) % n;
+      const playback = state.live.room.playback;
+      state.live.idx = room.open && playback?.playing && playback.eventId === state.live.eventId
+        ? replayFrameAt(playback, n, playback.serverTime + performance.now() - playback.receivedAt)
+        : ((state.live.idx === null ? -1 : state.live.idx) + 1) % n;
     } else {
       state.idx = ((state.idx === null ? -1 : state.idx) + 1) % n;
     }
     render();
-  }, Math.max(100, Number(CONFIG.playIntervalMs) || 1000));
+  }, state.source === 'live' && room.open ? 200 : Math.max(100, Number(CONFIG.playIntervalMs) || 1000));
 }
 
 /* ------------------------------------------------------------------ */
@@ -1786,7 +1873,7 @@ function setIndex(i) {
   if (state.source === 'live') {
     state.live.idx = next;
     // A user's seek is shared with the replay room (search replays are not).
-    if (room.open && !state.live.replay) room.send({ type: 'seek', frame: next });
+    if (room.open && !state.live.replay) room.send({ type: 'pause', frame: next });
   } else {
     state.idx = next;
   }
@@ -1941,6 +2028,7 @@ function bindEvents() {
 /** Controls and evidence of the LIVE channel. */
 function bindLiveEvents() {
   const L = () => state.live;
+  el.liveRefresh.addEventListener('click', refreshLiveCatalog);
 
   el.liveEvent.addEventListener('change', () => {
     const id = el.liveEvent.value;
@@ -2194,8 +2282,8 @@ function boot() {
     });
   }
 
-  // 4. Timeline and rasters.
-  loadHazard(state.hazard);
+  // Load demo rasters only when the viewer has deliberately selected a demo.
+  if (savedSource() === 'demo') loadHazard(state.hazard);
 
   // 4b. Earth Replay API connection + session check (never blocks the demo).
   probe().then((r) => {
@@ -2210,7 +2298,7 @@ function boot() {
 
   // 4c. Come back to the channel the viewer last used (e.g. after the Auth0
   //     round trip, which always lands on "/").
-  if (savedSource() === 'live') enterLive();
+  if (savedSource() !== 'demo') enterLive();
 
   // 5. Route (also performs a render).
   route();
@@ -2242,6 +2330,11 @@ function boot() {
       const v = liveView();
       return { source: state.source, eventId: state.live.eventId, mode: v.tl.mode, steps: v.len, idx: v.idx, panel: state.live.panel, loading: v.loading };
     },
+  });
+  window.addEventListener('pagehide', () => {
+    clearTimeout(areaQueryTimer);
+    stopPlaying();
+    leaveRoom();
   });
 }
 

@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en" data-mode="observed" data-hazard="volcano" data-route="home">
+<html lang="en" data-mode="observed" data-hazard="volcano" data-route="home" data-source="live" data-forecasts="none">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#07090E">
-  <title>spaceapp — Aso, in time</title>
+  <title>Earth Replay — NISAR workstation</title>
+  <link rel="icon" href="data:,">
   <meta name="description" content="NISAR SAR workstation. Three synthetic demonstration channels over Japan, plus a live channel showing real NISAR catalog events and ASF preview images. Not real-time monitoring, not a validated forecast.">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,13 +35,13 @@
 
     <fieldset id="hazard-switch">
       <legend class="visually-hidden">Hazard channel</legend>
-      <input id="hz-volcano" type="radio" name="hazard" value="volcano" checked>
+      <input id="hz-volcano" type="radio" name="hazard" value="volcano">
       <label for="hz-volcano"><span class="hz-num">01 // </span>VOLCANIC SAR</label>
       <input id="hz-earthquake" type="radio" name="hazard" value="earthquake">
       <label for="hz-earthquake"><span class="hz-num">02 // </span>SEISMIC FAULT</label>
       <input id="hz-tsunami" type="radio" name="hazard" value="tsunami">
       <label for="hz-tsunami"><span class="hz-num">03 // </span>TSUNAMI PROPAGATION</label>
-      <input id="hz-live" type="radio" name="hazard" value="live">
+      <input id="hz-live" type="radio" name="hazard" value="live" checked>
       <label for="hz-live"><span class="hz-num">04 // </span>LIVE NISAR</label>
       <label class="compound-label">
         <input id="compound-toggle" type="checkbox">
@@ -85,7 +86,9 @@
           <select id="live-event">
             <option value="">Loading events…</option>
           </select>
+          <button id="live-refresh" type="button">Refresh catalog</button>
           <p id="live-events-note" class="meta">CONNECTING TO THE CATALOG</p>
+          <p id="live-status" class="meta" role="status" aria-live="polite" hidden></p>
           <label id="live-layer-wrap" hidden>Layer
             <select id="live-layer"></select>
           </label>
@@ -172,7 +175,7 @@
           <ul id="legend-live" hidden>
             <li>
               <span class="legend-swatch" data-kind="preview" aria-hidden="true"></span>
-              <span class="legend-text">ASF preview: a real NISAR pass, quicklook only, not calibrated</span>
+              <span id="live-legend-raster" class="legend-text">ASF preview: a real NISAR pass, quicklook only, not calibrated</span>
             </li>
             <li>
               <span class="legend-swatch" data-kind="aoi" aria-hidden="true"></span>

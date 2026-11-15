@@ -6,6 +6,8 @@
   "description": "No-build static workstation. `npm run dev` serves this folder over HTTP; there are no dependencies to install.",
   "scripts": {
     "dev": "node dev-server.mjs",
-    "start": "node dev-server.mjs"
+    "start": "node dev-server.mjs",
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.js"
   }
 }

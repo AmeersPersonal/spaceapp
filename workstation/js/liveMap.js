@@ -155,7 +155,7 @@ export function applyLiveMap(map, lv) {
 
   // Outlook cells (modelled).
   const cells = active && lv.outlookOn && Array.isArray(lv.cells) ? lv.cells : [];
-  const outlookKey = `${cells.map((c) => c.id).join(',')}|${lv.selectedCell || ''}`;
+  const outlookKey = JSON.stringify([cells.map(c => [c.id, c.bbox, c.probability]), lv.selectedCell || '']);
   if (s.outlookKey !== outlookKey) {
     map.getSource('live-outlook').setData({
       type: 'FeatureCollection',
@@ -196,6 +196,12 @@ export function applyLiveMap(map, lv) {
   }
   for (const [key, rec] of s.images) {
     const img = want.get(key);
+    if (active && !img) {
+      if (map.getLayer(rec.id)) map.removeLayer(rec.id);
+      if (map.getSource(rec.id)) map.removeSource(rec.id);
+      s.images.delete(key);
+      continue;
+    }
     const visible = Boolean(img && img.visible);
     if (rec.visible !== visible) {
       setVisibility(map, rec.id, visible);
@@ -209,12 +215,13 @@ export function applyLiveMap(map, lv) {
 
   // Processed tiles for the current date.
   const tiles = active ? lv.tiles : null;
-  const tilesKey = tiles ? tiles.url : '';
+  const tilesKey = tiles ? JSON.stringify([tiles.url, tiles.minZoom, tiles.maxZoom, tiles.bounds]) : '';
   if (s.tilesKey !== tilesKey) {
     if (map.getLayer('live-tiles')) map.removeLayer('live-tiles');
     if (map.getSource('live-tiles')) map.removeSource('live-tiles');
     if (tiles) {
-      const url = new URL(tiles.url, window.location.origin).href;
+      // URL normalisation escapes braces, but MapLibre must see XYZ tokens.
+      const url = new URL(tiles.url, window.location.origin).href.replace(/%7B([zxy])%7D/gi, '{$1}');
       map.addSource('live-tiles', {
         type: 'raster',
         tiles: [url],
