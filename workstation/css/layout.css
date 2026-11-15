@@ -1,0 +1,484 @@
+/* layout.css — workstation
+   Positioning of #map, #topbar, #controls, #evidence, #timeline, #page,
+   the route overlay rules and the ≤ 900px mobile layout.
+   No colour literals here: everything is var(). */
+
+/* ---------------------------------------------------------------------
+   1. Map: full viewport, never in document flow
+   --------------------------------------------------------------------- */
+#map {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: var(--bg-canvas);
+}
+
+/* ---------------------------------------------------------------------
+   2. HUD dock surface. Fill ONLY on the four outer docks.
+   --------------------------------------------------------------------- */
+.hud {
+  position: fixed;
+  background: var(--bg-hud-well);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-primary);
+}
+
+/* Everything inside a dock keeps a transparent background. */
+.hud > *,
+.hud section,
+.hud details,
+.hud fieldset {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------------------
+   3. Top bar
+   --------------------------------------------------------------------- */
+#topbar {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--topbar-h);
+  z-index: 20;
+  display: flex;
+  align-items: stretch;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+/* Cells are separated by a left hairline; the first cell has none. */
+#topbar > * {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border-left: 1px solid var(--border-hairline);
+  padding: 0 var(--space-4);
+}
+
+#topbar > :first-child {
+  border-left: 0;
+}
+
+#topbar > .wordmark {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-primary);
+}
+
+#topbar > .wordmark:hover {
+  text-decoration: none;
+  color: var(--pale-sky);
+}
+
+#topbar > .wordmark .meta {
+  font-size: 9.5px;
+}
+
+#hazard-switch {
+  padding: 0;
+  gap: 0;
+}
+
+#target-cell {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: var(--space-3);
+  row-gap: 1px;
+  align-content: center;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+#target-cell > #target-name {
+  grid-column: 1 / -1;
+  color: var(--text-primary);
+}
+
+#topnav {
+  margin-left: auto;
+  padding: 0 var(--space-2) 0 0;
+  gap: 0;
+}
+
+/* The aria-controls target wraps the three nav items; it contributes no box,
+   so the items lay out as #topnav's own flex (desktop) / grid (mobile) items. */
+#topnav-menu {
+  display: contents;
+}
+
+/* Mobile-only control; hidden on desktop. */
+#menu-toggle {
+  display: none;
+}
+
+/* Desktop widths below ~1600px can't fit every top-bar readout on one line
+   (cells are nowrap, so they would paint over each other). Drop the least
+   important ones in two steps. The pill keeps "◆ FORECAST MODE", so the
+   forecast wording (HANDOFF §3 lock 3) survives. */
+@media (min-width: 901px) {
+  /* Fixed-content cells keep their width; the target readout is the one
+     flexible cell and truncates instead of painting over its neighbours. */
+  #topbar > .wordmark,
+  #topbar > #hazard-switch,
+  #topbar > #mode-pill,
+  #topbar > #topnav {
+    flex-shrink: 0;
+  }
+
+  #target-cell {
+    flex: 0 1 auto;
+    overflow: hidden;
+  }
+
+  #target-cell > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1600px) {
+  #topbar > .wordmark .meta,
+  #target-footprint,
+  #mode-pill .pill-suffix {
+    display: none;
+  }
+
+  #target-cell {
+    grid-template-columns: minmax(0, auto);
+  }
+
+  /* #topbar prefix: must outrank components.css's #hazard-switch > label. */
+  #topbar > #hazard-switch > label {
+    padding: 0 var(--space-2);
+    font-size: 9.5px;
+  }
+}
+
+/* 901–1200px: the target readout goes too (the coordinates remain in the
+   evidence dock under the point chart). */
+@media (min-width: 901px) and (max-width: 1200px) {
+  #target-cell,
+  #hazard-switch .hz-num {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   4. Side docks (desktop). The dock clips; the drawer inside scrolls,
+   so the corner reticles stay pinned to the dock corners.
+   --------------------------------------------------------------------- */
+#controls,
+#evidence {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 15;
+}
+
+#controls {
+  top: var(--dock-top);
+  left: var(--dock-gap);
+  width: var(--controls-w);
+  max-height: calc(100vh - var(--dock-top) - var(--timeline-h) - 3 * var(--dock-gap));
+}
+
+#evidence {
+  top: var(--dock-top);
+  right: var(--dock-gap);
+  bottom: calc(var(--timeline-h) + 2 * var(--dock-gap));
+  width: var(--evidence-w);
+}
+
+#controls-drawer,
+#evidence-drawer {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-3);
+}
+
+#evidence-drawer {
+  flex: 1 1 100%;
+}
+
+/* Drawer handles are a mobile affordance; desktop details are always open. */
+#controls-drawer > summary,
+#evidence-drawer > summary {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+   5. Timeline dock
+   --------------------------------------------------------------------- */
+#timeline {
+  bottom: var(--dock-gap);
+  left: var(--dock-gap);
+  right: var(--dock-gap);
+  height: var(--timeline-h);
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+}
+
+#timeline > * {
+  min-width: 0;
+}
+
+/* Track geometry. Two rows: 30px of label + line, 32px of tick buttons.
+   Columns: observed | NOW (zero width) | forecast.
+   JS sets --obs and --fc as plain numbers on #track; the observed column
+   is 100% × obs / (obs + fc), so the NOW tick sits exactly at that boundary. */
+#track {
+  --obs-frac: calc(var(--obs, 6) / (var(--obs, 6) + var(--fc, 4)));
+  position: relative;
+  display: grid;
+  grid-template-columns: calc(100% * var(--obs-frac)) 0 minmax(0, 1fr);
+  grid-template-rows: 30px 32px;
+  align-self: center;
+  height: 62px;
+}
+
+#seg-observed { grid-column: 1; grid-row: 1; }
+#now-tick     { grid-column: 2; grid-row: 1; }
+#seg-forecast { grid-column: 3; grid-row: 1; }
+#ticks        { grid-column: 1 / -1; grid-row: 2; }
+
+html[data-forecasts="none"] #track {
+  grid-template-columns: 1fr 0 0;
+}
+
+html[data-forecasts="none"] #seg-forecast,
+html[data-forecasts="none"] #now-tick {
+  display: none;
+}
+
+/* The slider lies over the segment row only, centred on the track line
+   (line at y = 30px; the input is 15px tall from y = 23px). */
+#date-slider {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 23px;
+  width: 100%;
+  height: 15px;
+  z-index: 2;
+}
+
+#timeline-date {
+  text-align: right;
+  white-space: nowrap;
+  min-width: 11ch;
+}
+
+/* ---------------------------------------------------------------------
+   6. Route overlay (#page) and route-dependent visibility
+   --------------------------------------------------------------------- */
+#page {
+  position: fixed;
+  inset: var(--topbar-h) 0 0 0;
+  z-index: 25;
+  background: var(--bg-canvas);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-6) var(--space-4);
+}
+
+#page > * {
+  width: 100%;
+  max-width: 360px;
+  min-width: 0;
+}
+
+#page > #notfound {
+  max-width: none;
+}
+
+/* Off the home route, the three working docks are not shown. */
+html:not([data-route="home"]) #controls,
+html:not([data-route="home"]) #evidence,
+html:not([data-route="home"]) #timeline {
+  display: none;
+}
+
+/* ---------------------------------------------------------------------
+   7. Mobile (≤ 900px)
+   --------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  /* Top bar: wordmark, short pill and the menu toggle. */
+  #topbar {
+    padding-right: var(--topbar-h);
+  }
+
+  #topbar > * {
+    padding: 0 var(--space-3);
+  }
+
+  #target-cell {
+    display: none;
+  }
+
+  #mode-pill .pill-suffix {
+    display: none;
+  }
+
+  /* Menu toggle: fixed in the bar's right cell at all times. */
+  #menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: visible;
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: var(--topbar-h);
+    height: var(--topbar-h);
+    border: 0;
+    border-left: 1px solid var(--border-hairline);
+    z-index: 22;
+  }
+
+  /* The dropdown: hazard row first, then the nav links, both pinned under
+     the bar as an extension of the #topbar dock. They are visibility-hidden
+     (and therefore out of the tab order) until the toggle is expanded. */
+  #hazard-switch,
+  #topnav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0;
+    z-index: 21;
+    background: var(--bg-hud-well);
+    border-left: 0;
+    border-bottom: 1px solid var(--border-hairline);
+    visibility: hidden;
+  }
+
+  #hazard-switch {
+    top: var(--topbar-h);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: var(--hit-mobile);
+  }
+
+  #topnav {
+    top: calc(var(--topbar-h) + 2 * var(--hit-mobile) + 1px);
+    display: grid;
+    grid-auto-rows: var(--hit-mobile);
+  }
+
+  #topbar:has(#menu-toggle[aria-expanded="true"]) #hazard-switch,
+  #topbar:has(#menu-toggle[aria-expanded="true"]) #topnav {
+    visibility: visible;
+  }
+
+  /* Side docks become floating drawers over the map. */
+  #controls,
+  #evidence {
+    left: var(--space-2);
+    right: var(--space-2);
+    width: auto;
+    max-height: none;
+    bottom: auto;
+    display: block;
+    overflow: visible;
+  }
+
+  #controls {
+    top: calc(var(--topbar-h) + var(--space-2));
+    z-index: 15;
+  }
+
+  #evidence {
+    top: auto;
+    bottom: calc(var(--timeline-h) + var(--space-2));
+    z-index: 16;
+  }
+
+  #controls-drawer,
+  #evidence-drawer {
+    max-height: var(--drawer-handle-h);
+    overflow: hidden;
+    padding: 0;
+  }
+
+  #controls-drawer[open],
+  #evidence-drawer[open] {
+    max-height: calc(38vh + var(--drawer-handle-h));
+    overflow-y: auto;
+    padding: 0 var(--space-3) var(--space-3);
+  }
+
+  #controls-drawer > summary,
+  #evidence-drawer > summary {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 calc(-1 * var(--space-3)) var(--space-3);
+    background: var(--bg-hud-well);
+  }
+
+  #controls-drawer:not([open]) > summary,
+  #evidence-drawer:not([open]) > summary {
+    margin: 0;
+  }
+
+  /* Timeline hugs the viewport edges. */
+  #timeline {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    grid-template-columns: var(--hit-mobile) 1fr auto;
+    column-gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
+  }
+
+  #timeline-date {
+    min-width: 0;
+    max-width: 10ch;
+    white-space: normal;
+  }
+
+  /* Every other tick label is hidden; visibility keeps the spacing so the
+     remaining labels stay aligned with the thumb positions. */
+  #ticks li:nth-child(even) {
+    visibility: hidden;
+  }
+
+  /* Segment and NOW labels have no room at this width; the text stays in
+     the accessibility tree, the lines and hatch keep their px geometry. */
+  /* The text sits in span.meta, which sets its own font-size, so the
+     spans are the target. */
+  #seg-observed > .meta,
+  #seg-forecast > .meta,
+  #now-tick > .meta {
+    font-size: 0;
+    line-height: 0;
+  }
+
+  /* Nothing may exceed the viewport. */
+  #topbar > *,
+  #timeline > * {
+    min-width: 0;
+  }
+
+  #page {
+    padding: var(--space-4) var(--space-4);
+  }
+}

@@ -40,6 +40,19 @@
   top: 106px;
 }
 
+/* The disaster picker goes below the badges (106px + their 38px height + a gap). */
+.sx .sx-picker {
+  top: 154px;
+  max-height: calc(100% - 372px);
+}
+
+@media (max-width: 900px) {
+  .sx .sx-picker {
+    top: 152px;
+    max-height: none;
+  }
+}
+
 /* ---------- Phones ---------- */
 
 @media (max-width: 900px) {
@@ -106,6 +119,11 @@
 }
 
 @media (max-width: 900px) {
+  /* Follow the sample picker's measured bottom, leaving attribution above playback. */
+  .sx .sx-hint {
+    top: var(--sx-top-inset);
+  }
+
   /* The card starts under the toolbar's real bottom edge (see useBottomInset.js). */
   .sx .sx-info {
     top: var(--sx-top-inset, 156px);

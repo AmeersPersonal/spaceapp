@@ -3,39 +3,101 @@ import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapView.css";
-import { studyArea } from "./studyArea.js";
-import { useBottomInset } from "./useBottomInset.js";
+import { basemapStyle, studyAreas } from "./studyArea.js";
+import { useBottomInset, useTopInset } from "./useBottomInset.js";
 
 // Vite needs to be told where MapLibre's background worker file is.
 maplibregl.setWorkerUrl(workerUrl);
 
-const { west, south, east, north } = studyArea.bounds;
-
+// Everything the map needs to know about one study area's timeline.
 // The timeline has two halves: dates the satellite has already flown
 // (we have an image) and dates the model is predicting (we do not).
-const OBSERVED = studyArea.dates;
-const FORECAST = studyArea.forecast ?? [];
-const TIMELINE = [
-  ...OBSERVED.map((d) => ({ ...d, kind: "observed" })),
-  ...FORECAST.map((d) => ({ ...d, kind: "forecast" })),
-];
-const LAST_OBSERVED = OBSERVED.length - 1;
+function buildTimeline(area) {
+  const { west, south, east, north } = area.bounds;
+  const OBSERVED = area.dates;
+  const FORECAST = area.forecast ?? [];
+  const TIMELINE = [
+    ...OBSERVED.map((d) => ({ ...d, kind: "observed" })),
+    ...FORECAST.map((d) => ({ ...d, kind: "forecast" })),
+  ];
+  const LAST_OBSERVED = OBSERVED.length - 1;
+  return {
+    OBSERVED,
+    FORECAST,
+    TIMELINE,
+    LAST_OBSERVED,
+    // Where the "Now" divider sits on the slider track, as a percentage.
+    NOW_PERCENT: Math.min(
+      100,
+      TIMELINE.length > 1
+        ? ((LAST_OBSERVED + 0.5) / (TIMELINE.length - 1)) * 100
+        : 100,
+    ),
+    // Corner order MapLibre expects: top-left, top-right, bottom-right, bottom-left.
+    IMAGE_CORNERS: [
+      [west, north],
+      [east, north],
+      [east, south],
+      [west, south],
+    ],
+  };
+}
 
-// Where the "Now" divider sits on the slider track, as a percentage.
-const NOW_PERCENT = Math.min(
-  100,
-  TIMELINE.length > 1
-    ? ((LAST_OBSERVED + 0.5) / (TIMELINE.length - 1)) * 100
-    : 100,
-);
+const MAP_PADDING = 1.5; // degrees of slack around the study area
 
-// Corner order MapLibre expects: top-left, top-right, bottom-right, bottom-left.
-const IMAGE_CORNERS = [
-  [west, north],
-  [east, north],
-  [east, south],
-  [west, south],
-];
+function insideBounds({ west, south, east, north }, lng, lat) {
+  return lng >= west && lng <= east && lat >= south && lat <= north;
+}
+
+function maxBoundsFor({ west, south, east, north }) {
+  return [
+    [west - MAP_PADDING, south - MAP_PADDING],
+    [east + MAP_PADDING, north + MAP_PADDING],
+  ];
+}
+
+const RISK_COLOR = ["match", ["get", "risk"], "high", "#e5484d", "#f5a524"];
+
+// (Re)build the radar overlay and the risk zones for one study area.
+// Each area gets brand-new sources rather than moving one image across the
+// globe: an image source whose coordinates change while images are still
+// loading can end up with nothing to draw, taking the layers above it with it.
+function installOverlays(map, area) {
+  for (const id of ["risk-line", "risk-fill", "radar"]) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  for (const id of ["risk", "radar"]) {
+    if (map.getSource(id)) map.removeSource(id);
+  }
+
+  // Step 2 — the radar image, laid over the map.
+  map.addSource("radar", {
+    type: "image",
+    url: area.dates[area.dates.length - 1].image,
+    coordinates: buildTimeline(area).IMAGE_CORNERS,
+  });
+  map.addLayer({
+    id: "radar",
+    type: "raster",
+    source: "radar",
+    paint: { "raster-opacity": 0.85, "raster-fade-duration": 0 },
+  });
+
+  // Step 6 — risk zones: observed for the past, predicted for the future.
+  map.addSource("risk", { type: "geojson", data: area.riskZonesUrl });
+  map.addLayer({
+    id: "risk-fill",
+    type: "fill",
+    source: "risk",
+    paint: { "fill-color": RISK_COLOR, "fill-opacity": 0.28 },
+  });
+  map.addLayer({
+    id: "risk-line",
+    type: "line",
+    source: "risk",
+    paint: { "line-color": RISK_COLOR, "line-width": 1.5 },
+  });
+}
 
 // ---------- Helpers that read the radar images ----------
 
@@ -58,7 +120,7 @@ function loadPixels(url) {
 }
 
 // Radar brightness (0 to 1) at a longitude/latitude.
-function sampleAt(pixels, lng, lat) {
+function sampleAt(pixels, { west, south, east, north }, lng, lat) {
   const x = Math.floor(((lng - west) / (east - west)) * pixels.width);
   const y = Math.floor(((north - lat) / (north - south)) * pixels.height);
   const cx = Math.min(pixels.width - 1, Math.max(0, x));
@@ -92,14 +154,11 @@ function blockAverage(pixels) {
 
 // Build a change-detection image: blue where the ground got darker than the
 // baseline date, orange where it got brighter, transparent where it's the same.
+// Returns ImageData, handed straight to the map with no network round trip.
 function buildChangeImage(basePixels, currentPixels) {
   const base = blockAverage(basePixels);
   const current = blockAverage(currentPixels);
-  const canvas = document.createElement("canvas");
-  canvas.width = base.width;
-  canvas.height = base.height;
-  const ctx = canvas.getContext("2d");
-  const out = ctx.createImageData(base.width, base.height);
+  const out = new ImageData(base.width, base.height);
   const THRESHOLD = 55; // ignore small differences
 
   for (let i = 0; i < base.values.length; i++) {
@@ -117,8 +176,7 @@ function buildChangeImage(basePixels, currentPixels) {
     }
     out.data[o + 3] = Math.min(255, 90 + Math.abs(diff) * 2);
   }
-  ctx.putImageData(out, 0, 0);
-  return canvas.toDataURL("image/png");
+  return out;
 }
 
 function formatDate(iso) {
@@ -133,7 +191,8 @@ function formatDate(iso) {
 // Only the observed half has values; the forecast half is shaded and empty,
 // because no satellite pass has happened yet.
 
-function TimeChart({ values, activeIndex }) {
+function TimeChart({ tl, values, activeIndex }) {
+  const { TIMELINE, FORECAST, LAST_OBSERVED } = tl;
   const W = 300;
   const H = 130;
   const pad = { left: 30, right: 10, top: 10, bottom: 22 };
@@ -227,7 +286,8 @@ function TimeChart({ values, activeIndex }) {
 // Solid line = worked out from radar we already have.
 // Dashed line = the model's prediction.
 
-function RiskChart({ activeIndex }) {
+function RiskChart({ tl, activeIndex }) {
+  const { TIMELINE, FORECAST, LAST_OBSERVED } = tl;
   const W = 300;
   const H = 130;
   const pad = { left: 30, right: 10, top: 10, bottom: 22 };
@@ -346,12 +406,32 @@ function MapView() {
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const changeCache = useRef(new Map());
+  const overlayAreaRef = useRef(null); // which area the map's overlays show
+
+  const [areaId, setAreaId] = useState(studyAreas[0].id);
+  const area = studyAreas.find((a) => a.id === areaId) ?? studyAreas[0];
+  const tl = useMemo(() => buildTimeline(area), [area]);
+  const {
+    OBSERVED,
+    FORECAST,
+    TIMELINE,
+    LAST_OBSERVED,
+    NOW_PERCENT,
+    IMAGE_CORNERS,
+  } = tl;
+  // The map's click handler is set up once, so it reads the area from here.
+  const areaRef = useRef(area);
+  useEffect(() => {
+    areaRef.current = area;
+  }, [area]);
 
   const [mapReady, setMapReady] = useState(false);
   const [pixels, setPixels] = useState(null); // raw pixels of every observed image
   const [loadError, setLoadError] = useState("");
 
-  const [dateIndex, setDateIndex] = useState(LAST_OBSERVED); // start at "now"
+  const [dateIndex, setDateIndex] = useState(
+    () => studyAreas[0].dates.length - 1, // start at "now"
+  );
   const [playing, setPlaying] = useState(false);
   const [mode, setMode] = useState("radar"); // 'radar' or 'change'
   const [baselineIndex, setBaselineIndex] = useState(0);
@@ -359,25 +439,41 @@ function MapView() {
   const [showRisk, setShowRisk] = useState(true);
   const [point, setPoint] = useState(null); // clicked location
   const controlsRef = useBottomInset(); // keeps the attribution above the controls bar
+  const pickerRef = useTopInset(); // keeps the phone prompt below the scenario picker
   const [panelOpen, setPanelOpen] = useState(false); // detail card, opened by clicking the map
 
-  const step = TIMELINE[dateIndex];
+  const step = TIMELINE[dateIndex] ?? TIMELINE[LAST_OBSERVED];
   const isForecast = step.kind === "forecast";
 
-  // Step 1 — create the map, locked onto the study area.
+  // Switch to another disaster: reset the timeline to its "now" and drop
+  // anything that belonged to the old area.
+  function selectArea(id) {
+    if (id === areaId) return;
+    const next = studyAreas.find((a) => a.id === id);
+    if (!next) return;
+    setAreaId(id);
+    setDateIndex(next.dates.length - 1);
+    setPlaying(false);
+    setMode("radar");
+    setBaselineIndex(0);
+    setPoint(null);
+    setPixels(null);
+    setLoadError("");
+  }
+
+  // Step 1 — create the map, locked onto the first study area.
   useEffect(() => {
+    const first = areaRef.current;
+    const { west, south, east, north } = first.bounds;
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: studyArea.basemapStyle,
+      style: basemapStyle,
       bounds: [
         [west, south],
         [east, north],
       ],
       fitBoundsOptions: { padding: 30 },
-      maxBounds: [
-        [west - 1.5, south - 1.5],
-        [east + 1.5, north + 1.5],
-      ],
+      maxBounds: maxBoundsFor(first.bounds),
       // Strictly 2D: no tilting or rotating.
       pitchWithRotate: false,
       dragRotate: false,
@@ -388,62 +484,22 @@ function MapView() {
       "top-right",
     );
 
+    // The overlays are added by the area effect below once the map is ready.
     map.on("load", () => {
-      // Step 2 — the radar image, laid over the map.
-      map.addSource("radar", {
-        type: "image",
-        url: OBSERVED[0].image,
-        coordinates: IMAGE_CORNERS,
-      });
-      map.addLayer({
-        id: "radar",
-        type: "raster",
-        source: "radar",
-        paint: { "raster-opacity": 0.85, "raster-fade-duration": 0 },
-      });
-
-      // Step 6 — risk zones: observed for the past, predicted for the future.
-      map.addSource("risk", { type: "geojson", data: studyArea.riskZonesUrl });
-      map.addLayer({
-        id: "risk-fill",
-        type: "fill",
-        source: "risk",
-        paint: {
-          "fill-color": [
-            "match",
-            ["get", "risk"],
-            "high",
-            "#e5484d",
-            "#f5a524",
-          ],
-          "fill-opacity": 0.28,
-        },
-      });
-      map.addLayer({
-        id: "risk-line",
-        type: "line",
-        source: "risk",
-        paint: {
-          "line-color": [
-            "match",
-            ["get", "risk"],
-            "high",
-            "#e5484d",
-            "#f5a524",
-          ],
-          "line-width": 1.5,
-        },
-      });
-
       mapRef.current = map;
       setMapReady(true);
+    });
+
+    // Surface map problems instead of failing silently.
+    map.on("error", (event) => {
+      console.error("Map error:", event.error ?? event);
     });
 
     // Step 5 — click a point inside the study area: drop a marker there and
     // open the detail card for it.
     map.on("click", (event) => {
       const { lng, lat } = event.lngLat;
-      if (lng >= west && lng <= east && lat >= south && lat <= north) {
+      if (insideBounds(areaRef.current.bounds, lng, lat)) {
         setPoint({ lng, lat });
         setPanelOpen(true);
       }
@@ -457,12 +513,40 @@ function MapView() {
 
     return () => {
       mapRef.current = null;
+      overlayAreaRef.current = null; // a new map needs its overlays again
       setMapReady(false);
       map.remove();
     };
   }, []);
 
-  // Load the pixels of every observed image once (for the chart and change view).
+  // Build the overlays for the chosen area, then fly there. The pan limits
+  // are lifted for the flight and put back around the new area when it lands.
+  // Declared before the effects that update the overlays, so they always
+  // find them in place.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    if (overlayAreaRef.current === area.id) return;
+    const firstTime = overlayAreaRef.current === null;
+    overlayAreaRef.current = area.id;
+    installOverlays(map, area);
+    if (firstTime) return; // the map was created looking at this area
+    const { west, south, east, north } = area.bounds;
+    const lock = () => map.setMaxBounds(maxBoundsFor(area.bounds));
+    map.setMaxBounds(null);
+    map.once("moveend", lock);
+    map.fitBounds(
+      [
+        [west, south],
+        [east, north],
+      ],
+      { padding: 30, duration: 2200, essential: true },
+    );
+    return () => map.off("moveend", lock);
+  }, [mapReady, area]);
+
+  // Load the pixels of every observed image for this area (for the chart and
+  // change view).
   useEffect(() => {
     let cancelled = false;
     Promise.all(OBSERVED.map((d) => loadPixels(d.image)))
@@ -475,7 +559,7 @@ function MapView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [OBSERVED]);
 
   // Steps 3 and 4 — show the chosen date. Future dates have no image of their
   // own, so the last real pass stays on screen, dimmed, as ground context.
@@ -483,31 +567,54 @@ function MapView() {
     const map = mapRef.current;
     if (!mapReady || !map) return;
 
+    const source = map.getSource("radar");
+    if (!source) return;
     const imageIndex = isForecast ? LAST_OBSERVED : dateIndex;
-    let url = OBSERVED[imageIndex].image;
-    if (!isForecast && mode === "change" && pixels) {
-      const key = `${baselineIndex}-${dateIndex}`;
+    const url = OBSERVED[imageIndex]?.image;
+    if (!url) return;
+
+    // Once this area's images are decoded, hand them over directly: no
+    // request to cancel halfway, nothing to race with the next date.
+    const ready = pixels && pixels.length === OBSERVED.length;
+    let image = ready ? pixels[imageIndex] : null;
+    if (ready && !isForecast && mode === "change") {
+      const key = `${area.id}-${baselineIndex}-${dateIndex}`;
       if (!changeCache.current.has(key)) {
         changeCache.current.set(
           key,
           buildChangeImage(pixels[baselineIndex], pixels[dateIndex]),
         );
       }
-      url = changeCache.current.get(key);
+      image = changeCache.current.get(key);
     }
-    map.getSource("radar").updateImage({ url, coordinates: IMAGE_CORNERS });
-  }, [mapReady, pixels, dateIndex, isForecast, mode, baselineIndex]);
+    source.updateImage(
+      image
+        ? { image, coordinates: IMAGE_CORNERS }
+        : { url, coordinates: IMAGE_CORNERS },
+    );
+  }, [
+    mapReady,
+    area,
+    OBSERVED,
+    LAST_OBSERVED,
+    IMAGE_CORNERS,
+    pixels,
+    dateIndex,
+    isForecast,
+    mode,
+    baselineIndex,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!mapReady || !map) return;
+    if (!mapReady || !map || !map.getLayer("radar")) return;
     // Fade the radar on forecast dates so it reads as background, not evidence.
     map.setPaintProperty(
       "radar",
       "raster-opacity",
       isForecast ? opacity * 0.35 : opacity,
     );
-  }, [mapReady, opacity, isForecast]);
+  }, [mapReady, area, opacity, isForecast]);
 
   // Swap the risk zones for the predicted ones, and make them stronger the
   // more likely the model thinks the hazard is.
@@ -516,21 +623,21 @@ function MapView() {
     if (!mapReady || !map) return;
     const source = map.getSource("risk");
     if (!source) return;
-    source.setData((isForecast && step.riskZonesUrl) || studyArea.riskZonesUrl);
+    source.setData((isForecast && step.riskZonesUrl) || area.riskZonesUrl);
     map.setPaintProperty(
       "risk-fill",
       "fill-opacity",
       isForecast ? 0.18 + 0.45 * (step.probability ?? 0.5) : 0.28,
     );
-  }, [mapReady, dateIndex, isForecast, step]);
+  }, [mapReady, area, isForecast, step]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!mapReady || !map) return;
+    if (!mapReady || !map || !map.getLayer("risk-fill")) return;
     const visibility = showRisk ? "visible" : "none";
     map.setLayoutProperty("risk-fill", "visibility", visibility);
     map.setLayoutProperty("risk-line", "visibility", visibility);
-  }, [mapReady, showRisk]);
+  }, [mapReady, area, showRisk]);
 
   // Step 3 — play button: run the whole timeline, past into future.
   useEffect(() => {
@@ -539,7 +646,7 @@ function MapView() {
       setDateIndex((i) => (i + 1) % TIMELINE.length);
     }, 1000);
     return () => clearInterval(timer);
-  }, [playing]);
+  }, [playing, TIMELINE.length]);
 
   // Marker for the clicked point.
   useEffect(() => {
@@ -558,8 +665,8 @@ function MapView() {
 
   const series = useMemo(() => {
     if (!point || !pixels) return null;
-    return pixels.map((p) => sampleAt(p, point.lng, point.lat));
-  }, [point, pixels]);
+    return pixels.map((p) => sampleAt(p, area.bounds, point.lng, point.lat));
+  }, [point, pixels, area]);
 
   const currentDate = formatDate(step.date);
 
@@ -572,10 +679,26 @@ function MapView() {
           {currentDate}
           {isForecast && <span className="sx-tag">Forecast</span>}
         </div>
-        {studyArea.isSample && (
-          <div className="sx-samplebadge">Sample data</div>
-        )}
+        {area.isSample && <div className="sx-samplebadge">Sample data</div>}
       </div>
+
+      {/* Pick a disaster. Each one is a separate study area. */}
+      <nav ref={pickerRef} className="sx-picker" aria-label="Disasters">
+        {studyAreas.map((a) => (
+          <button
+            key={a.id}
+            className={`sx-pick sx-pick-${a.id}${a.id === area.id ? " sx-pick-active" : ""}`}
+            onClick={() => selectArea(a.id)}
+            aria-pressed={a.id === area.id}
+          >
+            <span className="sx-pick-dot" aria-hidden="true" />
+            <span className="sx-pick-text">
+              <span className="sx-pick-hazard">{a.hazard}</span>
+              <span className="sx-pick-place">{a.name}</span>
+            </span>
+          </button>
+        ))}
+      </nav>
 
       {!panelOpen && (
         <button className="sx-hint" onClick={() => setPanelOpen(true)}>
@@ -693,8 +816,8 @@ function MapView() {
         >
           ×
         </button>
-        <p className="sx-eyebrow">{studyArea.hazard}</p>
-        <h2>{studyArea.name}</h2>
+        <p className="sx-eyebrow">{area.hazard}</p>
+        <h2>{area.name}</h2>
 
         {/* The prediction card, only while the slider is past "Now". */}
         {isForecast && (
@@ -717,23 +840,32 @@ function MapView() {
             </div>
             <p className="sx-prob-value">
               {Math.round((step.probability ?? 0) * 100)}% chance of{" "}
-              {studyArea.hazard.toLowerCase()}
+              {area.hazard.toLowerCase()}
             </p>
             {step.note && <p className="sx-text">{step.note}</p>}
-            {studyArea.modelNote && (
-              <p className="sx-note">{studyArea.modelNote}</p>
-            )}
+            {area.modelNote && <p className="sx-note">{area.modelNote}</p>}
           </div>
         )}
 
-        {studyArea.story.map((text) => (
+        {area.story.map((text) => (
           <p key={text} className="sx-text">
             {text}
           </p>
         ))}
 
+        {area.sources?.length > 0 && (
+          <>
+            <h3>Data behind this</h3>
+            <ul className="sx-sources">
+              {area.sources.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          </>
+        )}
+
         <h3>Risk over time</h3>
-        <RiskChart activeIndex={dateIndex} />
+        <RiskChart tl={tl} activeIndex={dateIndex} />
         <p className="sx-note">
           Solid line is worked out from radar we already have. Dashed line is
           the model's prediction.
@@ -749,19 +881,19 @@ function MapView() {
           <div className="sx-legend">
             <div className="sx-ramp" />
             <div className="sx-ramp-labels">
-              <span>Dark: smooth — fresh ash, water, bare ground</span>
-              <span>Bright: rough — lava, vegetation, buildings</span>
+              <span>{area.legend.dark}</span>
+              <span>{area.legend.bright}</span>
             </div>
           </div>
         ) : (
           <ul className="sx-legend-list">
             <li>
               <span className="sx-swatch" style={{ background: "#2b83ff" }} />
-              Darker than baseline (smoother — new ash or water)
+              {area.legend.darker}
             </li>
             <li>
               <span className="sx-swatch" style={{ background: "#ff8c28" }} />
-              Brighter than baseline (rougher or newly exposed ground)
+              {area.legend.brighter}
             </li>
           </ul>
         )}
@@ -769,11 +901,13 @@ function MapView() {
           <ul className="sx-legend-list">
             <li>
               <span className="sx-swatch" style={{ background: "#e5484d" }} />
-              Higher risk {isForecast ? "(predicted)" : "(from observations)"}
+              {area.legend.high}{" "}
+              {isForecast ? "(predicted)" : "(from observations)"}
             </li>
             <li>
               <span className="sx-swatch" style={{ background: "#f5a524" }} />
-              Medium risk {isForecast ? "(predicted)" : "(from observations)"}
+              {area.legend.medium}{" "}
+              {isForecast ? "(predicted)" : "(from observations)"}
             </li>
           </ul>
         )}
@@ -782,7 +916,7 @@ function MapView() {
         {loadError && <p className="sx-error">{loadError}</p>}
         {series ? (
           <>
-            <TimeChart values={series} activeIndex={dateIndex} />
+            <TimeChart tl={tl} values={series} activeIndex={dateIndex} />
             <p className="sx-note">
               At {point.lat.toFixed(3)}°, {point.lng.toFixed(3)}°. 0 is darkest,
               1 is brightest.
