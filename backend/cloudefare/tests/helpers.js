@@ -38,6 +38,10 @@ export function fakeVectors() {
       for (const v of vectors) store.set(v.id, v);
       return { mutationId: 'm1' };
     },
+    async deleteByIds(ids) {
+      for (const id of ids) store.delete(id);
+      return { mutationId: 'm2', ids };
+    },
     async query(_vector, { topK, filter }) {
       const matches = [...store.values()]
         .filter((v) => !filter?.eventId || v.metadata?.eventId === filter.eventId)

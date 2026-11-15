@@ -194,3 +194,117 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 720px) {
+  .ev {
+    gap: 20px;
+    padding: 5.5rem 12px 3rem;
+  }
+
+  .ev h2 {
+    font-size: 1.3rem;
+    overflow-wrap: anywhere;
+  }
+
+  .ev-card {
+    padding: 12px;
+    /* A wide scene table scrolls inside its card instead of stretching the page. */
+    overflow-x: auto;
+  }
+
+  .ev-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ev-ask {
+    flex-wrap: wrap;
+  }
+
+  .ev-ask input {
+    flex-basis: 180px;
+  }
+
+  .ev-item {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  /* The chosen event opens under the list, so a long list scrolls in place
+     instead of pushing it far down the page. */
+  .ev-list {
+    max-height: 42vh;
+    overflow-y: auto;
+  }
+}
+
+/* ---------- Date range and replay ---------- */
+
+.ev-side .dr {
+  margin-bottom: 10px;
+}
+
+.ev-count {
+  margin: 0 0 8px;
+}
+
+.ev-replay {
+  margin: 4px 0 8px;
+}
+
+/* ---------- Pictures ---------- */
+
+.ev-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 8px 0 14px;
+}
+
+.ev-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.ev-figure img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border: 1px solid #3d1f3a;
+  border-radius: 8px;
+  background: #e9eef2; /* light, so USGS maps with transparent backgrounds stay readable */
+}
+
+.ev-figure:hover img {
+  border-color: #BFD1E5;
+}
+
+.ev-figure-title {
+  color: #EBF5EE;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ev-links {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .ev-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ev-links {
+    gap: 12px;
+  }
+}

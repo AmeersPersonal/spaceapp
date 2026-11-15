@@ -75,9 +75,10 @@ export function mountAuthRoutes(app) {
   // With FRONTEND_URL set, a finished login lands on the frontend instead of the profile JSON.
   // The SDK only honours it on the API's own hostname (localhost dev); otherwise it falls back
   // to "/", which the API root forwards to FRONTEND_URL for browsers. `screen_hint=signup`
-  // opens Auth0's sign-up screen.
+  // opens Auth0's sign-up screen. Without FRONTEND_URL, a Worker that hosts the frontend
+  // itself (ASSETS binding) returns to its own root.
   app.get('/auth/login', (c, next) => login({
-    redirectAfterLogin: frontendOrigin(c.env) ? c.env.FRONTEND_URL : '/api/auth/me',
+    redirectAfterLogin: frontendOrigin(c.env) ? c.env.FRONTEND_URL : c.env.ASSETS ? '/' : '/api/auth/me',
     forwardAuthorizationParams: ['screen_hint'],
   })(c, next));
   app.get('/auth/callback', callback());

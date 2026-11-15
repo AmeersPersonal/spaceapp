@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapView.css";
@@ -7,9 +7,11 @@ import "./NisarMap.css";
 import { api } from "./api.js";
 import { useAuth } from "./auth.jsx";
 import AreaExplorer from "./AreaExplorer.jsx";
+import OutlookPanel from "./OutlookPanel.jsx";
 import { loadBrowseImage } from "./browseImage.js";
-import { JAPAN_BBOX, areaAround, contains, wrapLng, worldMask } from "./explore.js";
+import { JAPAN_BBOX, LAYERS, areaAround, centreInJapan, contains, lastMonths, layerLabel, orderLayers, quakeDay, statusLabel, wrapLng, worldMask } from "./explore.js";
 import { studyArea } from "./studyArea.js";
+import { useBottomInset, useTopInset } from "./useBottomInset.js";
 
 // The map fed by the backend catalog instead of the bundled sample data.
 //
@@ -62,10 +64,9 @@ function unionBounds(event, scenes) {
   ];
 }
 
+const OUTLOOK_LOADING = { status: "loading" };
 const layerId = (sceneId) => `scene-${sceneId}`;
 const wideScreen = () => window.innerWidth > 900;
-const centreInJapan = (e) =>
-  Boolean(e.bbox) && contains(JAPAN_BBOX, (e.bbox[0] + e.bbox[2]) / 2, (e.bbox[1] + e.bbox[3]) / 2);
 
 function NisarMap({ onOpenSample }) {
   const { status: authStatus } = useAuth();
@@ -82,7 +83,21 @@ function NisarMap({ onOpenSample }) {
   const [mapReady, setMapReady] = useState(false);
   const [events, setEvents] = useState(null);
   const [listError, setListError] = useState("");
-  const [eventId, setEventId] = useState("");
+  // Deep link from the Events page: /?event=ID&replay=1 opens that event and plays it from the start.
+  const [params] = useSearchParams();
+  const [eventId, setEventId] = useState(() => params.get("event") ?? "");
+  const [autoplay, setAutoplay] = useState(() => params.get("replay") === "1");
+  const [layerPick, setLayerPick] = useState(""); // which processed layer to show, when an event has several
+  const [speed, setSpeed] = useState(1);
+  const [loop, setLoop] = useState(false);
+  const [range, setRange] = useState(() => lastMonths(6)); // the area search period: last 6 months until changed
+  // Earthquake outlook: a modeled layer of shaded cells, and its panel in the card.
+  const [outlookOn, setOutlookOn] = useState(false);
+  const [outlookBox, setOutlookBox] = useState(null); // region it is computed for
+  const [horizon, setHorizon] = useState(30);
+  const [outlookRaw, setOutlook] = useState({ status: "loading" });
+  const [cellId, setCellId] = useState(null);
+  const [replay, setReplay] = useState(null); // scenes found by a search, replayed without tracking: { id, name, bbox, scenes, eventTime? }
   const [detail, setDetail] = useState(null); // { event, scenes, layers, ... }
   const [detailError, setDetailError] = useState("");
   const [placed, setPlaced] = useState({}); // sceneId -> { url, coordinates }
@@ -90,11 +105,19 @@ function NisarMap({ onOpenSample }) {
   const [dateIndex, setDateIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [opacity, setOpacity] = useState(0.85);
+  const controlsRef = useBottomInset(); // keeps the attribution above the controls bar
+  const toolbarRef = useTopInset(); // keeps the details card below the toolbar, even when it wraps
   const [infoOpen, setInfoOpen] = useState(wideScreen);
   const [selectedId, setSelectedId] = useState(null);
   const [japan, setJapan] = useState(null); // Japan's outline (GeoJSON)
   const [probe, setProbe] = useState(null); // the clicked spot: { id, lng, lat, bbox }
   const [prompt, setPrompt] = useState(false); // signed-out visitor clicked outside the showcase
+  const ctaRef = useRef(null);
+
+  // On a phone the card is short, so the sign-in prompt can open below its fold: bring it into view.
+  useEffect(() => {
+    if (prompt && infoOpen) ctaRef.current?.scrollIntoView({ block: "nearest" });
+  }, [prompt, infoOpen]);
 
   // Step 1: the map, created once.
   useEffect(() => {
@@ -116,13 +139,33 @@ function NisarMap({ onOpenSample }) {
       map.addLayer({ id: "japan-glow", type: "line", source: "japan", paint: { "line-color": "#BFD1E5", "line-width": 7, "line-opacity": 0.28, "line-blur": 5 }, layout: { visibility: "none" } });
       map.addLayer({ id: "japan-line", type: "line", source: "japan", paint: { "line-color": "#BFD1E5", "line-width": 1.8 }, layout: { visibility: "none" } });
 
+      // Earthquake outlook cells, shaded from pale yellow (low chance) to red (high).
+      map.addSource("outlook", { type: "geojson", data: emptyCollection });
+      map.addLayer({
+        id: "outlook-fill",
+        type: "fill",
+        source: "outlook",
+        layout: { visibility: "none" },
+        paint: {
+          "fill-color": ["interpolate", ["linear"], ["get", "probability"], 0, "#f6e27a", 0.3, "#f5a524", 0.7, "#e5484d", 1, "#b3122a"],
+          "fill-opacity": ["interpolate", ["linear"], ["get", "probability"], 0, 0.18, 1, 0.6],
+        },
+      });
+      map.addLayer({
+        id: "outlook-line",
+        type: "line",
+        source: "outlook",
+        layout: { visibility: "none" },
+        paint: { "line-color": ["case", ["get", "selected"], "#ffffff", "rgba(42, 20, 40, 0.55)"], "line-width": ["case", ["get", "selected"], 2.5, 0.8] },
+      });
+
       map.addSource("aoi", { type: "geojson", data: emptyCollection });
       map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#BFD1E5", "fill-opacity": 0.06 } });
       map.addLayer({ id: "aoi-line", type: "line", source: "aoi", paint: { "line-color": "#BFD1E5", "line-width": 1.5, "line-dasharray": [2, 2] } });
       mapRef.current = map;
       setMapReady(true);
     });
-    map.on("click", (e) => clickRef.current(e.lngLat));
+    map.on("click", (e) => clickRef.current(e.lngLat, e.point));
     map.on("mousemove", (e) => {
       map.getCanvas().style.cursor = hoverRef.current(e.lngLat);
     });
@@ -197,12 +240,23 @@ function NisarMap({ onOpenSample }) {
     };
   }, [activeId]);
 
-  const current = activeId && detail?.event?.id === activeId ? detail : null;
+  // A replay stands in for the catalog event: same shape, so the rest of the map treats it alike.
+  const replayDetail = useMemo(
+    () =>
+      replay && {
+        event: { id: replay.id, name: replay.name, bbox: replay.bbox, type: replay.eventTime ? "earthquake" : "other" },
+        scenes: replay.scenes.map((s) => ({ ...s, status: "preview" })),
+        layers: [],
+      },
+    [replay],
+  );
+  const current = replayDetail ?? (activeId && detail?.event?.id === activeId ? detail : null);
   const event = current?.event ?? null;
   const scenes = useMemo(() => current?.scenes ?? [], [current]);
 
   // Processed tiles, if any: use the first layer's dates.
-  const tileLayer = current?.layers?.[0]?.layer ?? null;
+  const layerIds = useMemo(() => orderLayers(current?.layers), [current]);
+  const tileLayer = layerIds.includes(layerPick) ? layerPick : (layerIds[0] ?? null);
   const tileEntries = useMemo(
     () => (current?.layers ?? []).filter((l) => l.layer === tileLayer).sort((a, b) => a.date.localeCompare(b.date)),
     [current, tileLayer],
@@ -247,6 +301,13 @@ function NisarMap({ onOpenSample }) {
     const visibility = showJapan && japan ? "visible" : "none";
     for (const id of ["japan-mask", "japan-glow", "japan-line"]) map.setLayoutProperty(id, "visibility", visibility);
   }, [mapReady, japan, showJapan]);
+
+  // Starting or leaving a replay swaps every scene on the map.
+  useEffect(() => {
+    setPlaced({});
+    setFailed(0);
+    setSelectedId(null);
+  }, [replay]);
 
   // Step 4: outline the clicked area, or else the event's area, and frame what is on show.
   useEffect(() => {
@@ -340,7 +401,15 @@ function NisarMap({ onOpenSample }) {
             (s) => day(s.acquiredAt) === currentDate && addedRef.current.has(s.id) && contains(s.bounds, lng, lat),
           ) ?? null
         : null;
-    clickRef.current = ({ lng: rawLng, lat }) => {
+    clickRef.current = ({ lng: rawLng, lat }, point) => {
+      // With the outlook on, a shaded cell answers the click first.
+      const cell = outlookOn && point ? mapRef.current?.queryRenderedFeatures(point, { layers: ["outlook-fill"] })[0] : null;
+      if (cell) {
+        setProbe(null);
+        setCellId(cell.properties.id);
+        setInfoOpen(true);
+        return;
+      }
       const lng = wrapLng(rawLng);
       const scene = sceneAt(lng, lat);
       if (scene) {
@@ -356,7 +425,7 @@ function NisarMap({ onOpenSample }) {
       setInfoOpen(true);
     };
     hoverRef.current = ({ lng, lat }) => (sceneAt(wrapLng(lng), lat) ? "pointer" : signedIn ? "crosshair" : "");
-  }, [mode, currentDate, previewScenes, placed, signedIn, showJapan]);
+  }, [mode, currentDate, previewScenes, placed, signedIn, showJapan, outlookOn]);
 
   // Processed tiles for the chosen date.
   useEffect(() => {
@@ -379,24 +448,116 @@ function NisarMap({ onOpenSample }) {
     if (map.getLayer("nisar-tiles")) map.setPaintProperty("nisar-tiles", "raster-opacity", opacity);
   }, [mapReady, mode, tileEntries, currentDate, opacity]);
 
-  // Start each event at its newest acquisition.
+  // Start each catalog event at its newest acquisition; a replay starts at the first.
   useEffect(() => {
-    setDateIndex(Math.max(0, dates.length - 1));
+    setDateIndex(replay || autoplay ? 0 : Math.max(0, dates.length - 1));
     setPlaying(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new set of dates restarts playback
   }, [dates]);
 
-  // Play through the acquisitions.
+  // Play through the acquisitions, at the chosen speed; stop on the last one unless looping.
   useEffect(() => {
     if (!playing || dates.length < 2) return;
-    const timer = setInterval(() => setDateIndex((i) => (i + 1) % dates.length), 1500);
+    const timer = setInterval(
+      () => setDateIndex((i) => (i + 1 < dates.length ? i + 1 : loop ? 0 : i)),
+      1500 / speed,
+    );
     return () => clearInterval(timer);
-  }, [playing, dates.length]);
+  }, [playing, dates.length, speed, loop]);
+
+  useEffect(() => {
+    if (playing && !loop && dateIndex >= dates.length - 1) setPlaying(false);
+  }, [playing, loop, dateIndex, dates.length]);
+
+  const togglePlay = () => {
+    if (playing) return setPlaying(false);
+    if (dateIndex >= dates.length - 1) setDateIndex(0); // play again from the start
+    setPlaying(true);
+  };
+
+  // The outlook covers Japan for visitors; signed in, it covers the part of the map on screen (at most 60 degrees a side).
+  const viewBox = () => {
+    const map = mapRef.current;
+    if (!map || showJapan) return JAPAN_BBOX;
+    const bounds = map.getBounds();
+    const centre = map.getCenter();
+    const half = (span) => Math.min(30, Math.max(0.5, span / 2));
+    const lng = wrapLng(centre.lng);
+    const halfW = half(bounds.getEast() - bounds.getWest());
+    const halfH = half(bounds.getNorth() - bounds.getSouth());
+    return [
+      Math.max(-180, lng - halfW),
+      Math.max(-85, centre.lat - halfH),
+      Math.min(180, lng + halfW),
+      Math.min(85, centre.lat + halfH),
+    ].map((v) => Number(v.toFixed(1)));
+  };
+
+  const toggleOutlook = () => {
+    if (!outlookOn) {
+      setOutlookBox(viewBox());
+      setProbe(null);
+      setInfoOpen(true);
+    }
+    setCellId(null);
+    setOutlookOn((on) => !on);
+  };
+
+  // Fetch the outlook for the chosen region and horizon; a result for another request counts as loading.
+  const outlookKey = outlookBox ? `${outlookBox.join(",")}:${horizon}` : "";
+  useEffect(() => {
+    if (!outlookOn || !outlookBox) return;
+    let cancelled = false;
+    api
+      .outlook(outlookBox, horizon)
+      .then((data) => !cancelled && setOutlook({ status: "done", data, key: outlookKey }))
+      .catch((error) => !cancelled && setOutlook({ status: "error", message: error.message, key: outlookKey }));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- outlookKey stands for the box and the horizon
+  }, [outlookOn, outlookKey]);
+  const outlook = outlookRaw.key === outlookKey ? outlookRaw : OUTLOOK_LOADING;
+
+  // Draw the cells; the chosen one gets a white outline.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const cells = outlookOn && outlook.status === "done" ? outlook.data.cells : [];
+    map.getSource("outlook").setData({
+      type: "FeatureCollection",
+      features: cells.map((c) => ({ ...rectangle(c.bbox), properties: { id: c.id, probability: c.probability, selected: c.id === cellId } })),
+    });
+    for (const layer of ["outlook-fill", "outlook-line"]) map.setLayoutProperty(layer, "visibility", outlookOn ? "visible" : "none");
+  }, [mapReady, outlookOn, outlook, cellId]);
+
+  const selectCell = (id) => {
+    setCellId(id);
+    const cell = outlook.status === "done" ? outlook.data.cells.find((c) => c.id === id) : null;
+    if (cell) {
+      mapRef.current?.fitBounds([[cell.bbox[0], cell.bbox[1]], [cell.bbox[2], cell.bbox[3]]], {
+        padding: { top: 170, bottom: 170, left: wideScreen() ? 370 : 40, right: 70 },
+        duration: 600,
+        maxZoom: 7,
+      });
+    }
+  };
 
   // Choosing an event (from the picker, the list or a click result) leaves any area query.
   const openEvent = (id) => {
     setProbe(null);
     setPrompt(false);
+    setReplay(null);
     setEventId(id);
+  };
+
+  // Replay scenes found by a search: leave the area query and play them from the first, once their previews have loaded.
+  const startReplay = (next) => {
+    setProbe(null);
+    setPrompt(false);
+    setReplay(next);
+    setAutoplay(true);
+    setInfoOpen(wideScreen());
   };
 
   // A new event was just started from a click result: add it to the list right away
@@ -408,7 +569,27 @@ function NisarMap({ onOpenSample }) {
 
   const onDate = currentDate ? scenes.filter((s) => day(s.acquiredAt) === currentDate) : [];
   const selected = scenes.find((s) => s.id === selectedId) ?? null;
-  const loadingPreviews = mode === "previews" && Object.keys(placed).length + failed < previewScenes.length;
+  const loadingPreviews =
+    mode === "previews" && previewScenes.filter((s) => placed[s.id]).length + failed < previewScenes.length;
+
+  // A replay (or deep link) starts by itself once there is something to play and its previews are in.
+  useEffect(() => {
+    if (autoplay && dates.length > 1 && !loadingPreviews) {
+      setAutoplay(false);
+      setDateIndex(0);
+      setPlaying(true);
+    }
+  }, [autoplay, dates, loadingPreviews]);
+
+  // Where the shown date sits against an earthquake, when the event is one.
+  const eventDay = replay?.eventTime ? day(replay.eventTime) : quakeDay(event);
+  const offset = eventDay && currentDate ? Math.round((Date.parse(currentDate) - Date.parse(eventDay)) / 86_400_000) : null;
+  const relation =
+    offset === null
+      ? ""
+      : offset === 0
+        ? "the day of the earthquake"
+        : `${plural(Math.abs(offset), "day")} ${offset < 0 ? "before" : "after"} the earthquake`;
   const lastIndex = Math.max(0, dates.length - 1);
   const japanOnly = showJapan && !event;
   const exploring = signedIn && probe;
@@ -425,14 +606,15 @@ function NisarMap({ onOpenSample }) {
     <div className="sx">
       <div ref={containerRef} className="sx-map" />
 
-      <div className="sx-nisar-top">
+      <div ref={toolbarRef} className="sx-nisar-top">
         <select
           className="sx-select sx-event-select"
-          value={activeId}
+          value={replay ? replay.id : activeId}
           onChange={(e) => openEvent(e.target.value)}
-          disabled={!visibleEvents?.length}
+          disabled={!visibleEvents?.length && !replay}
           aria-label="Event"
         >
+          {replay && <option value={replay.id}>Replay: {replay.name}</option>}
           {!visibleEvents && <option>Loading events…</option>}
           {visibleEvents?.length === 0 && <option>{signedIn ? "No events yet" : "No Japan events yet"}</option>}
           {visibleEvents?.map((e) => (
@@ -445,6 +627,19 @@ function NisarMap({ onOpenSample }) {
         {event && (
           <button className="sx-fit" onClick={fitToData} title="Zoom to the data">
             Zoom to data
+          </button>
+        )}
+        <button
+          className={`sx-fit${outlookOn ? " sx-fit-on" : ""}`}
+          onClick={toggleOutlook}
+          aria-pressed={outlookOn}
+          title="Modeled chance of earthquakes in the coming days"
+        >
+          Outlook
+        </button>
+        {replay && (
+          <button className="sx-fit" onClick={() => setReplay(null)} title="Leave the replay">
+            Exit replay
           </button>
         )}
         {showJapan && event && (
@@ -460,9 +655,29 @@ function NisarMap({ onOpenSample }) {
             key={probe.id}
             probe={probe}
             events={events}
+            range={range}
+            onRange={setRange}
             onClose={() => setProbe(null)}
             onOpenEvent={openEvent}
             onTracked={onTracked}
+            onReplay={startReplay}
+          />
+        ) : outlookOn ? (
+          <OutlookPanel
+            state={outlook}
+            horizon={horizon}
+            onHorizon={setHorizon}
+            selectedId={cellId}
+            onSelect={selectCell}
+            onClose={toggleOutlook}
+            onUseView={
+              signedIn
+                ? () => {
+                    setCellId(null);
+                    setOutlookBox(viewBox());
+                  }
+                : null
+            }
           />
         ) : (
           <>
@@ -500,6 +715,9 @@ function NisarMap({ onOpenSample }) {
                         ))}
                       </ul>
                     )}
+                    <button className="sx-action" onClick={toggleOutlook}>
+                      See the earthquake outlook
+                    </button>{" "}
                     {onOpenSample && (
                       <button className="sx-action sx-action-quiet" onClick={onOpenSample}>
                         See the Mount Aso demo
@@ -510,7 +728,29 @@ function NisarMap({ onOpenSample }) {
 
                 {event && (
                   <>
-                    {mode === "tiles" && <p className="sx-note">Showing processed layer “{tileLayer}”.</p>}
+                    {replay && (
+                      <p className="sx-note">
+                        Replay of scenes found by your search, played from the first. Nothing is tracked or saved.
+                      </p>
+                    )}
+                    {mode === "tiles" && (
+                      <div className="sx-legend-box">
+                        <p className="sx-note">
+                          Showing <strong>{layerLabel(tileLayer)}</strong>
+                          {tileEntries[0]?.units ? ` (${tileEntries[0].units})` : ""}, processed from the NISAR scene.
+                        </p>
+                        {LAYERS[tileLayer] && (
+                          <>
+                            <div className={`sx-layer-ramp sx-layer-ramp-${LAYERS[tileLayer].style}`} aria-hidden="true" />
+                            <div className="sx-ramp-labels">
+                              <span>{LAYERS[tileLayer].low}</span>
+                              <span>{LAYERS[tileLayer].high}</span>
+                            </div>
+                            <p className="sx-note">{LAYERS[tileLayer].note}</p>
+                          </>
+                        )}
+                      </div>
+                    )}
                     {mode === "previews" && (
                       <p className="sx-note">
                         ASF’s preview image of each scene (an HH/HV colour composite). Quick-look pictures, not
@@ -539,7 +779,7 @@ function NisarMap({ onOpenSample }) {
                               >
                                 <strong>{s.product}</strong> · {s.polarizations.join("/") || "—"}
                                 {s.flightDirection ? ` · ${s.flightDirection.toLowerCase()}` : ""}
-                                <span className="sx-scene-status">{String(s.status).replaceAll("_", " ")}</span>
+                                <span className="sx-scene-status">{statusLabel(s.status)}</span>
                               </button>
                             </li>
                           ))}
@@ -568,12 +808,17 @@ function NisarMap({ onOpenSample }) {
                 {signedIn && !event && events?.length > 0 && (
                   <p className="sx-note">Click anywhere on the map to see what NISAR and NASA have for that spot, or pick an event above.</p>
                 )}
+                {event && !replay && (
+                  <Link to={`/events/${event.id}`} className="sx-action sx-action-quiet sx-action-small">
+                    Photos, briefing and questions
+                  </Link>
+                )}
                 {signedIn && event && (
                   <p className="sx-note">Click empty map to explore any other spot.</p>
                 )}
 
                 {showJapan && (
-                  <div className={`sx-cta${prompt ? " sx-cta-attn" : ""}`}>
+                  <div ref={ctaRef} className={`sx-cta${prompt ? " sx-cta-attn" : ""}`}>
                     <strong>{prompt ? "Sign in to explore that spot" : "Explore anywhere"}</strong>
                     <span>
                       Signed-in users can click any place on Earth to see its NISAR scenes, nearby earthquakes and
@@ -592,13 +837,13 @@ function NisarMap({ onOpenSample }) {
       </aside>
 
       {event && (
-        <div className="sx-controls sx-controls-compact">
+        <div ref={controlsRef} className="sx-controls sx-controls-compact">
           <div className="sx-row">
             <button
               className="sx-play"
-              onClick={() => setPlaying((p) => !p)}
+              onClick={togglePlay}
               disabled={dates.length < 2}
-              aria-label={playing ? "Pause" : "Play"}
+              aria-label={playing ? "Pause" : dateIndex >= lastIndex && dates.length > 1 ? "Play again from the start" : "Play"}
             >
               {playing ? "❚❚" : "▶"}
             </button>
@@ -618,8 +863,14 @@ function NisarMap({ onOpenSample }) {
             />
             <span className="sx-date">{currentDate ? formatDate(currentDate) : "No dates"}</span>
           </div>
-          <div className="sx-row">
-            <label className="sx-inline sx-grow">
+          {currentDate && dates.length > 1 && (
+            <p className="sx-replay-note" aria-live="polite">
+              Date {Math.min(dateIndex, lastIndex) + 1} of {dates.length}
+              {relation && ` · ${relation}`}
+            </p>
+          )}
+          <div className="sx-row sx-wrap">
+            <label className="sx-inline sx-grow sx-opacity">
               Opacity
               <input
                 className="sx-slider sx-grow"
@@ -630,6 +881,31 @@ function NisarMap({ onOpenSample }) {
                 value={opacity}
                 onChange={(e) => setOpacity(Number(e.target.value))}
               />
+            </label>
+            {layerIds.length > 1 && mode === "tiles" && (
+              <label className="sx-inline">
+                Layer
+                <select className="sx-select sx-speed" value={tileLayer ?? ""} onChange={(e) => setLayerPick(e.target.value)}>
+                  {layerIds.map((id) => (
+                    <option key={id} value={id}>
+                      {layerLabel(id)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="sx-inline">
+              Speed
+              <select className="sx-select sx-speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                <option value={0.5}>0.5×</option>
+                <option value={1}>1×</option>
+                <option value={2}>2×</option>
+                <option value={4}>4×</option>
+              </select>
+            </label>
+            <label className="sx-inline">
+              <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />
+              Loop
             </label>
           </div>
         </div>

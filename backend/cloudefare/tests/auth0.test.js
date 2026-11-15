@@ -104,7 +104,8 @@ describe('Auth0 login and API protection', () => {
     const transaction = started.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     const completed = await call('/auth/callback?code=test-code', { headers: { cookie: transaction } });
     expect(completed.status).toBe(302);
-    expect(completed.headers.get('location')).toBe('https://api.test/api/auth/me');
+    // The Worker hosts the frontend (ASSETS binding), so a finished login lands on the app.
+    expect(completed.headers.get('location')).toBe('https://api.test/');
     const cookie = completed.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
     expect(completed.headers.get('set-cookie')).toMatch(/HttpOnly/i);
     const profile = await call('/api/auth/me', { headers: { cookie } });
@@ -133,6 +134,22 @@ describe('Auth0 login and API protection', () => {
     expect(browser.headers.get('location')).toBe('http://localhost:5173/');
     expect((await call('/', { headers: { accept: 'application/json' } }, env)).status).toBe(200);
     expect((await call('/', { headers: { accept: 'text/html' } })).status).toBe(200);
+  });
+
+  it('serves the hosted frontend on the root, without redirecting to its own origin', async () => {
+    const ASSETS = { fetch: async () => new Response('<!doctype html><title>app</title>', { headers: { 'content-type': 'text/html' } }) };
+    const html = { headers: { accept: 'text/html,application/xhtml+xml' } };
+    for (const env of [{ ASSETS }, { ASSETS, FRONTEND_URL: 'https://api.test/' }]) {
+      const browser = await call('/', html, env);
+      expect(browser.status).toBe(200);
+      expect(await browser.text()).toContain('<title>app</title>');
+    }
+    const client = await call('/', { headers: { accept: 'application/json' } }, { ASSETS });
+    expect(await client.json()).toMatchObject({ service: 'earth-replay-api' });
+    // Without hosted assets, login still lands on the profile JSON.
+    mockDiscovery();
+    const started = await call('/auth/login', {}, { ASSETS: undefined });
+    expect(started.status).toBe(302);
   });
 
   it('rejects a callback without a matching login transaction', async () => {

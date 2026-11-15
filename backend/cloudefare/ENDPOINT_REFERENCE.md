@@ -52,11 +52,23 @@ Live check: **200** for `verification-nisar-20261114`; **404** for an unknown ev
 
 ### GET `/api/discover/earthquakes`
 
-Optional query: `minMagnitude` (4.5–9.9, default 6), `days` (1–365, default 30), `bbox=w,s,e,n` (at most 5° per side). Uses USGS, not NASA. No key is needed. Results are cached for ten minutes.
+Optional query: `minMagnitude` (4.5–9.9, default 6), `days` (1–365, default 30), or instead of `days` a period `start=YYYY-MM-DD&end=YYYY-MM-DD` (both required, at most 366 days), `bbox=w,s,e,n` (at most 5° per side). Uses USGS, not NASA. No key is needed. Results are cached for ten minutes.
 
 Returns `{earthquakes:[{sourceId,title,magnitude,time,latitude,longitude,depthKm,tsunami,alert,url,registered,suggested:{eventId,aoi,dateRange,products,...}}],credit}`. The suggested area is a heuristic around the epicenter, not a rupture model. Records predating NISAR launch are omitted.
 
 Live check: **200** for `?days=30&minMagnitude=6`; supplied the real earthquake `us7000tx16` used to test registration.
+
+### GET `/api/outlook`
+
+Required `bbox=w,s,e,n` (each side 1–60°); optional `horizonDays` (1–90, default 30). Counts USGS M4.5+ earthquakes of the past 365 days per grid cell and gives the Poisson chance of at least one in the window, plus an M6+ figure scaled by Gutenberg-Richter (b = 1). Up to three scenarios for the busiest cells get an AI-written title and summary; the numbers never come from the model. Always `modeled: true`; it does not predict a specific earthquake. Cached one hour.
+
+Live check: **200** for Japan (`122.9,24,146,45.7`): 566 earthquakes, 32 cells, three AI-worded scenarios.
+
+### GET `/api/events/:id/media`
+
+USGS impact maps (ShakeMap, PAGER, Did You Feel It?, ground failure) for `usgs-*` earthquake events, related photos from the NASA Image and Video Library, and links to the USGS event page, Wikimedia Commons and NASA Earth Observatory. NASA photos are a search by place and hazard, so they can show earlier disasters. Cached six hours.
+
+Live check: **200** for `usgs-us7000tx16`: five USGS maps, one NASA photo, four links.
 
 ### POST `/api/events/earthquake`
 

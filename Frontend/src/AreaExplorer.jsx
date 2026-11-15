@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api.js";
-import { contains, dateWindow, formatCoords } from "./explore.js";
+import DateRange from "./DateRange.jsx";
+import { MAX_SEARCH_DAYS, contains, formatCoords } from "./explore.js";
 
 // What the system finds for a spot the signed-in user clicked: NISAR scenes over it,
 // catalog events that cover it, recent earthquakes nearby and other NASA datasets.
-// Everything is queried live for a 1-degree box around the click.
+// Everything is queried live for a 1-degree box around the click, over the chosen period
+// (the last 6 months until the user picks another). Scenes found, and each quake, can also be
+// replayed on the map without tracking anything.
 
 const DATASET_NAMES = {
   gpm: "Rainfall (GPM IMERG)",
@@ -14,7 +17,6 @@ const DATASET_NAMES = {
   grace: "Water storage (GRACE)",
 };
 
-const WINDOW_DAYS = 90;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const shortDate = (iso) =>
   new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -28,28 +30,37 @@ function track(promise, set, isCurrent) {
     .catch((error) => isCurrent() && set({ status: "error", message: error.message }));
 }
 
-function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
-  const [nisar, setNisar] = useState(pending);
-  const [quakes, setQuakes] = useState(pending);
-  const [context, setContext] = useState(pending);
+function AreaExplorer({ probe, events, range, onRange, onClose, onOpenEvent, onTracked, onReplay }) {
+  // Each result remembers the period it was fetched for; one for another period counts as still loading.
+  const [nisarRaw, setNisar] = useState(pending);
+  const [quakesRaw, setQuakes] = useState(pending);
+  const [contextRaw, setContext] = useState(pending);
   const [busy, setBusy] = useState("");
   const [actionError, setActionError] = useState("");
+  const [noticeRaw, setNotice] = useState(null);
 
-  const window90 = useMemo(() => dateWindow(WINDOW_DAYS), []);
   const { bbox } = probe;
+  const { start, end } = range;
+  const period = `${start}..${end}`;
+  const fresh = (r) => (r.period === period ? r : pending);
+  const nisar = fresh(nisarRaw);
+  const quakes = fresh(quakesRaw);
+  const context = fresh(contextRaw);
+  const notice = noticeRaw?.period === period ? noticeRaw.text : "";
 
-  // The parent remounts this panel (key) for every new click, so state starts fresh
-  // and the three queries run once per spot.
+  // The parent remounts this panel (key) for every new click, so state starts fresh;
+  // picking another period runs the three queries again for the same spot.
   useEffect(() => {
     let current = true;
     const isCurrent = () => current;
-    track(api.nisarSearch(bbox, window90.start, window90.end), setNisar, isCurrent);
-    track(api.quakes(bbox, WINDOW_DAYS), setQuakes, isCurrent);
-    track(api.datasetContext(bbox, window90.start, window90.end), setContext, isCurrent);
+    const tag = (set) => (result) => set({ ...result, period });
+    track(api.nisarSearch(bbox, start, end), tag(setNisar), isCurrent);
+    track(api.quakes(bbox, start, end), tag(setQuakes), isCurrent);
+    track(api.datasetContext(bbox, start, end), tag(setContext), isCurrent);
     return () => {
       current = false;
     };
-  }, [bbox, window90]);
+  }, [bbox, start, end, period]);
 
   const here = (events ?? []).filter((e) => contains(e.bbox, probe.lng, probe.lat));
 
@@ -61,7 +72,7 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
     setActionError("");
     try {
       const name = `Area near ${formatCoords(probe.lng, probe.lat)}`;
-      const out = await api.trackArea({ aoi: bbox, dateRange: window90, name, type: "other" });
+      const out = await api.trackArea({ aoi: bbox, dateRange: { start, end }, name, type: "other" });
       onTracked({ id: out.eventId, name, type: "other", bbox, sceneCount: 0 });
     } catch (error) {
       failWith(error);
@@ -90,6 +101,45 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
     }
   };
 
+  const withPreview = (scenes) => scenes.filter((s) => s.browseUrl && s.bounds);
+
+  // Replay what the search found for this spot.
+  const replayArea = () => {
+    const scenes = withPreview(nisarData.scenes);
+    if (scenes.length === 0) {
+      setNotice({ period, text: "None of these scenes has a preview image to replay." });
+      return;
+    }
+    onReplay({
+      id: `replay-area-${probe.id}`,
+      name: `Area near ${formatCoords(probe.lng, probe.lat)}`,
+      bbox,
+      scenes,
+    });
+  };
+
+  // Replay a past earthquake: NISAR scenes from 36 days before it to 60 days after (the suggested ingest window).
+  const replayQuake = async (quake) => {
+    const key = `replay-${quake.sourceId}`;
+    setBusy(key);
+    setActionError("");
+    setNotice(null);
+    try {
+      const { aoi, dateRange } = quake.suggested;
+      const found = await api.nisarSearch(aoi, dateRange.start, dateRange.end);
+      const scenes = withPreview(found.scenes);
+      if (scenes.length === 0) {
+        setNotice({ period, text: `NISAR has no previewable scenes for M ${quake.magnitude.toFixed(1)} (${shortDate(quake.time)}) yet.` });
+        return;
+      }
+      onReplay({ id: key, name: quake.title, bbox: aoi, scenes, eventTime: quake.time });
+    } catch (error) {
+      setActionError(error.message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const nisarData = nisar.status === "done" ? nisar.data : null;
   const quakeList = quakes.status === "done" ? [...quakes.data.earthquakes].sort((a, b) => b.magnitude - a.magnitude).slice(0, 3) : [];
 
@@ -102,7 +152,9 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
       </div>
 
       <div className="sx-info-body">
-        <h3 className="sx-info-h">NISAR coverage, last {WINDOW_DAYS} days</h3>
+        <h3 className="sx-info-h">Period to search</h3>
+        <DateRange value={range} onChange={onRange} maxSpan={MAX_SEARCH_DAYS} />
+        <h3 className="sx-info-h">NISAR coverage, {shortDate(start)} – {shortDate(end)}</h3>
         {nisar.status === "loading" && <p className="sx-note">Searching…</p>}
         {nisar.status === "error" && <p className="sx-error">{nisar.message}</p>}
         {nisarData && (
@@ -124,6 +176,13 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
               disabled={nisarData.count === 0 || busy !== ""}
             >
               {busy === "area" ? "Starting…" : "Track this area"}
+            </button>{" "}
+            <button
+              className="sx-action sx-action-quiet"
+              onClick={replayArea}
+              disabled={withPreview(nisarData.scenes).length === 0 || busy !== ""}
+            >
+              ▶ Replay these scenes
             </button>
           </>
         )}
@@ -146,7 +205,7 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
           </>
         )}
 
-        <h3 className="sx-info-h">Earthquakes nearby (M4.5+, {WINDOW_DAYS} days)</h3>
+        <h3 className="sx-info-h">Earthquakes nearby (M4.5+) in this period</h3>
         {quakes.status === "loading" && <p className="sx-note">Searching…</p>}
         {quakes.status === "error" && <p className="sx-error">{quakes.message}</p>}
         {quakes.status === "done" && quakeList.length === 0 && <p className="sx-note">None found.</p>}
@@ -163,6 +222,13 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
                   <span className="sx-scene-status">
                     {shortDate(q.time)} · {busy === q.sourceId ? "starting…" : q.registered ? "tracked, open it" : "click to track"}
                   </span>
+                </button>
+                <button
+                  className="sx-action sx-action-quiet sx-action-small"
+                  onClick={() => replayQuake(q)}
+                  disabled={busy !== ""}
+                >
+                  {busy === `replay-${q.sourceId}` ? "Finding scenes…" : "▶ Replay this quake"}
                 </button>
               </li>
             ))}
@@ -188,6 +254,7 @@ function AreaExplorer({ probe, events, onClose, onOpenEvent, onTracked }) {
           <p className="sx-note">Most of these are catalog records showing what data exists, not measurements.</p>
         )}
 
+        {notice && <p className="sx-note">{notice}</p>}
         {actionError && <p className="sx-error">{actionError}</p>}
         <p className="sx-credit">NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. Earthquakes: USGS.</p>
       </div>

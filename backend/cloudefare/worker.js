@@ -28,6 +28,9 @@ import { ChatError, getThread, runChat, validateChatRequest } from './AI/chat.js
 import { forecastEvent, parseHorizon } from './AI/forecast.js';
 import { describeContext, ensureEventContext, promptContext } from './eventContext.js';
 import { summarizeEvent, summaryCacheKey } from './AI/summary.js';
+import { eventMedia } from './media.js';
+import { mountProcessorRoutes } from './processor.js';
+import { parseOutlookQuery, seismicOutlook } from './outlook.js';
 import {
   EventError,
   datasetContext,
@@ -47,6 +50,7 @@ import { getIngestStatus, handleQueue, parseIngestRequest, runScheduledPoll, sta
 
 export { IngestWorkflow } from './workFlowManger.js';
 export { ReplayRoom } from './replay.js';
+export { Processor } from './processor.js';
 
 const EVENT_CACHE_TTL = 60;
 const ANSWER_CACHE_TTL = 3600;
@@ -70,6 +74,7 @@ app.use('/tiles/*', async (c, next) => cors({ origin: c.env.CORS_ORIGIN || '*' }
 app.use('*', authenticate);
 mountAuthRoutes(app);
 mountChatRoutes(app);
+mountProcessorRoutes(app);
 
 app.onError((err, c) => {
   if (c.req.path.startsWith('/auth/')) {
@@ -94,7 +99,12 @@ async function readJson(c) {
 app.get('/', (c) => {
   // Browsers that land on the API root (after Auth0 logout, or login from another hostname)
   // are sent on to the frontend; API clients still get the service description.
-  if (frontendOrigin(c.env) && c.req.header('accept')?.includes('text/html')) return c.redirect(c.env.FRONTEND_URL);
+  // When the frontend is hosted by this Worker (static assets), browsers get the app itself.
+  if (c.req.header('accept')?.includes('text/html')) {
+    const frontend = frontendOrigin(c.env);
+    if (frontend && frontend !== new URL(c.req.url).origin) return c.redirect(c.env.FRONTEND_URL);
+    if (c.env.ASSETS) return c.env.ASSETS.fetch(c.req.raw);
+  }
   return c.json({
     service: 'earth-replay-api',
     routes: [
@@ -126,6 +136,8 @@ app.get('/', (c) => {
       'GET /api/chat/:conversationId',
       'GET /api/events/:id/summary',
       'GET /api/events/:id/predict',
+      'GET /api/events/:id/media',
+      'GET /api/outlook',
       'WS /api/room/:code',
     ],
     credit: DATA_CREDIT,
@@ -258,7 +270,8 @@ app.get('/api/discover/earthquakes', async (c) => {
   const parsed = parseDiscoverQuery(new URL(c.req.url).searchParams);
   if (parsed.errors) return badRequest(c, parsed.errors);
   try {
-    const key = `discover:quakes:${parsed.value.minMagnitude}:${parsed.value.days}:${parsed.value.bbox?.join(',') ?? 'world'}`;
+    const { minMagnitude, days, start, end, bbox } = parsed.value;
+    const key = `discover:quakes:${minMagnitude}:${start ? `${start}..${end}` : days}:${bbox?.join(',') ?? 'world'}`;
     const quakes = await cached(c.env.CACHE, key, DISCOVER_CACHE_TTL, () => fetchEarthquakes(parsed.value));
     const earthquakes = await Promise.all(
       quakes.map(async (q) => {
@@ -446,6 +459,35 @@ app.get('/api/events/:id/predict', async (c) => {
     if (err instanceof AIError) return aiUnavailable(c, 'predict', err);
     throw err;
   }
+});
+
+// ---------- outlook and pictures ----------
+
+const OUTLOOK_CACHE_TTL = 3600;
+const MEDIA_CACHE_TTL = 6 * 3600;
+
+// Modeled seismic outlook for a region, with AI-worded scenarios. Never an observation.
+app.get('/api/outlook', async (c) => {
+  const parsed = parseOutlookQuery(new URL(c.req.url).searchParams);
+  if (parsed.errors) return badRequest(c, parsed.errors);
+  const { bbox, horizonDays } = parsed.value;
+  try {
+    const result = await cached(c.env.CACHE, `outlook:${bbox.join(',')}:${horizonDays}`, OUTLOOK_CACHE_TTL, () =>
+      seismicOutlook(c.env, { bbox, horizonDays }),
+    );
+    return c.json(result);
+  } catch (err) {
+    return eventErrorResponse(c, err);
+  }
+});
+
+// USGS impact maps, related NASA photographs and photo links for one event.
+app.get('/api/events/:id/media', async (c) => {
+  const id = c.req.param('id');
+  if (!SAFE_ID_RE.test(id)) return badRequest(c, ['invalid event id']);
+  const event = await getEvent(c.env.DB, id);
+  if (!event) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
+  return c.json(await cached(c.env.CACHE, `media:${id}`, MEDIA_CACHE_TTL, () => eventMedia(event)));
 });
 
 // ---------- replay rooms ----------

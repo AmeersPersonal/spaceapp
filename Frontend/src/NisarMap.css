@@ -315,3 +315,132 @@
 .sx-cta span {
   color: var(--sx-muted);
 }
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 900px) {
+  .sx-nisar-top {
+    left: 12px;
+    right: 60px;
+  }
+
+  .sx-info {
+    left: 12px;
+    right: 60px;
+    max-width: none;
+    /* Never taller than the gap between the toolbar and the controls bar. */
+    max-height: min(46%, calc(100% - 170px - var(--sx-bottom-inset, 12px) - 8px));
+  }
+
+  .sx-event-select {
+    height: 40px;
+  }
+
+  .sx-fit {
+    height: 40px;
+  }
+}
+
+/* ---------- Replay ---------- */
+
+.sx-replay-note {
+  margin: -4px 0 0;
+  color: var(--sx-muted);
+  font-size: 0.8rem;
+}
+
+.sx-opacity {
+  flex-basis: 150px;
+}
+
+.sx-speed {
+  padding: 4px 8px;
+}
+
+.sx-action-small {
+  margin-top: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* ---------- Earthquake outlook ---------- */
+
+.sx-fit-on {
+  background: var(--sx-highlight);
+  color: #2a1428;
+}
+
+.sx-fit-on:hover {
+  background: #d4e2f0;
+  color: #2a1428;
+}
+
+.sx-outlook-chips {
+  margin-top: 12px;
+}
+
+.sx-outlook-legend {
+  margin-top: 12px;
+}
+
+.sx-outlook-ramp {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(to right, #f6e27a, #f5a524, #e5484d, #b3122a);
+}
+
+.sx-scenario-text {
+  display: block;
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+.sx-outlook-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  border-bottom: 1px solid var(--sx-border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sx-outlook-row:hover {
+  color: var(--sx-highlight);
+}
+
+@media (pointer: coarse) {
+  .sx-outlook-row {
+    padding: 10px 0;
+  }
+}
+
+/* ---------- Processed layer legend ---------- */
+
+.sx-legend-box {
+  margin: 8px 0;
+}
+
+.sx-layer-ramp {
+  height: 10px;
+  margin-top: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--sx-border);
+}
+
+.sx-layer-ramp-gray {
+  background: linear-gradient(to right, #0c0c0e, #f5f5f0);
+}
+
+.sx-layer-ramp-diverging {
+  background: linear-gradient(to right, #2166ac, #f7f7f7, #b2182b);
+}
+
+.sx-layer-ramp-coherence {
+  background: linear-gradient(to right, #440154, #3b528b, #21918c, #5ec962, #fde725);
+}

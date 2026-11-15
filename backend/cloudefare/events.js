@@ -133,20 +133,42 @@ export function parseDiscoverQuery(params) {
   };
   const minMagnitude = num('minMagnitude', 6, 4.5, 9.9);
   const days = num('days', 30, 1, 365);
+  // An explicit period (YYYY-MM-DD, inclusive) replaces "the last `days` days".
+  let datesValid = true;
+  const date = (key) => {
+    const raw = params.get(key);
+    if (raw === null || raw === '') return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw) || Number.isNaN(Date.parse(raw))) {
+      errors.push(`${key} must be a YYYY-MM-DD date`);
+      datesValid = false;
+    }
+    return raw;
+  };
+  const start = date('start');
+  const end = date('end');
+  if ((start === null) !== (end === null)) errors.push('start and end must be given together');
+  else if (start && end && datesValid) {
+    if (start > end) errors.push('start must be on or before end');
+    else if ((Date.parse(end) - Date.parse(start)) / DAY_MS > 366) errors.push('start and end must span at most 366 days');
+  }
   let bbox = null;
   if (params.get('bbox')) {
     const b = parseBboxParam(params.get('bbox'));
     if (b.error) errors.push(b.error);
     else bbox = b.bbox;
   }
-  return errors.length ? { errors } : { value: { minMagnitude, days, bbox } };
+  if (errors.length) return { errors };
+  return { value: { minMagnitude, days, bbox, ...(start && end ? { start, end } : {}) } };
 }
 
-export function buildUsgsUrl({ baseUrl = USGS_QUERY_URL, minMagnitude, days, bbox, now = Date.now(), limit = 20 }) {
+export function buildUsgsUrl({ baseUrl = USGS_QUERY_URL, minMagnitude, days, start, end, bbox, now = Date.now(), limit = 20 }) {
   const url = new URL(baseUrl);
   url.searchParams.set('format', 'geojson');
-  url.searchParams.set('starttime', new Date(now - days * DAY_MS).toISOString().slice(0, 19));
-  url.searchParams.set('endtime', new Date(now).toISOString().slice(0, 19));
+  // A chosen period covers its whole last day, but never reaches past `now`.
+  const from = start && end ? Date.parse(start) : now - days * DAY_MS;
+  const to = start && end ? Math.min(Date.parse(end) + DAY_MS - 1000, now) : now;
+  url.searchParams.set('starttime', new Date(from).toISOString().slice(0, 19));
+  url.searchParams.set('endtime', new Date(to).toISOString().slice(0, 19));
   url.searchParams.set('minmagnitude', String(minMagnitude));
   url.searchParams.set('orderby', 'time');
   url.searchParams.set('limit', String(limit));
@@ -161,8 +183,8 @@ export function buildUsgsUrl({ baseUrl = USGS_QUERY_URL, minMagnitude, days, bbo
 }
 
 /** Recent earthquakes from USGS, newest first. Quakes before NISAR launch are dropped (no possible data). */
-export async function fetchEarthquakes({ minMagnitude = 6, days = 30, bbox = null, now = Date.now() } = {}, deps = {}) {
-  const url = buildUsgsUrl({ minMagnitude, days, bbox, now });
+export async function fetchEarthquakes({ minMagnitude = 6, days = 30, start, end, bbox = null, now = Date.now() } = {}, deps = {}) {
+  const url = buildUsgsUrl({ minMagnitude, days, start, end, bbox, now });
   const body = await fetchJson(url, { fetchImpl: deps.fetch, label: 'USGS' });
   if (!body || !Array.isArray(body.features)) throw new EventError('USGS response missing features array', { retryable: true, code: 'upstream_error' });
   return body.features.map(normalizeQuake).filter((q) => q && q.time.slice(0, 10) >= NISAR_LAUNCH_DATE);
