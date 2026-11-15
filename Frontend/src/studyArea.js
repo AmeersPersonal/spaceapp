@@ -253,7 +253,8 @@ export const studyAreas = [
       'Polar night hides it from optical satellites for months. Radar keeps working, and GRACE weighs how much ice the whole basin is losing.',
     ],
   },
-].map((area) => ({ modelNote: PLACEHOLDER_NOTE, ...area }))
+  // basemapStyle stays on each area too: NisarMap.jsx reads studyArea.basemapStyle.
+].map((area) => ({ modelNote: PLACEHOLDER_NOTE, basemapStyle, ...area }))
 
 // Kept for anything that still expects a single study area.
 export const studyArea = studyAreas[0]
