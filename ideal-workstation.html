@@ -1,0 +1,4815 @@
+<!doctype html>
+<html lang="en" data-mode="observed" data-hazard="volcano" data-route="home" data-dim="2d">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07090E">
+  <title>spaceapp — Aso, in time</title>
+  <meta name="description" content="Synthetic NISAR-style SAR workstation over Aso caldera, Japan with 2D-to-3D terrain extrusion and timeline forecast locks. Demonstration only.">
+
+  <!-- Google Fonts: Orbitron (wordmark/404 only), Space Grotesk, Inter, IBM Plex Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+  <!-- Three.js & GSAP for 2D-to-3D Volumetric Terrain Extrusion & Camera Choreography -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <style>
+    /* ==========================================================================
+       1. TOKENS & RESET (css/tokens.css)
+       JPL / NISAR Orbital Telemetry Workstation Aesthetic
+       Zero border-radius except: (1) range thumb in observed mode,
+       (2) .legend-mark circle, (3) SVG .chart-dot.
+       ========================================================================== */
+    :root {
+      --bg-canvas: #07090E;
+      --bg-hud: rgba(11, 15, 22, 0.94);
+      --bg-hud-elevated: #101622;
+      --bg-control: #0C111B;
+      --bg-control-hover: #141C2B;
+      --border-hairline: rgba(235, 245, 238, 0.14);
+      --border-strong: rgba(235, 245, 238, 0.32);
+      --mint-cream: #EBF5EE;
+      --text-primary: #EBF5EE;
+      --text-secondary: #9FB0C4;
+      --text-muted: #68778D;
+      --pale-sky: #BFD1E5;
+      --pale-sky-dim: rgba(191, 209, 229, 0.16);
+      --risk-high: #E5484D;
+      --risk-medium: #F5A524;
+      --risk-low: #30A46C;
+      --change-darker: #2B83FF;
+      --change-brighter: #FF8C28;
+
+      --font-display: 'Orbitron', sans-serif;
+      --font-title: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
+
+      --topbar-h: 52px;
+      --timeline-h: 92px;
+      --dock-left-w: 304px;
+      --dock-right-w: 368px;
+      --gap: 10px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      font-size: 13px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    button, input, select {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: none;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:disabled, input:disabled, select:disabled {
+      cursor: not-allowed;
+      opacity: 0.42;
+    }
+
+    a {
+      color: var(--pale-sky);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    :focus-visible {
+      outline: 1px solid var(--pale-sky);
+      outline-offset: 2px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: -100px;
+      left: 12px;
+      z-index: 9999;
+      background: var(--bg-hud-elevated);
+      color: var(--mint-cream);
+      border: 1px solid var(--pale-sky);
+      padding: 6px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .skip-link:focus {
+      top: 12px;
+    }
+
+    .meta {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-secondary);
+    }
+
+    /* ==========================================================================
+       2. HUD DOCKS & LAYOUT (css/layout.css)
+       Corner reticle L-brackets, 1px solid hairlines, zero blur/glow/shadow
+       ========================================================================== */
+    .hud {
+      background-color: var(--bg-hud);
+      border: 1px solid var(--border-hairline);
+      position: relative;
+    }
+
+    /* Corner reticle L-brackets on every HUD dock */
+    .hud::before,
+    .hud::after {
+      content: "";
+      position: absolute;
+      width: 7px;
+      height: 7px;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .hud::before {
+      top: -1px;
+      left: -1px;
+      border-top: 2px solid var(--pale-sky);
+      border-left: 2px solid var(--pale-sky);
+    }
+    .hud::after {
+      bottom: -1px;
+      right: -1px;
+      border-bottom: 2px solid var(--pale-sky);
+      border-right: 2px solid var(--pale-sky);
+    }
+
+    /* Full-viewport WebGL Telemetry Map Canvas */
+    #map {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      background-color: var(--bg-canvas);
+      overflow: hidden;
+    }
+
+    #map canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    html[data-dim="3d"] #map canvas {
+      cursor: grab;
+    }
+    html[data-dim="3d"] #map canvas:active {
+      cursor: grabbing;
+    }
+
+    /* Top Bar Dock */
+    #topbar {
+      position: fixed;
+      top: var(--gap);
+      left: var(--gap);
+      right: var(--gap);
+      height: var(--topbar-h);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      gap: 12px;
+    }
+
+    /* Workspace Main Container (Side Docks) */
+    #workspace {
+      position: fixed;
+      top: calc(var(--topbar-h) + var(--gap) * 2);
+      bottom: calc(var(--timeline-h) + var(--gap) * 2);
+      left: var(--gap);
+      right: var(--gap);
+      z-index: 15;
+      pointer-events: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    #controls,
+    #evidence {
+      pointer-events: auto;
+      max-height: 100%;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border-strong) transparent;
+    }
+
+    #controls {
+      width: var(--dock-left-w);
+      padding: 12px;
+    }
+
+    #evidence {
+      width: var(--dock-right-w);
+      padding: 12px;
+    }
+
+    /* Timeline Bottom Dock */
+    #timeline {
+      position: fixed;
+      left: var(--gap);
+      right: var(--gap);
+      bottom: var(--gap);
+      height: var(--timeline-h);
+      z-index: 20;
+      display: grid;
+      grid-template-columns: 44px 1fr 164px;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 14px;
+    }
+
+    /* Desktop drawer summaries hidden */
+    #controls-drawer > summary,
+    #evidence-drawer > summary {
+      display: none;
+      list-style: none;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 6px 4px;
+      cursor: pointer;
+      color: var(--mint-cream);
+      border-bottom: 1px solid var(--border-hairline);
+      margin-bottom: 8px;
+    }
+    #controls-drawer > summary::-webkit-details-marker,
+    #evidence-drawer > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    /* ==========================================================================
+       3. COMPONENTS (css/components.css)
+       ========================================================================== */
+
+    /* Wordmark — Orbitron ONLY here and .display-404 */
+    .wordmark {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--mint-cream);
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+      text-decoration: none !important;
+      flex-shrink: 0;
+    }
+    .wordmark .meta {
+      font-size: 9px;
+      color: var(--pale-sky);
+      margin-top: 3px;
+    }
+
+    /* Hazard Switcher Fieldset */
+    #hazard-switch {
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: nowrap;
+    }
+    #hazard-switch input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #hazard-switch > label:not(.compound-label) {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 9px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 120ms ease, color 120ms ease, background-color 120ms ease;
+    }
+    #hazard-switch > label:not(.compound-label):hover {
+      background: var(--bg-control-hover);
+      color: var(--mint-cream);
+    }
+    #hazard-switch input[type="radio"]:checked + label {
+      border-color: var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+    .compound-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 9px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+      cursor: pointer;
+      white-space: nowrap;
+      margin-left: 4px;
+    }
+    .compound-label input {
+      accent-color: var(--pale-sky);
+    }
+
+    /* Target Telemetry Readout Cell */
+    #target-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      border-left: 1px solid var(--border-hairline);
+      border-right: 1px solid var(--border-hairline);
+      padding: 0 12px;
+      white-space: nowrap;
+    }
+    #target-name {
+      color: var(--mint-cream);
+      font-weight: 500;
+    }
+
+    /* Mode Pill — Morphs on data-mode="forecast" */
+    #mode-pill {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-control);
+      color: var(--mint-cream);
+      white-space: nowrap;
+    }
+    html[data-mode="forecast"] #mode-pill {
+      border-color: var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+    }
+
+    /* Top Navigation */
+    #topnav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      position: relative;
+    }
+    #topnav-menu {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #topnav-menu button,
+    #topnav-menu a,
+    #menu-toggle {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 6px 9px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+    #topnav-menu button:hover,
+    #topnav-menu a:hover,
+    #menu-toggle:hover {
+      border-color: var(--pale-sky);
+      color: var(--mint-cream);
+    }
+    #menu-toggle {
+      display: none;
+    }
+
+    /* Left Dock: Controls */
+    #pass-header {
+      border-bottom: 1px solid var(--border-hairline);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    #pass-date {
+      font-family: var(--font-title);
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--mint-cream);
+      font-variant-numeric: tabular-nums;
+    }
+    html[data-mode="forecast"] #pass-date {
+      color: var(--pale-sky);
+    }
+    #pass-index {
+      margin-top: 2px;
+    }
+    #no-pass-alert {
+      margin-top: 6px;
+      padding: 5px 7px;
+      border: 1px solid var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+
+    /* 2D / 3D Simulation Mode Bar inside Controls */
+    #sim-3d-panel {
+      border: 1px solid var(--border-strong);
+      background: rgba(16, 22, 34, 0.85);
+      padding: 9px;
+      margin-bottom: 10px;
+    }
+    .sim-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .sim-panel-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      color: var(--pale-sky);
+      text-transform: uppercase;
+    }
+    .sim-badge {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      padding: 2px 5px;
+      border: 1px solid var(--pale-sky);
+      color: var(--pale-sky);
+      text-transform: uppercase;
+    }
+    .dim-toggle-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .dim-btn {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 6px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    .dim-btn[aria-pressed="true"] {
+      border-color: var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+    .cam-preset-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .cam-btn {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      padding: 4px 4px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+    .cam-btn:hover {
+      border-color: var(--pale-sky);
+      color: var(--mint-cream);
+    }
+    .action-btn-wide {
+      width: 100%;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 6px 8px;
+      border: 1px solid var(--pale-sky);
+      background: rgba(191, 209, 229, 0.1);
+      color: var(--pale-sky);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 4px;
+    }
+    .action-btn-wide:hover {
+      background: rgba(191, 209, 229, 0.22);
+      color: var(--mint-cream);
+    }
+
+    /* View Mode Toggle (Radar / Change since) */
+    #view-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    #view-toggle button {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 7px 8px;
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      color: var(--text-secondary);
+    }
+    #view-toggle button[aria-pressed="true"]:not(:disabled) {
+      border-color: var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+
+    /* Baseline Selector */
+    #baseline-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+    #baseline {
+      padding: 6px 8px;
+      background: var(--bg-control);
+      border: 1px solid var(--border-strong);
+      color: var(--mint-cream);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    /* Opacity Slider & Forecast Lock */
+    #opacity-wrap {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 8px;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    #opacity-wrap label {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    #opacity-readout {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      color: var(--mint-cream);
+    }
+    #opacity {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+    #opacity-lock {
+      grid-column: 1 / -1;
+      color: var(--pale-sky);
+      font-weight: 600;
+      padding-top: 2px;
+    }
+
+    /* Range Inputs (Allowed Exception #1: Observed thumb is circular; Forecast thumb is rotated diamond) */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 18px;
+      background: transparent;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 2px;
+      background: var(--border-strong);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      margin-top: -5px;
+      background: var(--mint-cream);
+      border: 2px solid var(--bg-canvas);
+      border-radius: 50%; /* Allowed Exception #1 */
+    }
+    html[data-mode="forecast"] #date-slider::-webkit-slider-thumb {
+      background: var(--pale-sky);
+      border-radius: 0;
+      transform: rotate(45deg);
+    }
+
+    /* Checkboxes */
+    .check-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--text-primary);
+      padding: 4px 0;
+      cursor: pointer;
+    }
+    .check-label input[type="checkbox"] {
+      accent-color: var(--pale-sky);
+      width: 13px;
+      height: 13px;
+    }
+
+    /* Legend */
+    #legend {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-hairline);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .legend-ramp {
+      height: 8px;
+      border: 1px solid var(--border-hairline);
+      background: linear-gradient(90deg, #090D14 0%, #7C8B9E 50%, #EBF5EE 100%);
+    }
+    .legend-ramp-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+    }
+    #legend-change {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .legend-key {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-secondary);
+    }
+    .legend-patch {
+      width: 12px;
+      height: 12px;
+      border: 1px solid var(--border-strong);
+      flex-shrink: 0;
+    }
+    .legend-patch[data-change="darker"] {
+      background: var(--change-darker);
+    }
+    .legend-patch[data-change="brighter"] {
+      background: var(--change-brighter);
+    }
+    #legend-forecast p {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      line-height: 1.4;
+      color: var(--pale-sky);
+      padding: 6px;
+      border: 1px solid var(--border-hairline);
+      background: rgba(191, 209, 229, 0.06);
+    }
+    #legend-risk {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    #legend-risk li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+    /* Allowed Exception #2: .legend-mark circle */
+    .legend-mark {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+    }
+    .legend-mark[data-risk="high"] {
+      border: 1.5px solid var(--risk-high);
+      background: rgba(229, 72, 77, 0.25);
+    }
+    .legend-mark[data-risk="medium"] {
+      border: 1.5px solid var(--risk-medium);
+      background: rgba(245, 165, 36, 0.2);
+    }
+    html[data-mode="forecast"] .legend-mark {
+      border-style: dashed;
+      background: transparent;
+    }
+
+    /* Right Dock: Evidence */
+    #provenance {
+      padding: 6px 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-control);
+      color: var(--pale-sky);
+      font-weight: 600;
+      margin-bottom: 10px;
+      letter-spacing: 0.05em;
+    }
+    #map-error,
+    #asset-error {
+      padding: 8px;
+      border: 1px solid var(--risk-high);
+      background: rgba(229, 72, 77, 0.14);
+      color: var(--mint-cream);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      margin-bottom: 10px;
+    }
+
+    #evidence h3 {
+      font-family: var(--font-title);
+      font-size: 12.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--mint-cream);
+      margin-bottom: 6px;
+    }
+
+    #status-card {
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+    html[data-mode="forecast"] #status-card {
+      border-color: var(--pale-sky);
+      background: rgba(191, 209, 229, 0.06);
+    }
+
+    #observed-summary {
+      display: grid;
+      grid-template-columns: 105px 1fr;
+      gap: 4px 8px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+    }
+    #observed-summary dt {
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    #observed-summary dd {
+      color: var(--mint-cream);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Forecast Prediction Card (Lock #5) */
+    #forecast-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .forecast-hero-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #forecast-prob {
+      font-family: var(--font-title);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--pale-sky);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .level {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 7px;
+      text-transform: uppercase;
+      border: 1px solid var(--border-strong);
+    }
+    .level[data-level="low"] {
+      color: var(--risk-low);
+      border-color: var(--risk-low);
+    }
+    .level[data-level="medium"] {
+      color: var(--risk-medium);
+      border-color: var(--risk-medium);
+    }
+    .level[data-level="high"] {
+      color: var(--risk-high);
+      border-color: var(--risk-high);
+    }
+    .prob-bar {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-hairline);
+      position: relative;
+      overflow: hidden;
+    }
+    #forecast-bar {
+      height: 100%;
+      width: calc(var(--p, 0) * 1%);
+      background: var(--pale-sky);
+      transition: width 180ms ease;
+    }
+    #forecast-driver {
+      font-size: 11.5px;
+      color: var(--text-primary);
+    }
+    #forecast-disclaimer {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--pale-sky);
+      border-left: 2px solid var(--pale-sky);
+      padding-left: 7px;
+      font-weight: 500;
+    }
+
+    /* Evidence SVG Charts (css/components.css §5.11) */
+    figure {
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      padding: 8px;
+      margin-bottom: 10px;
+    }
+    figcaption {
+      margin-top: 6px;
+      font-size: 9.5px !important;
+      line-height: 1.35;
+    }
+    .chart {
+      width: 100%;
+      height: auto;
+      display: block;
+      overflow: visible;
+    }
+    .chart-grid {
+      stroke: var(--border-hairline);
+      stroke-width: 1;
+    }
+    .chart-axis {
+      fill: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-variant-numeric: tabular-nums;
+      text-transform: uppercase;
+    }
+    .chart-now {
+      stroke: var(--pale-sky);
+      stroke-width: 1;
+      stroke-dasharray: 2 2;
+    }
+    .chart-now-label {
+      fill: var(--pale-sky);
+      font-weight: 600;
+    }
+    .chart-line {
+      stroke: var(--mint-cream);
+      stroke-width: 1.6;
+    }
+    .chart-line--model {
+      stroke: var(--pale-sky);
+      stroke-width: 1.5;
+      stroke-dasharray: 4 3;
+    }
+    /* Allowed Exception #3: SVG .chart-dot */
+    .chart-dot {
+      fill: var(--bg-canvas);
+      stroke: var(--mint-cream);
+      stroke-width: 1.5;
+    }
+    .chart-dot--active {
+      fill: var(--mint-cream);
+      stroke: var(--bg-canvas);
+      stroke-width: 1.5;
+    }
+    .chart-dot--model {
+      fill: var(--bg-canvas);
+      stroke: var(--pale-sky);
+      stroke-width: 1.4;
+    }
+    .chart-diamond--active {
+      fill: var(--pale-sky);
+      stroke: var(--bg-canvas);
+      stroke-width: 1.4;
+    }
+    .chart-empty {
+      fill: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      text-transform: uppercase;
+    }
+
+    #point-coords {
+      margin-bottom: 4px;
+    }
+    #point-status {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+
+    /* Timeline Footer Controls */
+    #play {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-control);
+      color: var(--mint-cream);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #play:hover:not(:disabled) {
+      border-color: var(--pale-sky);
+      color: var(--pale-sky);
+    }
+    #play svg {
+      fill: currentColor;
+    }
+
+    #track {
+      --obs: 5.5;
+      --fc: 3.5;
+      display: grid;
+      grid-template-columns: calc(var(--obs) * 1fr) auto calc(var(--fc) * 1fr);
+      grid-template-rows: auto auto auto;
+      align-items: center;
+      gap: 2px 0;
+      position: relative;
+    }
+    html[data-forecasts="none"] #track {
+      grid-template-columns: 1fr;
+    }
+    html[data-forecasts="none"] #now-tick,
+    html[data-forecasts="none"] #seg-forecast {
+      display: none;
+    }
+    #seg-observed {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    #now-tick {
+      grid-column: 2;
+      grid-row: 1;
+      padding: 0 8px;
+      border-left: 1px dashed var(--pale-sky);
+    }
+    #now-tick .meta {
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+    #seg-forecast {
+      grid-column: 3;
+      grid-row: 1;
+      text-align: right;
+    }
+    #seg-forecast .meta {
+      color: var(--pale-sky);
+    }
+    #date-slider {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      width: 100%;
+      margin: 2px 0;
+    }
+    #ticks {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+    }
+    #ticks button {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 2px 4px;
+      border: 1px solid transparent;
+    }
+    #ticks button[data-kind="forecast"] {
+      color: var(--pale-sky);
+      opacity: 0.78;
+    }
+    #ticks button[aria-current="true"] {
+      color: var(--mint-cream);
+      border-color: var(--pale-sky);
+      background: var(--pale-sky-dim);
+      font-weight: 600;
+      opacity: 1;
+    }
+
+    #timeline-date {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-align: right;
+      color: var(--mint-cream);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    html[data-mode="forecast"] #timeline-date {
+      color: var(--pale-sky);
+    }
+
+    /* ==========================================================================
+       4. FLOATING 3D TELEMETRY OVERLAY & BEFORE/AFTER COMPARATOR DRAWER
+       ========================================================================== */
+    #viewport-hud-pill {
+      position: fixed;
+      top: calc(var(--topbar-h) + var(--gap) * 2);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 14;
+      background: var(--bg-hud);
+      border: 1px solid var(--border-strong);
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    #viewport-hud-pill .pill-sep {
+      color: var(--border-strong);
+    }
+    #viewport-hud-pill button {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border: 1px solid var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+    #viewport-hud-pill button:hover {
+      background: var(--pale-sky);
+      color: var(--bg-canvas);
+    }
+
+    /* Multi-Stage Before & After Comparison Strip */
+    #comparison-strip {
+      position: fixed;
+      bottom: calc(var(--timeline-h) + var(--gap) * 2);
+      left: calc(var(--dock-left-w) + var(--gap) * 2);
+      right: calc(var(--dock-right-w) + var(--gap) * 2);
+      z-index: 16;
+      background: var(--bg-hud);
+      border: 1px solid var(--pale-sky);
+      padding: 10px 12px;
+    }
+    .comp-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .comp-header-title {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--pale-sky);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .comp-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .stage-card {
+      border: 1px solid var(--border-hairline);
+      background: var(--bg-control);
+      padding: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 140ms ease, background-color 140ms ease;
+    }
+    .stage-card:hover,
+    .stage-card[data-active="true"] {
+      border-color: var(--pale-sky);
+      background: rgba(191, 209, 229, 0.1);
+    }
+    .stage-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--pale-sky);
+      font-weight: 600;
+    }
+    .stage-preview-wrap {
+      position: relative;
+      width: 100%;
+      height: 68px;
+      border: 1px solid var(--border-hairline);
+      background: #05070B;
+      overflow: hidden;
+    }
+    .stage-preview-wrap canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .stage-badge-overlay {
+      position: absolute;
+      bottom: 3px;
+      right: 3px;
+      background: rgba(7, 9, 14, 0.88);
+      border: 1px solid var(--border-strong);
+      padding: 1px 4px;
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      color: var(--mint-cream);
+    }
+    .stage-desc {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      line-height: 1.3;
+      color: var(--text-secondary);
+    }
+
+    /* Map Attribution Bottom Corner */
+    #map-attribution {
+      position: fixed;
+      bottom: calc(var(--timeline-h) + var(--gap) + 4px);
+      right: calc(var(--dock-right-w) + var(--gap) * 2);
+      z-index: 12;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      background: rgba(7, 9, 14, 0.8);
+      padding: 2px 6px;
+      border: 1px solid var(--border-hairline);
+      pointer-events: none;
+    }
+
+    /* ==========================================================================
+       5. ROUTES (#page: Sign in, Sign up, 404) & DIALOGS (Method, About)
+       ========================================================================== */
+    #page {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: rgba(7, 9, 14, 0.94);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #signin-form,
+    #signup-form,
+    #notfound {
+      width: 100%;
+      max-width: 380px;
+      background: var(--bg-hud-elevated);
+      border: 1px solid var(--border-strong);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #signin-form h2,
+    #signup-form h2 {
+      font-family: var(--font-title);
+      font-size: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    #signin-form label,
+    #signup-form label {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+    #signin-form input,
+    #signup-form input {
+      padding: 8px 10px;
+      background: var(--bg-control);
+      border: 1px solid var(--border-strong);
+      color: var(--mint-cream);
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    #signin-form button[type="submit"],
+    #signup-form button[type="submit"] {
+      margin-top: 6px;
+      padding: 9px 12px;
+      border: 1px solid var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    #pw-error {
+      color: var(--risk-high);
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .display-404 {
+      font-family: var(--font-display);
+      font-size: 28px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--mint-cream);
+    }
+
+    dialog {
+      margin: auto;
+      max-width: 580px;
+      width: calc(100% - 32px);
+      max-height: 82vh;
+      overflow-y: auto;
+      background: var(--bg-hud-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--pale-sky);
+      padding: 20px;
+    }
+    dialog::backdrop {
+      background: rgba(7, 9, 14, 0.82);
+    }
+    dialog h2 {
+      font-family: var(--font-title);
+      font-size: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--pale-sky);
+      margin-bottom: 12px;
+    }
+    dialog p {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+    .dialog-close {
+      margin-top: 8px;
+      padding: 7px 14px;
+      border: 1px solid var(--pale-sky);
+      background: var(--pale-sky-dim);
+      color: var(--pale-sky);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    /* ==========================================================================
+       6. RESPONSIVE MOBILE WORKSTATION (≤ 900px)
+       ========================================================================== */
+    @media (max-width: 900px) {
+      #target-cell,
+      .pill-suffix,
+      #viewport-hud-pill {
+        display: none;
+      }
+      #menu-toggle {
+        display: inline-block;
+      }
+      #topnav-menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 6px;
+        background: var(--bg-hud-elevated);
+        border: 1px solid var(--border-strong);
+        padding: 8px;
+        flex-direction: column;
+        align-items: stretch;
+        min-width: 140px;
+      }
+      #topnav:has(#menu-toggle[aria-expanded="true"]) #topnav-menu {
+        display: flex;
+      }
+      #workspace {
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 8px;
+        overflow-y: auto;
+      }
+      #controls,
+      #evidence {
+        width: 100%;
+        max-height: 44vh;
+      }
+      #controls-drawer > summary,
+      #evidence-drawer > summary {
+        display: block;
+      }
+      #comparison-strip {
+        left: var(--gap);
+        right: var(--gap);
+      }
+      .comp-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      #timeline {
+        grid-template-columns: 38px 1fr;
+        height: auto;
+      }
+      #timeline-date {
+        display: none;
+      }
+      #map-attribution {
+        right: var(--gap);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <a class="skip-link" href="#controls">Skip to controls</a>
+
+  <!-- Full-Viewport Interactive 2D/3D Telemetry Map Canvas -->
+  <div id="map" role="region" aria-label="Interactive 2D and 3D radar telemetry map of the study area"></div>
+
+  <!-- Floating 2D/3D Camera Status & Quick-Zoom Pill -->
+  <div id="viewport-hud-pill" aria-label="3D Viewport Telemetry Bar">
+    <span id="cam-state-readout" class="meta">VIEW: 2D NORTH-UP ORTHO // PITCH 0°</span>
+    <span class="pill-sep">//</span>
+    <span class="meta">CLICK FOOTPRINT TO INSPECT &amp; EXTRUDE 3D</span>
+    <button id="btn-quick-3d" type="button">ZOOM IN 3D</button>
+    <button id="btn-toggle-compare" type="button">BEFORE / AFTER STRIP</button>
+  </div>
+
+  <!-- Multi-Stage Before & After Timeline Evolution Strip -->
+  <section id="comparison-strip" class="hud" aria-label="Before and After Multi-Change Visualizer">
+    <div class="comp-header">
+      <span class="comp-header-title">MULTI-STAGE TIMELINE &amp; 2D→3D TRANSFORMATION COMPARATOR (CLICK ANY STAGE TO ANIMATE)</span>
+      <button id="btn-close-compare" type="button" class="cam-btn">HIDE STRIP [×]</button>
+    </div>
+    <div class="comp-grid">
+      <button type="button" class="stage-card" data-stage="before-2d" data-active="false">
+        <div class="stage-card-head">
+          <span>01 // BEFORE (PASS 01)</span>
+          <span>21 APR · 2D</span>
+        </div>
+        <div class="stage-preview-wrap">
+          <canvas id="thumb-stage-1" width="160" height="80"></canvas>
+          <span class="stage-badge-overlay">FLAT NORTH-UP</span>
+        </div>
+        <p class="stage-desc">Baseline L-band SAR pass. Minimal ash lobe; flat 0° pitch orthographic plane.</p>
+      </button>
+
+      <button type="button" class="stage-card" data-stage="change-2d" data-active="false">
+        <div class="stage-card-head">
+          <span>02 // MULTI-PASS Δ</span>
+          <span>20 JUN · DIFF</span>
+        </div>
+        <div class="stage-preview-wrap">
+          <canvas id="thumb-stage-2" width="160" height="80"></canvas>
+          <span class="stage-badge-overlay">BLUE / ORANGE Δ</span>
+        </div>
+        <p class="stage-desc">3×3 box-blurred difference (Pass 06 vs Pass 01): ash darkening (blue) &amp; vent uplift (orange).</p>
+      </button>
+
+      <button type="button" class="stage-card" data-stage="extrude-3d" data-active="true">
+        <div class="stage-card-head">
+          <span>03 // CLICK → 3D ZOOM</span>
+          <span>20 JUN · 3D</span>
+        </div>
+        <div class="stage-preview-wrap">
+          <canvas id="thumb-stage-3" width="160" height="80"></canvas>
+          <span class="stage-badge-overlay">58° 3D RELIEF</span>
+        </div>
+        <p class="stage-desc">Camera zooms in &amp; tilts to 58°; 2D SAR extrudes into 3D topological relief + reticle beacon.</p>
+      </button>
+
+      <button type="button" class="stage-card" data-stage="forecast-lock" data-active="false">
+        <div class="stage-card-head">
+          <span>04 // AFTER (FORECAST)</span>
+          <span>26 JUL · ◆ LOCK</span>
+        </div>
+        <div class="stage-preview-wrap">
+          <canvas id="thumb-stage-4" width="160" height="80"></canvas>
+          <span class="stage-badge-overlay">35% CONTEXT LOCK</span>
+        </div>
+        <p class="stage-desc">Crosses NOW: raster locks to 35%, wireframe mesh, dashed risk rings, no future pixel data.</p>
+      </button>
+    </div>
+  </section>
+
+  <div id="map-attribution">NISAR-SIM TELEMETRY ENGINE · NASA/JPL-CALTECH &amp; ISRO CONCEPT · SYNTHETIC DEMO</div>
+
+  <!-- Top Bar HUD -->
+  <header id="topbar" class="hud">
+    <a class="wordmark" href="#/">spaceapp
+      <span class="meta">NISAR-SIM // L-BAND SAR</span>
+    </a>
+
+    <fieldset id="hazard-switch">
+      <legend class="visually-hidden">Hazard channel</legend>
+      <input id="hz-volcano" type="radio" name="hazard" value="volcano" checked>
+      <label for="hz-volcano">01 // VOLCANIC SAR</label>
+      <input id="hz-earthquake" type="radio" name="hazard" value="earthquake">
+      <label for="hz-earthquake">02 // SEISMIC FAULT</label>
+      <input id="hz-tsunami" type="radio" name="hazard" value="tsunami">
+      <label for="hz-tsunami">03 // TSUNAMI PROPAGATION</label>
+      <label class="compound-label">
+        <input id="compound-toggle" type="checkbox">
+        + COMPOUND OVERLAY
+      </label>
+    </fieldset>
+
+    <div id="target-cell">
+      <span id="target-name" class="meta">TARGET: ASO CALDERA, KUMAMOTO, JP</span>
+      <span id="target-coords" class="meta">32.884° N, 131.104° E</span>
+      <span id="target-footprint" class="meta">FOOTPRINT: 24 × 20 KM</span>
+    </div>
+
+    <div id="mode-pill" role="status"><span class="pill-main">● OBSERVED PASS</span><span class="pill-suffix"> // MEASURED</span></div>
+
+    <nav id="topnav" aria-label="Site">
+      <div id="topnav-menu">
+        <button id="open-method" type="button">Method</button>
+        <button id="open-about" type="button">About</button>
+        <a href="#/signin">Sign in</a>
+      </div>
+      <button id="menu-toggle" type="button" aria-expanded="false" aria-controls="topnav-menu">Menu</button>
+    </nav>
+  </header>
+
+  <!-- Main Side Docks -->
+  <main id="workspace">
+
+    <!-- Left Dock: Sensor, 2D/3D Extrusion, and Layer Controls -->
+    <aside id="controls" class="hud" aria-label="Sensor and layer controls">
+      <details id="controls-drawer" open>
+        <summary>Controls</summary>
+
+        <section id="pass-header" aria-label="Current pass">
+          <h2 id="pass-date">20 JUN 2026</h2>
+          <p id="pass-index" class="meta">PASS 06 / 06</p>
+          <p id="no-pass-alert" class="meta" hidden>NO SATELLITE PASS FOR THIS DATE</p>
+        </section>
+
+        <!-- Interactive 2D <-> 3D Camera & Terrain Extrusion Controller -->
+        <section id="sim-3d-panel" aria-label="2D to 3D Volumetric Simulation">
+          <div class="sim-panel-header">
+            <span class="sim-panel-title">TERRAIN GEOMETRY</span>
+            <span id="dim-status-badge" class="sim-badge">2D FLAT</span>
+          </div>
+          <div class="dim-toggle-grid" role="group" aria-label="Dimension mode">
+            <button id="btn-dim-2d" type="button" class="dim-btn" aria-pressed="true">2D North-Up</button>
+            <button id="btn-dim-3d" type="button" class="dim-btn" aria-pressed="false">3D Extruded</button>
+          </div>
+          <div class="cam-preset-row" aria-label="Camera zoom presets">
+            <button id="cam-reset-2d" type="button" class="cam-btn" title="Zoom out to flat 2D north-up view">Zoom Out 2D</button>
+            <button id="cam-overview-3d" type="button" class="cam-btn" title="3D oblique caldera overview">3D Overview</button>
+            <button id="cam-focus-target" type="button" class="cam-btn" title="Zoom in close to active reticle or vent">Zoom In 3D</button>
+          </div>
+          <button id="btn-tour-choreography" type="button" class="action-btn-wide">
+            <span>▶ AUTO 2D→3D TIMELINE TOUR</span>
+            <span id="tour-state-label">START</span>
+          </button>
+        </section>
+
+        <div id="view-toggle" role="group" aria-label="View mode">
+          <button id="btn-radar" type="button" aria-pressed="true">Radar image</button>
+          <button id="btn-change" type="button" aria-pressed="false">Change since</button>
+        </div>
+
+        <label id="baseline-wrap" hidden>Baseline
+          <select id="baseline">
+            <option value="0">21 APR 2026</option>
+            <option value="1">03 MAY 2026</option>
+            <option value="2">15 MAY 2026</option>
+            <option value="3">27 MAY 2026</option>
+            <option value="4">08 JUN 2026</option>
+            <option value="5">20 JUN 2026</option>
+          </select>
+        </label>
+
+        <div id="opacity-wrap">
+          <label for="opacity">Raster opacity</label>
+          <output id="opacity-readout" for="opacity">85%</output>
+          <input id="opacity" type="range" min="0" max="100" step="5" value="85">
+          <p id="opacity-lock" class="meta" hidden>LOCKED: 35% CONTEXT ONLY</p>
+        </div>
+
+        <label class="check-label">
+          <input id="toggle-risk" type="checkbox" checked>
+          Risk extent
+        </label>
+        <label class="check-label">
+          <input id="toggle-reticle" type="checkbox" checked>
+          Inspection reticle
+        </label>
+
+        <section id="legend" aria-label="Legend">
+          <div id="legend-radar">
+            <div class="legend-ramp" role="img" aria-label="Greyscale ramp from dark to bright"></div>
+            <div class="legend-ramp-labels">
+              <span class="legend-text">Dark: smooth / wet</span>
+              <span class="legend-text">Bright: rough / steep</span>
+            </div>
+          </div>
+          <div id="legend-change" hidden>
+            <span class="legend-key">
+              <span class="legend-patch" data-change="darker" aria-hidden="true"></span>
+              <span class="legend-text">Darker than baseline</span>
+            </span>
+            <span class="legend-key">
+              <span class="legend-patch" data-change="brighter" aria-hidden="true"></span>
+              <span class="legend-text">Brighter than baseline</span>
+            </span>
+          </div>
+          <div id="legend-forecast" hidden>
+            <p>No satellite radar pass. The last sample image is dimmed to 35% as geographic context, not a new observation.</p>
+          </div>
+          <ul id="legend-risk">
+            <li>
+              <span class="legend-mark" data-risk="high" aria-hidden="true"></span>
+              <span class="legend-text">High hazard extent (measured extent)</span>
+            </li>
+            <li>
+              <span class="legend-mark" data-risk="medium" aria-hidden="true"></span>
+              <span class="legend-text">Medium hazard extent (measured extent)</span>
+            </li>
+          </ul>
+        </section>
+      </details>
+    </aside>
+
+    <!-- Right Dock: Scientific Evidence & SVG Charts -->
+    <aside id="evidence" class="hud" aria-label="Evidence">
+      <details id="evidence-drawer" open>
+        <summary>Evidence</summary>
+
+        <p id="provenance" class="meta">SYNTHETIC DEMONSTRATION // NOT LIVE NISAR TELEMETRY</p>
+        <p id="map-error" role="alert" hidden></p>
+        <p id="asset-error" role="alert" hidden></p>
+
+        <section id="status-card" aria-label="Pass status">
+          <div id="observed-card">
+            <h3>Observed sample pass</h3>
+            <dl id="observed-summary">
+              <dt>Pass</dt>
+              <dd id="observed-pass">06 / 06 · 20 JUN 2026</dd>
+              <dt>Baseline</dt>
+              <dd id="observed-baseline">None · radar image view</dd>
+              <dt>Inspected point</dt>
+              <dd id="observed-point">None</dd>
+            </dl>
+          </div>
+          <div id="forecast-card" hidden>
+            <h3>Forecast for <span id="forecast-date">02 JUL 2026</span></h3>
+            <div class="forecast-hero-row">
+              <p id="forecast-prob">—%</p>
+              <span id="forecast-level" class="level" data-level="low">—</span>
+            </div>
+            <div class="prob-bar" role="img" aria-label="Sample probability bar">
+              <div id="forecast-bar"></div>
+            </div>
+            <p id="forecast-driver">Simulated driver: —</p>
+            <p id="forecast-disclaimer">Placeholder forecast. Swap in your model output.</p>
+            <p class="meta">Sample probability · not validated</p>
+          </div>
+        </section>
+
+        <section aria-label="Risk over time">
+          <h3>Risk over time</h3>
+          <figure id="chart-risk">
+            <div class="chart-slot">
+              <p class="chart-empty">Chart renders when the workstation script loads.</p>
+            </div>
+            <figcaption class="meta">Solid: measured risk index. Dashed: model projection. Both synthetic.</figcaption>
+          </figure>
+        </section>
+
+        <section aria-label="Point series">
+          <h3 id="point-title">Brightness at a point</h3>
+          <p id="point-coords" class="meta">32.884° N, 131.104° E</p>
+          <figure id="chart-point">
+            <div class="chart-slot">
+              <p class="chart-empty">No point selected.</p>
+            </div>
+            <figcaption class="meta">No future pixel brightness values — ever.</figcaption>
+          </figure>
+          <p id="point-status" role="status">Click inside the radar footprint to inspect a point &amp; zoom 3D.</p>
+        </section>
+      </details>
+    </aside>
+
+  </main>
+
+  <!-- Bottom Timeline Dock -->
+  <footer id="timeline" class="hud">
+    <button id="play" type="button" aria-label="Play">
+      <svg class="icon-play" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+        <path d="M2 1 L11 6 L2 11 Z"></path>
+      </svg>
+      <svg class="icon-pause" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" hidden>
+        <rect x="2" y="1" width="3" height="10"></rect>
+        <rect x="7" y="1" width="3" height="10"></rect>
+      </svg>
+    </button>
+
+    <div id="track">
+      <div id="seg-observed"><span class="meta">OBSERVED PASSES (01–06)</span></div>
+      <div id="now-tick"><span class="meta">NOW (20 JUN 2026)</span></div>
+      <div id="seg-forecast"><span class="meta">FORECAST HORIZON (07–10)</span></div>
+      <input id="date-slider" type="range" min="0" max="9" step="1" value="5" aria-label="Pass date" aria-valuetext="Observed sample pass, 20 Jun 2026">
+      <ol id="ticks" aria-label="Pass dates">
+        <li><button type="button" data-index="0" data-kind="observed">21 APR</button></li>
+        <li><button type="button" data-index="1" data-kind="observed">03 MAY</button></li>
+        <li><button type="button" data-index="2" data-kind="observed">15 MAY</button></li>
+        <li><button type="button" data-index="3" data-kind="observed">27 MAY</button></li>
+        <li><button type="button" data-index="4" data-kind="observed">08 JUN</button></li>
+        <li><button type="button" data-index="5" data-kind="observed" aria-current="true">20 JUN</button></li>
+        <li><button type="button" data-index="6" data-kind="forecast">02 JUL</button></li>
+        <li><button type="button" data-index="7" data-kind="forecast">14 JUL</button></li>
+        <li><button type="button" data-index="8" data-kind="forecast">26 JUL</button></li>
+        <li><button type="button" data-index="9" data-kind="forecast">07 AUG</button></li>
+      </ol>
+    </div>
+
+    <output id="timeline-date" for="date-slider">20 JUN 2026</output>
+  </footer>
+
+  <!-- Hash Route Overlay (#/signin, #/signup, #/404) -->
+  <section id="page" hidden aria-label="Account and navigation pages">
+
+    <form id="signin-form" aria-labelledby="signin-title" hidden>
+      <h2 id="signin-title">Sign in</h2>
+      <label for="signin-email">Email</label>
+      <input id="signin-email" type="email" name="email" autocomplete="email" required>
+      <label for="signin-password">Password</label>
+      <input id="signin-password" type="password" name="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+      <a href="#/signup">Create an account</a>
+      <a href="#/">Back to workstation</a>
+      <p class="meta">Prototype: no account is created and nothing is sent.</p>
+    </form>
+
+    <form id="signup-form" aria-labelledby="signup-title" hidden>
+      <h2 id="signup-title">Sign up</h2>
+      <label for="signup-name">Name</label>
+      <input id="signup-name" type="text" name="name" autocomplete="name" required>
+      <label for="signup-email">Email</label>
+      <input id="signup-email" type="email" name="email" autocomplete="email" required>
+      <label for="signup-password">Password</label>
+      <input id="signup-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+      <label for="signup-confirm">Confirm password</label>
+      <input id="signup-confirm" type="password" name="confirm" autocomplete="new-password" minlength="8" required>
+      <p id="pw-error" role="alert" hidden>Passwords do not match.</p>
+      <button type="submit">Sign up</button>
+      <a href="#/signin">Already have an account? Sign in</a>
+      <a href="#/">Back to workstation</a>
+      <p class="meta">Prototype: no account is created and nothing is sent.</p>
+    </form>
+
+    <div id="notfound" hidden>
+      <p class="display-404">spaceapp</p>
+      <p class="meta">404 · PAGE NOT FOUND</p>
+      <a href="#/">Back to workstation</a>
+    </div>
+
+  </section>
+
+  <!-- Method & About Dialogs -->
+  <dialog id="dlg-method" aria-labelledby="dlg-method-title">
+    <h2 id="dlg-method-title">Method</h2>
+    <p>Every radar image in this workstation is synthetic. A seeded procedural generator builds a 512 × 512 greyscale texture per pass from fractal value noise: an elliptical somma rim with sensor-facing slopes brightened and far slopes darkened, a smooth dark caldera floor, and a bright cone cluster near the Nakadake vent. A single fixed speckle field, roughly four-look, multiplies every pass so the grain stays identical between dates. Pixel values are display intensities on a 0–255 scale. They are not calibrated backscatter and are never labelled in dB.</p>
+    <p>Change between two passes is computed in the browser. Both images get a 3 × 3 box blur to suppress speckle, then each pixel is differenced (current minus baseline). Differences below 18 of 255 are transparent. Negative differences draw blue (the surface got darker, or in the seismic and tsunami channels, subsided or drew down), positive differences draw orange (brighter, uplifted, or crested). Alpha scales with the magnitude. Choosing the current pass as its own baseline yields an empty layer by construction.</p>
+    <p>In 3D Volumetric mode, the synthetic DEM (Digital Elevation Model) extrudes the Aso caldera rim, Nakadake cone cluster, Hyuganada fault scarp, or Bungo Channel shoaling wave train using a vertex displacement shader. Clicking any point inside the radar footprint places the 3D inspection reticle, samples all six observed passes, and smoothly zooms the camera into an oblique orbital perspective.</p>
+    <p>Past the last sample pass (20 June 2026, "NOW") the workstation changes state rather than inventing data. The last observed image is locked to 35% opacity as geographic context, the view modes and opacity control are disabled, the timeline thumb becomes a pale-sky diamond labelled FORECAST, extents and chart segments turn dashed, and a prediction card carries the disclaimer. No pixel brightness or point value is ever produced for a future date.</p>
+    <button class="dialog-close" type="button">Close</button>
+  </dialog>
+
+  <dialog id="dlg-about" aria-labelledby="dlg-about-title">
+    <h2 id="dlg-about-title">About</h2>
+    <p>spaceapp is a prototype built for the NASA Space Apps challenge "Dancing with the SARs". It explores how a repeat-pass L-band SAR mission such as NISAR could be presented alongside a model forecast without letting the two be confused. The study point is Aso caldera in Kumamoto, Japan, at 32.884° N, 131.104° E, with two further channels (a seismic fault and a tsunami propagation view) sharing the same timeline to show that the forecast locks behave identically for every hazard.</p>
+    <p>The timeline carries six observed passes twelve days apart, ending at a demonstration "NOW" of 20 June 2026, followed by four forecast dates. The dates are design specimens, not the system clock, and NOW is not a claim about real satellite availability. Nothing here is real-time monitoring.</p>
+    <p>Limitations: all imagery, values, probabilities, drivers and extents are synthetic demonstration material. There is no NISAR observation in this build and no validated forecast. Seismic and tsunami units are illustrative.</p>
+    <p>Data credits: NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. This demonstration uses no NISAR data; the credit line is retained so that a future build that does ingest NISAR products carries the correct attribution.</p>
+    <button class="dialog-close" type="button">Close</button>
+  </dialog>
+
+  <div id="announcer" class="visually-hidden" aria-live="polite"></div>
+
+  <!-- ==========================================================================
+       APPLICATION LOGIC (config.js + telemetry.js + charts.js + 3D map.js + main.js)
+       ========================================================================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      /* ========================================================================
+         MODULE 1: CONFIG & HAZARD REGISTRY (js/config.js)
+         ======================================================================== */
+      const DEFAULTS = {
+        useExternalImages: false,
+        useLiveBackend: false,
+        backendUrl: '/api/v1/hazards/{id}/timeline',
+        externalImagePath: './data/aso/{date}.png',
+        bounds: { west: 130.98, south: 32.79, east: 131.23, north: 32.97 },
+        forecasts: undefined,
+        defaultHazard: 'volcano',
+        playIntervalMs: 1150,
+        forecastOpacity: 0.35, // Locked on forecast dates
+        levelThresholds: { medium: 0.35, high: 0.6 },
+      };
+
+      const OVERRIDES =
+        typeof window !== 'undefined' && window.SPACEAPP_CONFIG && typeof window.SPACEAPP_CONFIG === 'object'
+          ? window.SPACEAPP_CONFIG
+          : {};
+
+      const CONFIG = { ...DEFAULTS, ...OVERRIDES };
+
+      const OBSERVED_DATES = ['2026-04-21', '2026-05-03', '2026-05-15', '2026-05-27', '2026-06-08', '2026-06-20'];
+      const FORECAST_DATES = ['2026-07-02', '2026-07-14', '2026-07-26', '2026-08-07'];
+      const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+      function parseIso(iso) {
+        if (typeof iso !== 'string') return null;
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+        if (!m) return null;
+        const month = Number(m[2]);
+        if (month < 1 || month > 12) return null;
+        return { y: Number(m[1]), m: month, d: Number(m[3]) };
+      }
+
+      function formatDate(iso) {
+        const p = parseIso(iso);
+        if (!p) return String(iso ?? '').toUpperCase();
+        return `${String(p.d).padStart(2, '0')} ${MONTHS[p.m - 1]} ${p.y}`;
+      }
+
+      function formatShort(iso) {
+        const p = parseIso(iso);
+        if (!p) return String(iso ?? '').toUpperCase();
+        return `${String(p.d).padStart(2, '0')} ${MONTHS[p.m - 1]}`;
+      }
+
+      function formatSpoken(iso) {
+        const p = parseIso(iso);
+        if (!p) return String(iso ?? '');
+        const mon = MONTHS[p.m - 1];
+        return `${p.d} ${mon[0]}${mon.slice(1).toLowerCase()} ${p.y}`;
+      }
+
+      function mulberry32(seed) {
+        let a = seed >>> 0;
+        return function next() {
+          a = (a + 0x6d2b79f5) >>> 0;
+          let t = a;
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function seedFrom(str) {
+        let h = 0x811c9dc5;
+        const s = String(str);
+        for (let i = 0; i < s.length; i++) {
+          h ^= s.charCodeAt(i);
+          h = Math.imul(h, 0x01000193);
+        }
+        return h >>> 0;
+      }
+
+      function gauss(rng) {
+        return (rng() + rng() + rng() - 1.5) * 2;
+      }
+
+      const KM_PER_DEG_LAT = 110.57;
+      const toRad = (deg) => (deg * Math.PI) / 180;
+      const kmPerDegLon = (lat) => 111.32 * Math.cos(toRad(lat));
+
+      function footprintKm(bounds) {
+        const midLat = (bounds.north + bounds.south) / 2;
+        const widthKm = (bounds.east - bounds.west) * kmPerDegLon(midLat);
+        const heightKm = (bounds.north - bounds.south) * KM_PER_DEG_LAT;
+        return {
+          widthKm,
+          heightKm,
+          label: `${Math.round(widthKm)} × ${Math.round(heightKm)} KM`,
+        };
+      }
+
+      function offsetKm(center, dxKm, dyKm) {
+        return [center[0] + dxKm / kmPerDegLon(center[1]), center[1] + dyKm / KM_PER_DEG_LAT];
+      }
+
+      function clampToBounds(coord, bounds, marginDeg = 0.002) {
+        return [
+          Math.min(bounds.east - marginDeg, Math.max(bounds.west + marginDeg, coord[0])),
+          Math.min(bounds.north - marginDeg, Math.max(bounds.south + marginDeg, coord[1])),
+        ];
+      }
+
+      function insideBoundsCoord(coord, bounds) {
+        return coord[0] >= bounds.west && coord[0] <= bounds.east && coord[1] >= bounds.south && coord[1] <= bounds.north;
+      }
+
+      function pointInRing(x, y, ring) {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i][0];
+          const yi = ring[i][1];
+          const xj = ring[j][0];
+          const yj = ring[j][1];
+          if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+        }
+        return inside;
+      }
+
+      function round5(v) {
+        return Math.round(v * 1e5) / 1e5;
+      }
+
+      function smoothBumps(rng, n, wobble) {
+        const raw = new Float64Array(n);
+        for (let i = 0; i < n; i++) raw[i] = 1 + wobble * gauss(rng);
+        const out = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+          let s = 0;
+          for (let k = -4; k <= 4; k++) s += raw[(i + k + n) % n];
+          out[i] = s / 9;
+        }
+        return out;
+      }
+
+      function ringPolygon(center, radiusKm, rng, bounds, n = 72, wobble = 0.2) {
+        const bumps = smoothBumps(rng, n, wobble);
+        const coords = [];
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          const r = radiusKm * bumps[i];
+          const c = clampToBounds(offsetKm(center, r * Math.cos(a), r * Math.sin(a)), bounds);
+          coords.push([round5(c[0]), round5(c[1])]);
+        }
+        coords.push(coords[0]);
+        return [coords];
+      }
+
+      function ellipsePolygon(center, aKm, bKm, strikeDeg, rng, bounds, n = 72, wobble = 0.1) {
+        const bumps = smoothBumps(rng, n, wobble);
+        const cs = Math.cos(toRad(strikeDeg));
+        const sn = Math.sin(toRad(strikeDeg));
+        const coords = [];
+        for (let i = 0; i < n; i++) {
+          const t = (i / n) * Math.PI * 2;
+          const ex = aKm * Math.cos(t) * bumps[i];
+          const ey = bKm * Math.sin(t) * bumps[i];
+          const dx = ex * cs - ey * sn;
+          const dy = ex * sn + ey * cs;
+          const c = clampToBounds(offsetKm(center, dx, dy), bounds);
+          coords.push([round5(c[0]), round5(c[1])]);
+        }
+        coords.push(coords[0]);
+        return [coords];
+      }
+
+      function feature(geometry, properties) {
+        return { type: 'Feature', properties, geometry };
+      }
+
+      const KYUSHU_COAST = [
+        [131.38, 31.45], [131.36, 31.6], [131.4, 31.75], [131.47, 31.9], [131.5, 32.05],
+        [131.56, 32.2], [131.62, 32.33], [131.67, 32.45], [131.71, 32.6], [131.78, 32.72],
+        [131.86, 32.85], [131.92, 32.97], [131.9, 33.08], [131.84, 33.16], [131.75, 33.22],
+        [131.62, 33.3], [131.5, 33.34],
+      ];
+
+      const KYUSHU_LAND = [[130.0, 31.3], ...KYUSHU_COAST, [130.0, 33.5], [130.0, 31.3]];
+      const SHIKOKU_LAND = [
+        [133.0, 33.5], [132.62, 33.18], [132.52, 33.05], [132.5, 32.95], [132.6, 32.88],
+        [132.72, 32.82], [133.0, 32.7], [133.0, 33.5],
+      ];
+
+      const COAST = Object.freeze({
+        kyushu: KYUSHU_COAST,
+        land: [KYUSHU_LAND, SHIKOKU_LAND],
+      });
+
+      function levelFor(p) {
+        const t = CONFIG.levelThresholds || DEFAULTS.levelThresholds;
+        const v = Number(p);
+        if (!Number.isFinite(v)) return 'low';
+        if (v >= t.high) return 'high';
+        if (v >= t.medium) return 'medium';
+        return 'low';
+      }
+
+      function forecastsOf(hazard) {
+        if (Array.isArray(CONFIG.forecasts)) return CONFIG.forecasts;
+        return hazard ? hazard.forecast : [];
+      }
+
+      function timelineOf(hazard) {
+        if (!hazard) return [];
+        const observed = hazard.observed.map((o, i) => ({ ...o, kind: 'observed', index: i }));
+        const forecast = forecastsOf(hazard).map((f, i) => ({
+          ...f,
+          kind: 'forecast',
+          index: observed.length + i,
+        }));
+        return [...observed, ...forecast];
+      }
+
+      function stepFor(hazard, kind, idx) {
+        const obs = hazard.observed;
+        const fc = forecastsOf(hazard);
+        const i = Number.isFinite(idx) ? Math.max(0, Math.floor(idx)) : obs.length - 1;
+        if (kind === 'forecast' && fc.length) {
+          const fi = Math.min(fc.length - 1, Math.max(0, i - obs.length));
+          const f = fc[fi];
+          return { kind: 'forecast', fi, date: f.date, p: Number(f.probability) || 0, oi: obs.length - 1 };
+        }
+        const oi = Math.min(obs.length - 1, i);
+        const o = obs[oi];
+        return { kind: 'observed', oi, date: o.date, p: Number(o.risk) || 0, fi: -1 };
+      }
+
+      function rngFor(hazard, date, salt = '') {
+        return mulberry32(seedFrom(`${hazard.id}|${date}|${salt}`));
+      }
+
+      function volcanoExtents(hazard, kind, idx) {
+        const s = stepFor(hazard, kind, idx);
+        const span = Math.max(1, hazard.observed.length - 1);
+        let highKm, mediumKm;
+        if (s.kind === 'observed') {
+          const t = s.oi / span;
+          highKm = 1.4 + 0.6 * t;
+          mediumKm = 3.8 + 1.2 * t;
+        } else {
+          highKm = 1.2 + 2.8 * s.p;
+          mediumKm = 3.2 + 5.5 * s.p;
+        }
+        const rng = rngFor(hazard, s.date, 'rings');
+        const center = hazard.coords;
+        const props = (risk) => ({ risk, schematic: true, kind: 'extent', date: s.date });
+        return {
+          type: 'FeatureCollection',
+          features: [
+            feature({ type: 'Polygon', coordinates: ringPolygon(center, mediumKm, rng, hazard.bounds) }, props('medium')),
+            feature({ type: 'Polygon', coordinates: ringPolygon(center, highKm, rng, hazard.bounds) }, props('high')),
+          ],
+        };
+      }
+
+      function earthquakeExtents(hazard, kind, idx) {
+        const s = stepFor(hazard, kind, idx);
+        const g = hazard.geometry;
+        const mainshockAt = g.mainshockIndex;
+        let high, medium;
+        if (s.kind === 'observed') {
+          if (s.oi < mainshockAt) {
+            high = { a: 9 + s.oi * 0.5, b: 5 + s.oi * 0.3 };
+            medium = { a: 20 + s.oi, b: 12 + s.oi * 0.5 };
+          } else {
+            const k = s.oi - mainshockAt;
+            high = { a: 40 + 2 * k, b: 22 + k };
+            medium = { a: 62 + 2 * k, b: 38 + k };
+          }
+        } else {
+          high = { a: 18 + 32 * s.p, b: 10 + 18 * s.p };
+          medium = { a: 30 + 46 * s.p, b: 18 + 28 * s.p };
+        }
+        const rng = rngFor(hazard, s.date, 'mmi');
+        const center = hazard.coords;
+        const props = (risk) => ({ risk, schematic: true, kind: 'extent', date: s.date });
+        return {
+          type: 'FeatureCollection',
+          features: [
+            feature(
+              { type: 'Polygon', coordinates: ellipsePolygon(center, medium.a, medium.b, g.strikeDeg, rng, hazard.bounds) },
+              props('medium')
+            ),
+            feature(
+              { type: 'Polygon', coordinates: ellipsePolygon(center, high.a, high.b, g.strikeDeg, rng, hazard.bounds) },
+              props('high')
+            ),
+            feature(
+              { type: 'LineString', coordinates: g.fault.map((c) => clampToBounds(c, hazard.bounds)) },
+              { kind: 'fault', schematic: true, date: s.date }
+            ),
+          ],
+        };
+      }
+
+      function coastBand(coast, from, to, inlandKm, seaKm, rng, bounds) {
+        const pts = coast.slice(from, to + 1);
+        const bumps = smoothBumps(rng, pts.length, 0.25);
+        const normals = pts.map((p, i) => {
+          const prev = pts[Math.max(0, i - 1)];
+          const next = pts[Math.min(pts.length - 1, i + 1)];
+          const tx = (next[0] - prev[0]) * kmPerDegLon(p[1]);
+          const ty = (next[1] - prev[1]) * KM_PER_DEG_LAT;
+          const len = Math.hypot(tx, ty) || 1;
+          let nx = ty / len;
+          let ny = -tx / len;
+          if (nx > 0) {
+            nx = -nx;
+            ny = -ny;
+          }
+          return [nx, ny];
+        });
+        const sea = pts.map((p, i) => clampToBounds(offsetKm(p, -normals[i][0] * seaKm, -normals[i][1] * seaKm), bounds));
+        const land = pts.map((p, i) => {
+          const w = inlandKm * bumps[i];
+          return clampToBounds(offsetKm(p, normals[i][0] * w, normals[i][1] * w), bounds);
+        });
+        const ring = [...sea, ...land.reverse()].map((c) => [round5(c[0]), round5(c[1])]);
+        ring.push(ring[0]);
+        return [ring];
+      }
+
+      function arrivalArc(source, radiusKm, bounds, landRings, fromDeg = 95, toDeg = 265, n = 40) {
+        const parts = [];
+        let cur = [];
+        for (let i = 0; i <= n; i++) {
+          const a = toRad(fromDeg + ((toDeg - fromDeg) * i) / n);
+          const c = offsetKm(source, radiusKm * Math.cos(a), radiusKm * Math.sin(a));
+          const ok = insideBoundsCoord(c, bounds) && !landRings.some((r) => pointInRing(c[0], c[1], r));
+          if (ok) {
+            cur.push([round5(c[0]), round5(c[1])]);
+          } else if (cur.length) {
+            if (cur.length > 1) parts.push(cur);
+            cur = [];
+          }
+        }
+        if (cur.length > 1) parts.push(cur);
+        return parts;
+      }
+
+      function tsunamiExtents(hazard, kind, idx) {
+        const s = stepFor(hazard, kind, idx);
+        const g = hazard.geometry;
+        const span = Math.max(1, hazard.observed.length - 1);
+        let highKm, mediumKm, arcBase;
+        if (s.kind === 'observed') {
+          const t = s.oi / span;
+          highKm = 1.5 + 1.5 * t;
+          mediumKm = 3 + 3 * t;
+          arcBase = 14 + 54 * t;
+        } else {
+          highKm = 2 + 6 * s.p;
+          mediumKm = 4 + 10 * s.p;
+          arcBase = 72 + 10 * s.fi;
+        }
+        const rng = rngFor(hazard, s.date, 'runup');
+        const coast = g.coast;
+        const props = (risk) => ({ risk, schematic: true, kind: 'extent', date: s.date });
+        const features = [
+          feature({ type: 'Polygon', coordinates: coastBand(coast, g.mediumRange[0], g.mediumRange[1], mediumKm, 1.5, rng, hazard.bounds) }, props('medium')),
+          feature({ type: 'Polygon', coordinates: coastBand(coast, g.highRange[0], g.highRange[1], highKm, 1.5, rng, hazard.bounds) }, props('high')),
+        ];
+        for (let k = 0; k < 3; k++) {
+          const r = arcBase - k * 9;
+          if (r < 5) continue;
+          const parts = arrivalArc(g.source, r, hazard.bounds, g.land);
+          if (!parts.length) continue;
+          features.push(
+            feature(
+              { type: 'MultiLineString', coordinates: parts },
+              { kind: 'arrival', risk: 'medium', schematic: true, date: s.date, order: k }
+            )
+          );
+        }
+        return { type: 'FeatureCollection', features };
+      }
+
+      const EXTENT_BUILDERS = { volcano: volcanoExtents, earthquake: earthquakeExtents, tsunami: tsunamiExtents };
+
+      function defineHazard(def) {
+        const hazard = { ...def };
+        const build = EXTENT_BUILDERS[def.id];
+        hazard.riskExtents = (kind, idx) => build(hazard, kind, idx);
+        return Object.freeze(hazard);
+      }
+
+      const obs = (risks) => OBSERVED_DATES.map((date, i) => ({ date, risk: risks[i] }));
+      const fc = (probs, drivers) => FORECAST_DATES.map((date, i) => ({ date, probability: probs[i], driver: drivers[i] }));
+
+      const HAZARD_REGISTRY = Object.freeze({
+        volcano: defineHazard({
+          id: 'volcano',
+          code: 'NISAR-L // VOLCANIC SAR',
+          channelLabel: '01 // VOLCANIC SAR',
+          targetName: 'ASO CALDERA, KUMAMOTO, JP',
+          coords: [131.104, 32.884],
+          zoom: 11.4,
+          bounds: { ...CONFIG.bounds },
+          primaryMetricLabel: 'Eruption / Unrest Probability',
+          pointSeriesLabel: 'Brightness at a point',
+          pointUnit: 'display intensity (synthetic, uncalibrated)',
+          pointNoun: 'pixel brightness',
+          changeLabels: { darker: 'darker than baseline', brighter: 'brighter than baseline' },
+          riskLabels: { high: 'high hazard extent', medium: 'medium hazard extent' },
+          raster: 'sar',
+          observed: obs([0.12, 0.16, 0.22, 0.29, 0.37, 0.44]),
+          forecast: fc(
+            [0.48, 0.62, 0.81, 0.57],
+            [
+              'Simulated driver: continued caldera-floor darkening near Nakadake.',
+              'Simulated driver: the ash lobe spreads beyond the central cone cluster.',
+              'Simulated driver: modelled peak as deformation crosses the fitted threshold.',
+              'Simulated driver: the source re-pressurises and the extent pulls back.',
+            ]
+          ),
+          geometry: {
+            calderaCentre: [131.088, 32.896],
+            rimKm: { a: 9, b: 12.5 },
+            cones: [
+              [0, 0, 72, 1.3, 0.9],
+              [0.012, 0.006, 60, 1.0, 0.8],
+              [-0.026, 0.012, 48, 0.9, 0.7],
+              [-0.03, -0.012, 44, 0.8, 0.7],
+              [0.072, 0.004, 52, 1.1, 0.8],
+            ],
+            ashBearingDeg: 55,
+            ashKm: [0.8, 1.2, 1.7, 2.3, 3.0, 3.8],
+          },
+        }),
+
+        earthquake: defineHazard({
+          id: 'earthquake',
+          code: 'ALOS-4 / USGS-SIM // SEISMIC INSAR',
+          channelLabel: '02 // SEISMIC FAULT',
+          targetName: 'HYUGANADA SUBDUCTION ZONE, JP',
+          coords: [131.85, 32.15],
+          zoom: 8.5,
+          bounds: { west: 130.9, south: 31.5, east: 132.8, north: 32.8 },
+          primaryMetricLabel: 'M6.0+ Aftershock Probability',
+          pointSeriesLabel: 'Line-of-Sight (LOS) Ground Displacement',
+          pointUnit: 'cm (synthetic, illustrative)',
+          pointNoun: 'displacement',
+          changeLabels: { darker: 'subsidence', brighter: 'uplift' },
+          riskLabels: { high: 'MMI VII+', medium: 'MMI V–VI' },
+          raster: 'interferogram',
+          observed: obs([0.05, 0.06, 0.07, 0.74, 0.56, 0.44]),
+          forecast: fc(
+            [0.37, 0.32, 0.28, 0.25],
+            [
+              'Simulated driver: Omori-style aftershock decay two passes after the modelled mainshock.',
+              'Simulated driver: decay continues; modelled stress transfer stays on the northern segment.',
+              'Simulated driver: aftershock rate approaches the pre-event background.',
+              'Simulated driver: residual probability from the modelled slip patch.',
+            ]
+          ),
+          geometry: {
+            fault: [
+              [131.55, 31.7], [131.74, 31.98], [131.88, 32.2], [132.02, 32.42], [132.15, 32.6],
+            ],
+            strikeDeg: 60.4,
+            mainshockIndex: 3,
+            coherenceSeed: 'coh',
+          },
+        }),
+
+        tsunami: defineHazard({
+          id: 'tsunami',
+          code: 'SWOT / DART-SIM // TSUNAMI ALTIMETRY',
+          channelLabel: '03 // TSUNAMI PROPAGATION',
+          targetName: 'BUNGO CHANNEL & MIYAZAKI COAST, JP',
+          coords: [132.1, 32.6],
+          zoom: 8.2,
+          bounds: { west: 131.4, south: 31.9, east: 132.8, north: 33.3 },
+          primaryMetricLabel: 'Coastal Inundation Exceedance (>1m)',
+          pointSeriesLabel: 'Sea-Surface Height Anomaly',
+          pointUnit: 'cm (synthetic, illustrative)',
+          pointNoun: 'sea-surface height',
+          changeLabels: { darker: 'drawdown', brighter: 'crest elevation' },
+          riskLabels: { high: 'run-up high', medium: 'run-up moderate' },
+          raster: 'ssha',
+          observed: obs([0.04, 0.07, 0.11, 0.18, 0.27, 0.39]),
+          forecast: fc(
+            [0.58, 0.71, 0.46, 0.24],
+            [
+              'Simulated driver: leading crest reaches the Hyuga shelf in the propagation model.',
+              'Simulated driver: modelled peak run-up along the Nobeoka–Saiki coast.',
+              'Simulated driver: trailing wave train decays; channel resonance subsides.',
+              'Simulated driver: residual anomaly below the exceedance threshold.',
+            ]
+          ),
+          geometry: {
+            coast: KYUSHU_COAST,
+            land: COAST.land,
+            highRange: [6, 11],
+            mediumRange: [3, 14],
+            source: [132.35, 32.25],
+          },
+        }),
+      });
+
+      function getHazard(id) {
+        return HAZARD_REGISTRY[id];
+      }
+
+      function defaultHazard() {
+        return getHazard(CONFIG.defaultHazard) || HAZARD_REGISTRY.volcano;
+      }
+
+      /* ========================================================================
+         MODULE 2: TELEMETRY SERVICE & PROCEDURAL RASTERS (js/telemetry.js)
+         ======================================================================== */
+      const RASTER_SIZE = 512;
+      const SPECKLE_SEED = 0x5eed4a11;
+      const CHANGE_THRESHOLD = 18;
+      const N_PIX = RASTER_SIZE * RASTER_SIZE;
+      const TAU = Math.PI * 2;
+      const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+      const smoothstep = (a, b, x) => {
+        const t = clamp01((x - a) / (b - a));
+        return t * t * (3 - 2 * t);
+      };
+
+      const speckleCache = new Map();
+      function speckleField() {
+        let S = speckleCache.get(SPECKLE_SEED);
+        if (S) return S;
+        const rng = mulberry32(SPECKLE_SEED);
+        S = new Float32Array(N_PIX);
+        for (let i = 0; i < N_PIX; i++) {
+          let s = 0;
+          for (let k = 0; k < 4; k++) s -= Math.log(1 - rng());
+          S[i] = s * 0.25;
+        }
+        speckleCache.set(SPECKLE_SEED, S);
+        return S;
+      }
+
+      function makeNoise(seed) {
+        const rng = mulberry32(seed);
+        const p = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) p[i] = i;
+        for (let i = 255; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          const t = p[i];
+          p[i] = p[j];
+          p[j] = t;
+        }
+        const perm = new Uint8Array(512);
+        for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+        const vals = new Float32Array(256);
+        for (let i = 0; i < 256; i++) vals[i] = rng();
+
+        function noise(x, y) {
+          const xi = Math.floor(x);
+          const yi = Math.floor(y);
+          const fx = x - xi;
+          const fy = y - yi;
+          const sx = fx * fx * (3 - 2 * fx);
+          const sy = fy * fy * (3 - 2 * fy);
+          const X = xi & 255;
+          const Y = yi & 255;
+          const r0 = perm[Y];
+          const r1 = perm[Y + 1];
+          const a = vals[perm[X + r0]];
+          const b = vals[perm[X + 1 + r0]];
+          const c = vals[perm[X + r1]];
+          const d = vals[perm[X + 1 + r1]];
+          const top = a + (b - a) * sx;
+          const bot = c + (d - c) * sx;
+          return top + (bot - top) * sy;
+        }
+
+        function fbm(x, y, octaves) {
+          let sum = 0;
+          let amp = 0.5;
+          let norm = 0;
+          let f = 1;
+          for (let o = 0; o < octaves; o++) {
+            sum += amp * noise(x * f + o * 17.17, y * f + o * 31.31);
+            norm += amp;
+            amp *= 0.5;
+            f *= 2;
+          }
+          return sum / norm;
+        }
+
+        return { noise, fbm };
+      }
+
+      function frameOf(bounds) {
+        const midLat = (bounds.north + bounds.south) / 2;
+        const kmLon = kmPerDegLon(midLat);
+        const kmW = (bounds.east - bounds.west) * kmLon;
+        const kmH = (bounds.north - bounds.south) * KM_PER_DEG_LAT;
+        const W = RASTER_SIZE;
+        return {
+          bounds,
+          W,
+          kmLon,
+          kmW,
+          kmH,
+          pxPerKmX: W / kmW,
+          pxPerKmY: W / kmH,
+          lngToX: (lng) => ((lng - bounds.west) / (bounds.east - bounds.west)) * W,
+          latToY: (lat) => ((bounds.north - lat) / (bounds.north - bounds.south)) * W,
+          xToLng: (x) => bounds.west + ((x + 0.5) / W) * (bounds.east - bounds.west),
+          yToLat: (y) => bounds.north - ((y + 0.5) / W) * (bounds.north - bounds.south),
+          lngToKmX: (lng) => (lng - bounds.west) * kmLon,
+          latToKmY: (lat) => (lat - bounds.south) * KM_PER_DEG_LAT,
+        };
+      }
+
+      function distanceToPolyline(px, py, line) {
+        let best = Infinity;
+        let side = 1;
+        for (let i = 0; i + 1 < line.length; i++) {
+          const ax = line[i][0];
+          const ay = line[i][1];
+          const bx = line[i + 1][0];
+          const by = line[i + 1][1];
+          const dx = bx - ax;
+          const dy = by - ay;
+          const len2 = dx * dx + dy * dy || 1;
+          const t = clamp01(((px - ax) * dx + (py - ay) * dy) / len2);
+          const cx = ax + t * dx;
+          const cy = ay + t * dy;
+          const d = Math.hypot(px - cx, py - cy);
+          if (d < best) {
+            best = d;
+            side = dx * (py - ay) - dy * (px - ax) >= 0 ? 1 : -1;
+          }
+        }
+        return { d: best, side };
+      }
+
+      const staticCache = new Map();
+
+      function buildSarStatic(hazard) {
+        const f = frameOf(hazard.bounds);
+        const { W } = f;
+        const g = hazard.geometry;
+        const nz = makeNoise(seedFrom(`sar|${hazard.id}`));
+
+        const terrain = new Float32Array(N_PIX);
+        for (let y = 0; y < W; y++) {
+          for (let x = 0; x < W; x++) terrain[y * W + x] = nz.fbm(x / 48, y / 48, 5);
+        }
+
+        const base = new Float32Array(N_PIX);
+        const elevation = new Float32Array(N_PIX); // 3D DEM heightfield [0..1]
+        const fromVent = new Float32Array(N_PIX);
+        const lobe = new Float32Array(N_PIX);
+        const wobble = new Float32Array(N_PIX);
+
+        const vx = f.lngToX(hazard.coords[0]);
+        const vy = f.latToY(hazard.coords[1]);
+        const cx = f.lngToX(g.calderaCentre[0]);
+        const cy = f.latToY(g.calderaCentre[1]);
+        const CAL_A = g.rimKm.a * f.pxPerKmX;
+        const CAL_B = g.rimKm.b * f.pxPerKmY;
+        const cones = g.cones.map(([dLng, dLat, amp, sxKm, syKm]) => ({
+          x: f.lngToX(hazard.coords[0] + dLng),
+          y: f.latToY(hazard.coords[1] + dLat),
+          amp,
+          sx: sxKm * f.pxPerKmX,
+          sy: syKm * f.pxPerKmY,
+        }));
+        const ashBearing = toRad(g.ashBearingDeg);
+
+        for (let y = 0; y < W; y++) {
+          for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            const t = terrain[i];
+            const gx = terrain[i + (x < W - 1 ? 1 : 0)] - terrain[i - (x > 0 ? 1 : 0)];
+            const shade = clamp(gx * 22, -0.6, 0.6);
+            let v = (70 + 60 * t) * (1 + 0.5 * shade);
+
+            const ex = (x - cx) / CAL_A;
+            const ey = (y - cy) / CAL_B;
+            const rim = Math.hypot(ex, ey);
+            const bump = Math.exp(-((rim - 1) * (rim - 1)) / 0.006);
+            const facing = rim > 1e-3 ? (-(rim - 1) * ex) / rim : 0;
+            v += 85 * bump * (1 + 0.6 * clamp(facing * 4, -1, 1));
+            const floorBowl = Math.exp(-(rim * rim) / 0.35);
+            v -= 26 * floorBowl;
+
+            // Physical 3D elevation profile for Aso Caldera:
+            // Outer somma slope + sharp somma caldera rim + depressed caldera floor + Nakadake cones
+            let elev = 0.22 * t + 0.45 * Math.exp(-((rim - 1) * (rim - 1)) / 0.018) - 0.22 * floorBowl;
+
+            for (let c = 0; c < cones.length; c++) {
+              const k = cones[c];
+              const dx = (x - k.x) / k.sx;
+              const dy = (y - k.y) / k.sy;
+              const r2 = dx * dx + dy * dy;
+              const e = Math.exp(-r2 / 0.6);
+              v += k.amp * e * (1 - 0.45 * clamp(dx, -1, 1));
+              elev += (k.amp / 72) * 0.68 * Math.exp(-r2 / 0.72);
+              // Central Nakadake crater pit at cone 0
+              if (c === 0) {
+                elev -= 0.26 * Math.exp(-r2 / 0.07);
+              }
+            }
+            base[i] = v;
+            elevation[i] = clamp(elev, -0.25, 1.25);
+
+            const dxk = (x - vx) / f.pxPerKmX;
+            const dyk = (y - vy) / f.pxPerKmY;
+            fromVent[i] = Math.hypot(dxk, dyk);
+            const bearing = Math.atan2(-(y - vy), x - vx);
+            lobe[i] = 1 + 0.55 * Math.cos(bearing - ashBearing);
+            wobble[i] = 0.65 + 0.7 * nz.fbm(x / 64 + 100, y / 64 + 100, 3);
+          }
+        }
+        return { type: 'sar', base, elevation, fromVent, lobe, wobble, speckleStrength: 1 };
+      }
+
+      function buildInterferogramStatic(hazard) {
+        const f = frameOf(hazard.bounds);
+        const { W } = f;
+        const g = hazard.geometry;
+        const nz = makeNoise(seedFrom(`ifg|${hazard.id}`));
+        const land = COAST.land;
+
+        const terrain = new Float32Array(N_PIX);
+        const coh = new Float32Array(N_PIX);
+        const dist = new Float32Array(N_PIX);
+        const side = new Int8Array(N_PIX);
+        const elevation = new Float32Array(N_PIX);
+        const faultKm = g.fault.map(([lng, lat]) => [f.lngToKmX(lng), f.latToKmY(lat)]);
+
+        for (let y = 0; y < W; y++) {
+          const lat = f.yToLat(y);
+          const kmy = (W - y - 0.5) * (f.kmH / W);
+          for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            const lng = f.xToLng(x);
+            const kmx = (x + 0.5) * (f.kmW / W);
+            terrain[i] = nz.fbm(x / 56, y / 56, 5);
+            const onLand = land.some((r) => pointInRing(lng, lat, r));
+            coh[i] = onLand ? smoothstep(0.36, 0.64, nz.fbm(x / 40 + 7, y / 40 + 7, 4)) : 0;
+            const r = distanceToPolyline(kmx, kmy, faultKm);
+            dist[i] = r.d;
+            side[i] = r.side;
+            // 3D bathymetry + Kyushu mountain relief + subduction trench scarp
+            const trench = -0.35 * Math.exp(-(r.d * r.d) / 45);
+            elevation[i] = (onLand ? 0.32 + 0.55 * terrain[i] : -0.15 + 0.12 * terrain[i]) + trench + (r.side > 0 ? 0.12 : -0.08) * Math.exp(-r.d / 28);
+          }
+        }
+        return { type: 'interferogram', terrain, coh, dist, side, elevation, speckleStrength: 0.55 };
+      }
+
+      function buildSshaStatic(hazard) {
+        const f = frameOf(hazard.bounds);
+        const { W } = f;
+        const g = hazard.geometry;
+        const nz = makeNoise(seedFrom(`ssha|${hazard.id}`));
+
+        const land = new Uint8Array(N_PIX);
+        const tex = new Float32Array(N_PIX);
+        const dist = new Float32Array(N_PIX);
+        const elevation = new Float32Array(N_PIX);
+        const coastKm = g.coast.map(([lng, lat]) => [f.lngToKmX(lng), f.latToKmY(lat)]);
+
+        for (let y = 0; y < W; y++) {
+          const lat = f.yToLat(y);
+          const kmy = (W - y - 0.5) * (f.kmH / W);
+          for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            const lng = f.xToLng(x);
+            const kmx = (x + 0.5) * (f.kmW / W);
+            const onLand = g.land.some((r) => pointInRing(lng, lat, r));
+            land[i] = onLand ? 1 : 0;
+            if (onLand) {
+              const t = nz.fbm(x / 36, y / 36, 4);
+              tex[i] = 28 + 36 * t;
+              dist[i] = 0;
+              elevation[i] = 0.25 + 0.55 * t;
+            } else {
+              const t = nz.fbm(x / 90 + 3, y / 90 + 3, 3);
+              tex[i] = 118 + 14 * (t - 0.5);
+              dist[i] = distanceToPolyline(kmx, kmy, coastKm).d;
+              elevation[i] = 0.0;
+            }
+          }
+        }
+        return { type: 'ssha', land, tex, dist, elevation, speckleStrength: 0.3 };
+      }
+
+      const STATIC_BUILDERS = {
+        sar: buildSarStatic,
+        interferogram: buildInterferogramStatic,
+        ssha: buildSshaStatic,
+      };
+
+      function staticFor(hazard) {
+        let st = staticCache.get(hazard.id);
+        if (!st) {
+          const build = STATIC_BUILDERS[hazard.raster];
+          st = build(hazard);
+          staticCache.set(hazard.id, st);
+        }
+        return st;
+      }
+
+      function ashRadiusKm(hazard, idx, count) {
+        const table = hazard.geometry && hazard.geometry.ashKm;
+        if (table && count === table.length) return table[idx];
+        const span = Math.max(1, count - 1);
+        return 0.8 + 3.0 * (idx / span);
+      }
+
+      function renderSar(hazard, st, idx, count, out, S) {
+        const r = ashRadiusKm(hazard, idx, count);
+        const rough = idx >= 3 ? (idx - 2) * 0.08 : 0;
+        const { base, fromVent, lobe, wobble } = st;
+        for (let i = 0; i < N_PIX; i++) {
+          let v = base[i];
+          const edge = clamp01((r * lobe[i] * wobble[i] - fromVent[i]) / 1.2);
+          v *= 1 - 0.78 * edge;
+          if (rough > 0) {
+            const d = fromVent[i] - 0.6;
+            v += 160 * rough * Math.exp(-(d * d) / 0.03);
+          }
+          v = clamp(v, 0, 255) * S[i];
+          const q = v < 0 ? 0 : v > 255 ? 255 : (v + 0.5) | 0;
+          const o = i * 4;
+          out[o] = q;
+          out[o + 1] = q;
+          out[o + 2] = q;
+          out[o + 3] = 255;
+        }
+      }
+
+      function renderInterferogram(hazard, st, idx, count, out, S) {
+        const mainshock = (hazard.geometry && hazard.geometry.mainshockIndex) ?? 3;
+        const fringes = idx < mainshock ? 0.35 + 0.1 * idx : 5 + 0.45 * (idx - mainshock);
+        const kEast = TAU * fringes;
+        const kWest = TAU * fringes * 0.72;
+        const { terrain, coh, dist, side } = st;
+        for (let i = 0; i < N_PIX; i++) {
+          const d = dist[i];
+          const c = coh[i];
+          const disp = side[i] > 0 ? Math.exp(-d / 40) : Math.exp(-d / 28);
+          const phase = (side[i] > 0 ? kEast : kWest) * disp;
+          const fringe = 0.5 + 0.5 * Math.cos(phase);
+          let v = (35 + 70 * terrain[i]) * (1 - 0.65 * c) + c * 200 * fringe;
+          v = clamp(v, 0, 255) * S[i];
+          const q = v < 0 ? 0 : v > 255 ? 255 : (v + 0.5) | 0;
+          const o = i * 4;
+          out[o] = q;
+          out[o + 1] = q;
+          out[o + 2] = q;
+          out[o + 3] = 255;
+        }
+      }
+
+      function renderSsha(hazard, st, idx, count, out, S) {
+        const span = Math.max(1, count - 1);
+        const t = idx / span;
+        const front = 100 - 75 * t;
+        const amp = 64 * (1 + 0.45 * t);
+        const { land, tex, dist } = st;
+        for (let i = 0; i < N_PIX; i++) {
+          let v = tex[i];
+          if (!land[i]) {
+            const d = dist[i];
+            const lambda = 14 + 0.1 * d;
+            const env = Math.exp(-((d - front) * (d - front)) / (22 * 22));
+            v += amp * env * Math.sin((TAU * (d - front)) / lambda);
+          }
+          v = clamp(v, 0, 255) * S[i];
+          const q = v < 0 ? 0 : v > 255 ? 255 : (v + 0.5) | 0;
+          const o = i * 4;
+          out[o] = q;
+          out[o + 1] = q;
+          out[o + 2] = q;
+          out[o + 3] = 255;
+        }
+      }
+
+      const RENDERERS = { sar: renderSar, interferogram: renderInterferogram, ssha: renderSsha };
+
+      const scaledSpeckleCache = new Map();
+      function speckleFor(strength) {
+        const S = speckleField();
+        if (strength === 1) return S;
+        let out = scaledSpeckleCache.get(strength);
+        if (!out) {
+          out = new Float32Array(N_PIX);
+          for (let i = 0; i < N_PIX; i++) out[i] = 1 + (S[i] - 1) * strength;
+          scaledSpeckleCache.set(strength, out);
+        }
+        return out;
+      }
+
+      function createCanvas(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+      }
+
+      function boxBlur3(imageData) {
+        const w = imageData.width;
+        const h = imageData.height;
+        const src = imageData.data;
+        const tmp = new Float32Array(w * h);
+        const out = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) {
+          const row = y * w;
+          for (let x = 0; x < w; x++) {
+            const xl = x > 0 ? x - 1 : x;
+            const xr = x < w - 1 ? x + 1 : x;
+            tmp[row + x] = (src[(row + xl) * 4] + src[(row + x) * 4] + src[(row + xr) * 4]) / 3;
+          }
+        }
+        for (let y = 0; y < h; y++) {
+          const yu = y > 0 ? y - 1 : y;
+          const yd = y < h - 1 ? y + 1 : y;
+          for (let x = 0; x < w; x++) {
+            out[y * w + x] = (tmp[yu * w + x] + tmp[y * w + x] + tmp[yd * w + x]) / 3;
+          }
+        }
+        return out;
+      }
+
+      class TelemetryService {
+        constructor(config = CONFIG, registry = HAZARD_REGISTRY) {
+          this.config = config;
+          this.registry = registry;
+          this.rasterCache = new Map();
+          this.timelines = new Map();
+        }
+
+        hazard(hazardId) {
+          const hazard = (this.registry && this.registry[hazardId]) || getHazard(hazardId);
+          if (!hazard) throw new Error(`Unknown hazard "${hazardId}"`);
+          return hazard;
+        }
+
+        observedSteps(hazardId) {
+          const tl = this.timelines.get(hazardId);
+          if (tl) return tl.filter((s) => s.kind === 'observed');
+          return this.hazard(hazardId).observed.map((o, i) => ({ ...o, kind: 'observed', index: i }));
+        }
+
+        async getTimeline(hazardId) {
+          const hazard = this.hazard(hazardId);
+          const timeline = timelineOf(hazard);
+          this.timelines.set(hazardId, timeline);
+          return timeline;
+        }
+
+        getRaster(hazardId, dateIndex) {
+          const hazard = this.hazard(hazardId);
+          const observed = this.observedSteps(hazardId);
+          const step = observed[dateIndex];
+          if (!step) {
+            return Promise.reject(new Error(`No satellite pass at index ${dateIndex} for ${hazardId}`));
+          }
+          const key = `${hazardId}|${step.date}`;
+          const cached = this.rasterCache.get(key);
+          if (cached) return cached;
+          const job = Promise.resolve().then(() => {
+            const st = staticFor(hazard);
+            const render = RENDERERS[st.type];
+            const S = speckleFor(st.speckleStrength);
+            const canvas = createCanvas(RASTER_SIZE, RASTER_SIZE);
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.createImageData(RASTER_SIZE, RASTER_SIZE);
+            render(hazard, st, dateIndex, observed.length, imageData.data, S);
+            ctx.putImageData(imageData, 0, 0);
+            return { canvas, imageData, url: canvas.toDataURL('image/png'), source: 'procedural' };
+          });
+          this.rasterCache.set(key, job);
+          return job;
+        }
+
+        sample(imageData, bounds, lng, lat) {
+          if (!imageData || !bounds) return null;
+          if (!(lng >= bounds.west && lng <= bounds.east && lat >= bounds.south && lat <= bounds.north)) return null;
+          const w = imageData.width;
+          const h = imageData.height;
+          const x = Math.floor(((lng - bounds.west) / (bounds.east - bounds.west)) * w);
+          const y = Math.floor(((bounds.north - lat) / (bounds.north - bounds.south)) * h);
+          const cx = Math.min(w - 1, Math.max(0, x));
+          const cy = Math.min(h - 1, Math.max(0, y));
+          return imageData.data[(cy * w + cx) * 4] / 255;
+        }
+
+        changeCanvas(baseData, currentData, isSame) {
+          const w = (baseData && baseData.width) || (currentData && currentData.width) || RASTER_SIZE;
+          const h = (baseData && baseData.height) || (currentData && currentData.height) || RASTER_SIZE;
+          const canvas = createCanvas(w, h);
+          if (isSame || !baseData || !currentData) return canvas;
+          const ctx = canvas.getContext('2d');
+          const a = boxBlur3(baseData);
+          const b = boxBlur3(currentData);
+          const out = ctx.createImageData(w, h);
+          const d = out.data;
+          for (let i = 0; i < a.length; i++) {
+            const diff = b[i] - a[i];
+            const mag = diff < 0 ? -diff : diff;
+            if (mag < CHANGE_THRESHOLD) continue;
+            const o = i * 4;
+            if (diff < 0) {
+              d[o] = 43;
+              d[o + 1] = 131;
+              d[o + 2] = 255;
+            } else {
+              d[o] = 255;
+              d[o + 1] = 140;
+              d[o + 2] = 40;
+            }
+            d[o + 3] = Math.min(255, 70 + mag * 2.2);
+          }
+          ctx.putImageData(out, 0, 0);
+          return canvas;
+        }
+      }
+
+      /* ========================================================================
+         MODULE 3: PURE SVG CHARTS BUILDER (js/charts.js)
+         ======================================================================== */
+      const CHART_W = 300;
+      const CHART_H = 130;
+      const CHART_PAD = Object.freeze({ l: 30, r: 8, t: 10, b: 20 });
+      const HIT_RADIUS = 9;
+      const DOT_RADIUS = 2.5;
+      const DIAMOND_SIDE = 5;
+      const DIAMOND_ACTIVE_SIDE = 8;
+      const HATCH_STROKE = 'rgba(191,209,229,.18)';
+      const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+      function escapeXml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function safeId(id) {
+        const cleaned = String(id ?? 'chart').replace(/[^A-Za-z0-9_-]/g, '-');
+        return cleaned || 'chart';
+      }
+
+      const fmt2 = (v) => Number(v).toFixed(2);
+      const round2 = (v) => Math.round(v * 100) / 100;
+      const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+      const countWord = (n) => (n >= 0 && n < NUMBER_WORDS.length ? NUMBER_WORDS[n] : String(n));
+
+      function formatTick(v) {
+        if (Number.isInteger(v)) return String(v);
+        let s = Number(v).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+        s = s.replace(/^(-?)0\./, '$1.');
+        return s;
+      }
+
+      function plotFrame({
+        id,
+        width = CHART_W,
+        height = CHART_H,
+        n,
+        nowIndex,
+        hasForecast,
+        yDomain = [0, 1],
+        title,
+        desc,
+        firstLabel = '',
+        lastLabel = '',
+      } = {}) {
+        const sid = safeId(id);
+        const pad = { ...CHART_PAD };
+        const count = Math.max(0, Number(n) || 0);
+        const span = count > 1 ? count - 1 : 1;
+        const plotW = width - pad.l - pad.r;
+        const plotH = height - pad.t - pad.b;
+        const [d0, d1raw] = yDomain;
+        const d1 = d1raw === d0 ? d0 + 1 : d1raw;
+
+        const x = (i) => round2(pad.l + (i / span) * plotW);
+        const y = (v) => round2(pad.t + (1 - (v - d0) / (d1 - d0)) * plotH);
+
+        const showNow = Boolean(hasForecast) && isNum(nowIndex) && nowIndex >= 0 && count > 1;
+        const nowX = showNow ? x(nowIndex + 0.5) : null;
+        const rightX = width - pad.r;
+
+        const titleId = `${sid}-title`;
+        const descId = `${sid}-desc`;
+
+        let open = `<svg class="chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${titleId} ${descId}" data-chart="${sid}">`;
+        open += `<title id="${titleId}">${escapeXml(title ?? '')}</title>`;
+        open += `<desc id="${descId}">${escapeXml(desc ?? '')}</desc>`;
+
+        if (showNow) {
+          open +=
+            '<defs>' +
+            `<pattern id="hatch-${sid}" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">` +
+            `<line class="chart-hatch-line" x1="0" y1="0" x2="0" y2="6" stroke="${HATCH_STROKE}" stroke-width="1"/>` +
+            '</pattern></defs>';
+          open += `<rect class="chart-hatch" fill="url(#hatch-${sid})" x="${nowX}" y="${pad.t}" width="${round2(rightX - nowX)}" height="${plotH}"/>`;
+        }
+
+        const ticks = [d0, (d0 + d1) / 2, d1];
+        for (const t of ticks) {
+          const ty = y(t);
+          open += `<line class="chart-grid" x1="${pad.l}" x2="${rightX}" y1="${ty}" y2="${ty}"/>`;
+          open += `<text class="chart-axis" x="${pad.l - 4}" y="${ty + 3}" text-anchor="end">${escapeXml(formatTick(t))}</text>`;
+        }
+
+        const labelY = height - 6;
+        if (firstLabel) {
+          open += `<text class="chart-axis" x="${pad.l}" y="${labelY}" text-anchor="start">${escapeXml(firstLabel)}</text>`;
+        }
+        if (lastLabel && count > 1) {
+          open += `<text class="chart-axis" x="${rightX}" y="${labelY}" text-anchor="end">${escapeXml(lastLabel)}</text>`;
+        }
+
+        let close = '';
+        if (showNow) {
+          close += `<line class="chart-now" x1="${nowX}" x2="${nowX}" y1="${pad.t}" y2="${pad.t + plotH}"/>`;
+          close += `<text class="chart-axis chart-now-label" x="${nowX + 3}" y="${pad.t + 8}" text-anchor="start">NOW</text>`;
+        }
+        close += '</svg>';
+
+        return { open, close, x, y, pad, width, height, plotW, plotH, nowX, rightX, showNow };
+      }
+
+      function emptyText(frame, message) {
+        const cx = round2(frame.pad.l + frame.plotW / 2);
+        const cy = round2(frame.pad.t + frame.plotH / 2 + 3);
+        return `<text class="chart-empty" x="${cx}" y="${cy}" text-anchor="middle">${escapeXml(message)}</text>`;
+      }
+
+      function hatchText(frame, message) {
+        const cx = round2((frame.nowX + frame.rightX) / 2);
+        const cy = round2(frame.pad.t + frame.plotH / 2 + 3);
+        return `<text class="chart-empty" x="${cx}" y="${cy}" text-anchor="middle">${escapeXml(message)}</text>`;
+      }
+
+      function polyline(points, className) {
+        if (points.length < 2) return '';
+        const pts = points.map((p) => `${p.x},${p.y}`).join(' ');
+        return `<polyline class="${className}" fill="none" points="${pts}"/>`;
+      }
+
+      function diamond(cx, cy, side, className, index) {
+        const half = side / 2;
+        return `<rect class="${className}" data-index="${index}" x="${round2(cx - half)}" y="${round2(cy - half)}" width="${side}" height="${side}" transform="rotate(45 ${cx} ${cy})"/>`;
+      }
+
+      function markGroup({ index, cx, cy, kind, active, tooltip }) {
+        const t = `<title>${escapeXml(tooltip)}</title>`;
+        let mark;
+        if (kind === 'observed') {
+          const cls = active ? 'chart-dot chart-dot--active' : 'chart-dot';
+          mark = `<circle class="${cls}" data-index="${index}" cx="${cx}" cy="${cy}" r="${active ? 4.5 : DOT_RADIUS}">${t}</circle>`;
+        } else if (active) {
+          mark = diamond(cx, cy, DIAMOND_ACTIVE_SIDE, 'chart-diamond--active', index).replace('/>', `>${t}</rect>`);
+        } else {
+          mark = diamond(cx, cy, DIAMOND_SIDE, 'chart-dot--model', index).replace('/>', `>${t}</rect>`);
+        }
+        return (
+          `<g class="chart-hit" data-index="${index}" cursor="pointer">${t}` +
+          `<circle cx="${cx}" cy="${cy}" r="${HIT_RADIUS}" fill="none" pointer-events="all"/>` +
+          `${mark}</g>`
+        );
+      }
+
+      function splitTimeline(timeline) {
+        const list = Array.isArray(timeline) ? timeline : [];
+        const observed = [];
+        const forecast = [];
+        list.forEach((step, i) => {
+          if (!step) return;
+          if (step.kind === 'forecast') forecast.push({ ...step, i });
+          else observed.push({ ...step, i });
+        });
+        return { list, observed, forecast };
+      }
+
+      function listValues(entries, key) {
+        return entries
+          .filter((e) => isNum(e[key]))
+          .map((e) => `${formatDate(e.date)} ${fmt2(e[key])}`)
+          .join(', ');
+      }
+
+      function riskChart({ timeline, activeIndex, label } = {}) {
+        const { list, observed, forecast } = splitTimeline(timeline);
+        const n = list.length;
+        const nowIndex = observed.length - 1;
+        const hasForecast = forecast.length > 0;
+        const name = label || 'Risk over time';
+
+        const obsPts = observed.filter((s) => isNum(s.risk)).map((s) => ({ i: s.i, v: s.risk, date: s.date, kind: 'observed' }));
+        const fcPts = forecast.filter((s) => isNum(s.probability)).map((s) => ({ i: s.i, v: s.probability, date: s.date, kind: 'forecast' }));
+
+        let desc = `${name}. Observed: ${listValues(observed, 'risk') || 'none'}.`;
+        if (hasForecast) {
+          desc += ` Placeholder model: ${listValues(forecast, 'probability') || 'none'}. Model values are synthetic and not validated.`;
+        }
+
+        const frame = plotFrame({
+          id: 'risk',
+          n,
+          nowIndex,
+          hasForecast,
+          title: hasForecast ? `${name}: observed sample passes and placeholder model projection` : `${name}: observed sample passes`,
+          desc,
+          firstLabel: n > 0 ? formatShort(list[0].date) : '',
+          lastLabel: n > 1 ? formatShort(list[n - 1].date) : '',
+        });
+
+        const allPts = [...obsPts, ...fcPts];
+        if (n <= 1 || allPts.length === 0) {
+          return frame.open + emptyText(frame, 'No data to plot') + frame.close;
+        }
+
+        let body = '';
+        const toXY = (p) => ({ x: frame.x(p.i), y: frame.y(p.v) });
+        body += polyline(obsPts.map(toXY), 'chart-line');
+
+        const bridge = obsPts.length > 0 ? [obsPts[obsPts.length - 1], ...fcPts] : fcPts;
+        body += polyline(bridge.map(toXY), 'chart-line chart-line--model');
+
+        for (const p of allPts) {
+          const { x, y } = toXY(p);
+          const tooltip = p.kind === 'observed' ? `${formatDate(p.date)}: ${fmt2(p.v)}` : `${formatDate(p.date)}: model ${fmt2(p.v)}`;
+          body += markGroup({ index: p.i, cx: x, cy: y, kind: p.kind, active: p.i === activeIndex, tooltip });
+        }
+
+        return frame.open + body + frame.close;
+      }
+
+      function pointChart({
+        values,
+        timeline,
+        activeIndex,
+        label,
+        unit,
+        noun,
+        yDomain = [0, 1],
+        emptyMessage = 'No point selected',
+      } = {}) {
+        const { list, observed, forecast } = splitTimeline(timeline);
+        const n = list.length;
+        const nowIndex = observed.length - 1;
+        const hasForecast = forecast.length > 0;
+        const name = label || 'Value at a point';
+        const unitText = unit || 'display intensity (synthetic, uncalibrated)';
+        const nounText = noun || 'pixel brightness';
+
+        const series = Array.isArray(values) ? values : [];
+        const pts = [];
+        series.forEach((v, k) => {
+          if (isNum(v) && observed[k]) pts.push({ i: observed[k].i, v, date: observed[k].date });
+        });
+
+        let desc = pts.length
+          ? `${name}: ${countWord(pts.length)} observed values in ${unitText}.`
+          : `${name}: no point selected.`;
+        if (hasForecast) {
+          desc += ` No future ${nounText} values: no satellite pass has occurred after NOW.`;
+        }
+
+        const frame = plotFrame({
+          id: 'point',
+          n,
+          nowIndex,
+          hasForecast,
+          yDomain,
+          title: `${name} (${unitText})`,
+          desc,
+          firstLabel: n > 0 ? formatShort(list[0].date) : '',
+          lastLabel: n > 1 ? formatShort(list[n - 1].date) : '',
+        });
+
+        if (n <= 1 || pts.length === 0) {
+          const message = series.length === 0 ? emptyMessage : 'No data to plot';
+          return frame.open + emptyText(frame, message) + frame.close;
+        }
+
+        let body = '';
+        const toXY = (p) => ({ x: frame.x(p.i), y: frame.y(p.v) });
+        body += polyline(pts.map(toXY), 'chart-line');
+
+        for (const p of pts) {
+          const { x, y } = toXY(p);
+          body += markGroup({
+            index: p.i,
+            cx: x,
+            cy: y,
+            kind: 'observed',
+            active: p.i === activeIndex,
+            tooltip: `${formatDate(p.date)}: ${fmt2(p.v)}`,
+          });
+        }
+
+        if (frame.showNow) {
+          body += hatchText(frame, 'No data yet');
+        }
+
+        return frame.open + body + frame.close;
+      }
+
+      /* ========================================================================
+         MODULE 4: THREE.JS + GSAP 2D-TO-3D TELEMETRY MAP ENGINE (js/map.js)
+         Replaces flat tile map with an interactive 2D-to-3D extruded SAR terrain
+         workstation supporting click-to-zoom, orbital rotation in 3D, 3D dashed
+         risk rings, and compound hazard overlays.
+         ======================================================================== */
+      class TelemetryViewport3D {
+        constructor(container, { onClick }) {
+          this.container = container;
+          this.onClick = onClick;
+          this.width = container.clientWidth || window.innerWidth;
+          this.height = container.clientHeight || window.innerHeight;
+
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(0x07090e);
+          this.scene.fog = new THREE.FogExp2(0x07090e, 0.008);
+
+          this.camera = new THREE.PerspectiveCamera(38, this.width / this.height, 0.1, 300);
+
+          this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+          this.renderer.setSize(this.width, this.height);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          container.appendChild(this.renderer.domElement);
+
+          // World plane dimensions: footprint is 18 x 15 world units centered at (0,0,0)
+          this.planeW = 18;
+          this.planeH = 15;
+
+          // Camera Spherical Orbit Rig (target, radius, polarAngle=pitch, azimuth=bearing)
+          this.rig = {
+            targetX: 0,
+            targetY: 0,
+            targetZ: 0,
+            radius: 25.5,
+            pitchDeg: 0,    // 0° = strict 2D flat north-up; 58° = 3D extruded perspective
+            azimuthDeg: 0,  // 0° = North-up
+            extrusion: 0,   // 0.0 = flat 2D plane; 1.0 = full 3D DEM displacement
+          };
+
+          this.is3D = false;
+          this.currentHazard = HAZARD_REGISTRY.volcano;
+          this.currentView = null;
+
+          this.compositeCanvas = createCanvas(RASTER_SIZE, RASTER_SIZE);
+          this.compositeCtx = this.compositeCanvas.getContext('2d');
+          this.rasterTexture = new THREE.CanvasTexture(this.compositeCanvas);
+          this.rasterTexture.minFilter = THREE.LinearFilter;
+          this.rasterTexture.magFilter = THREE.NearestFilter;
+
+          this.heightCanvas = createCanvas(RASTER_SIZE, RASTER_SIZE);
+          this.heightCtx = this.heightCanvas.getContext('2d');
+          this.heightTexture = new THREE.CanvasTexture(this.heightCanvas);
+          this.heightTexture.minFilter = THREE.LinearFilter;
+          this.heightTexture.magFilter = THREE.LinearFilter;
+
+          this._buildSceneObjects();
+          this._bindInteraction();
+          this._syncCameraFromRig();
+        }
+
+        _buildSceneObjects() {
+          // 1. Surrounding Obsidian Basemap Graticule & Topographic Context Grid
+          this.basemapGroup = new THREE.Group();
+          const gridHelper = new THREE.GridHelper(90, 60, 0x1e293b, 0x111722);
+          gridHelper.position.y = -0.05;
+          this.basemapGroup.add(gridHelper);
+
+          // Subtle concentric radar range rings on surrounding dark canvas
+          const ringMat = new THREE.LineBasicMaterial({ color: 0x192334, transparent: true, opacity: 0.65 });
+          [12, 18, 26, 36].forEach((radius) => {
+            const pts = [];
+            for (let i = 0; i <= 96; i++) {
+              const a = (i / 96) * TAU;
+              pts.push(new THREE.Vector3(Math.cos(a) * radius, -0.04, Math.sin(a) * radius));
+            }
+            const geo = new THREE.BufferGeometry().setFromPoints(pts);
+            this.basemapGroup.add(new THREE.Line(geo, ringMat));
+          });
+          this.scene.add(this.basemapGroup);
+
+          // 2. Extrudable 2D/3D SAR Terrain Mesh (220x220 segments)
+          const geo = new THREE.PlaneGeometry(this.planeW, this.planeH, 220, 220);
+          geo.rotateX(-Math.PI / 2);
+
+          this.terrainUniforms = {
+            uRasterTex: { value: this.rasterTexture },
+            uHeightTex: { value: this.heightTexture },
+            uOpacity: { value: 0.85 },
+            uExtrusion: { value: 0.0 },
+            uIsForecast: { value: 0.0 },
+            uTime: { value: 0.0 },
+          };
+
+          this.terrainMaterial = new THREE.ShaderMaterial({
+            uniforms: this.terrainUniforms,
+            transparent: true,
+            vertexShader: `
+              uniform sampler2D uHeightTex;
+              uniform float uExtrusion;
+              varying vec2 vUv;
+              varying float vElev;
+              void main() {
+                vUv = uv;
+                float h = texture2D(uHeightTex, uv).r;
+                // Center neutral elevation around 0.22 so edges sit near y=0
+                float disp = (h - 0.20) * 3.35 * uExtrusion;
+                vElev = disp;
+                vec3 pos = position;
+                pos.y += disp;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform sampler2D uRasterTex;
+              uniform float uOpacity;
+              uniform float uIsForecast;
+              varying vec2 vUv;
+              varying float vElev;
+              void main() {
+                vec4 tex = texture2D(uRasterTex, vUv);
+                vec3 col = tex.rgb;
+
+                // Subtle 3D elevation contour lines when extruded
+                if (abs(vElev) > 0.02) {
+                  float contour = abs(fract(vElev * 3.5) - 0.5);
+                  if (contour < 0.035) {
+                    col = mix(col, vec3(0.75, 0.82, 0.90), 0.18);
+                  }
+                }
+
+                // In Forecast Mode, add a subtle pale-sky schematic grid so it never looks like a live measurement
+                if (uIsForecast > 0.5) {
+                  vec2 grid = abs(fract(vUv * 32.0 - 0.5) - 0.5) / fwidth(vUv * 32.0);
+                  float line = min(grid.x, grid.y);
+                  float gridFactor = 1.0 - min(line, 1.0);
+                  col = mix(col, vec3(0.749, 0.820, 0.898), gridFactor * 0.25);
+                }
+
+                gl_FragColor = vec4(col, uOpacity);
+              }
+            `,
+          });
+
+          this.terrainMesh = new THREE.Mesh(geo, this.terrainMaterial);
+          this.scene.add(this.terrainMesh);
+
+          // 3. Footprint Frame & Corner Reticle Ticks
+          this.footprintGroup = new THREE.Group();
+          const hw = this.planeW / 2;
+          const hh = this.planeH / 2;
+          const framePts = [
+            new THREE.Vector3(-hw, 0.02, -hh),
+            new THREE.Vector3(hw, 0.02, -hh),
+            new THREE.Vector3(hw, 0.02, hh),
+            new THREE.Vector3(-hw, 0.02, hh),
+            new THREE.Vector3(-hw, 0.02, -hh),
+          ];
+          const frameMat = new THREE.LineBasicMaterial({ color: 0xebf5ee, transparent: true, opacity: 0.38 });
+          this.footprintGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(framePts), frameMat));
+
+          // Corner "+" ticks
+          const tickMat = new THREE.LineBasicMaterial({ color: 0xbfd1e5, transparent: true, opacity: 0.85 });
+          const tk = 0.45;
+          [
+            [-hw, -hh],
+            [hw, -hh],
+            [hw, hh],
+            [-hw, hh],
+          ].forEach(([cx, cz]) => {
+            const hGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(cx - tk, 0.03, cz),
+              new THREE.Vector3(cx + tk, 0.03, cz),
+            ]);
+            const vGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(cx, 0.03, cz - tk),
+              new THREE.Vector3(cx, 0.03, cz + tk),
+            ]);
+            this.footprintGroup.add(new THREE.Line(hGeo, tickMat));
+            this.footprintGroup.add(new THREE.Line(vGeo, tickMat));
+          });
+          this.scene.add(this.footprintGroup);
+
+          // 4. Risk Extents & Fault/Arrival Group (Solid in Observed, Dashed in Forecast)
+          this.riskGroup = new THREE.Group();
+          this.scene.add(this.riskGroup);
+
+          // 5. Compound Overlays Group
+          this.compoundGroup = new THREE.Group();
+          this.scene.add(this.compoundGroup);
+
+          // 6. 3D Inspection Reticle Beacon (Crosshair box + vertical laser column in 3D)
+          this.reticleGroup = new THREE.Group();
+          this.reticleGroup.visible = false;
+
+          const rSize = 0.42;
+          const boxPts = [
+            new THREE.Vector3(-rSize, 0, -rSize),
+            new THREE.Vector3(rSize, 0, -rSize),
+            new THREE.Vector3(rSize, 0, rSize),
+            new THREE.Vector3(-rSize, 0, rSize),
+            new THREE.Vector3(-rSize, 0, -rSize),
+          ];
+          const rMat = new THREE.LineBasicMaterial({ color: 0xbfd1e5 });
+          this.reticleBox = new THREE.Line(new THREE.BufferGeometry().setFromPoints(boxPts), rMat);
+          this.reticleGroup.add(this.reticleBox);
+
+          // Vertical laser pillar for 3D mode
+          const beamGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 3.6, 0),
+          ]);
+          const beamMat = new THREE.LineDashedMaterial({ color: 0xbfd1e5, dashSize: 0.18, gapSize: 0.1 });
+          this.reticleBeam = new THREE.Line(beamGeo, beamMat);
+          this.reticleBeam.computeLineDistances();
+          this.reticleGroup.add(this.reticleBeam);
+
+          // Top diamond beacon on the 3D laser pillar
+          const topDiamondGeo = new THREE.OctahedronGeometry(0.16, 0);
+          const topDiamondMat = new THREE.MeshBasicMaterial({ color: 0xbfd1e5, wireframe: true });
+          this.reticleTopDiamond = new THREE.Mesh(topDiamondGeo, topDiamondMat);
+          this.reticleTopDiamond.position.y = 3.6;
+          this.reticleGroup.add(this.reticleTopDiamond);
+
+          this.scene.add(this.reticleGroup);
+        }
+
+        // Convert (lng, lat) to world (x, z) inside [-planeW/2..planeW/2, -planeH/2..planeH/2]
+        lngLatToWorld(lng, lat, bounds) {
+          const u = (lng - bounds.west) / (bounds.east - bounds.west);
+          const v = (bounds.north - lat) / (bounds.north - bounds.south);
+          const x = (u - 0.5) * this.planeW;
+          const z = (v - 0.5) * this.planeH;
+          return { x, z, u, v };
+        }
+
+        // Convert world (x, z) back to (lng, lat)
+        worldToLngLat(x, z, bounds) {
+          const u = x / this.planeW + 0.5;
+          const v = z / this.planeH + 0.5;
+          const lng = bounds.west + u * (bounds.east - bounds.west);
+          const lat = bounds.north - v * (bounds.north - bounds.south);
+          return { lng, lat, u, v };
+        }
+
+        // Sample height [0..1] at normalized (u,v) for placing 3D lines & reticle on the extruded surface
+        sampleElevationWorld(u, v) {
+          if (!this.currentElevationField) return 0;
+          const cx = clamp(Math.floor(u * RASTER_SIZE), 0, RASTER_SIZE - 1);
+          const cy = clamp(Math.floor(v * RASTER_SIZE), 0, RASTER_SIZE - 1);
+          const h = this.currentElevationField[cy * RASTER_SIZE + cx];
+          return (h - 0.2) * 3.35 * this.rig.extrusion;
+        }
+
+        _bindInteraction() {
+          const dom = this.renderer.domElement;
+          const raycaster = new THREE.Raycaster();
+          const mouse = new THREE.Vector2();
+
+          let pointerDownPos = null;
+          let isDragging = false;
+          let prevX = 0;
+          let prevY = 0;
+
+          dom.addEventListener('mousedown', (e) => {
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+            isDragging = false;
+            prevX = e.clientX;
+            prevY = e.clientY;
+          });
+
+          window.addEventListener('mousemove', (e) => {
+            if (!pointerDownPos) return;
+            const dx = e.clientX - prevX;
+            const dy = e.clientY - prevY;
+            if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 5) {
+              isDragging = true;
+            }
+            if (!isDragging) return;
+            prevX = e.clientX;
+            prevY = e.clientY;
+
+            if (this.is3D) {
+              // In 3D mode: drag rotates azimuth and pitch smoothly
+              this.rig.azimuthDeg = (this.rig.azimuthDeg - dx * 0.35) % 360;
+              this.rig.pitchDeg = clamp(this.rig.pitchDeg + dy * 0.28, 12, 76);
+              this._syncCameraFromRig();
+              this._updateHudReadout();
+            } else {
+              // In 2D mode: rotation is strictly locked (north-up, pitch 0), only gentle pan allowed
+              const panScale = this.rig.radius * 0.0012;
+              this.rig.targetX = clamp(this.rig.targetX - dx * panScale, -6, 6);
+              this.rig.targetZ = clamp(this.rig.targetZ - dy * panScale, -5, 5);
+              this._syncCameraFromRig();
+            }
+          });
+
+          window.addEventListener('mouseup', (e) => {
+            if (!pointerDownPos) return;
+            const wasClick = !isDragging;
+            pointerDownPos = null;
+            isDragging = false;
+
+            if (wasClick && e.target === dom) {
+              const rect = dom.getBoundingClientRect();
+              mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+              mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+              raycaster.setFromCamera(mouse, this.camera);
+
+              // Intersect with terrain mesh or ground plane
+              const hits = raycaster.intersectObject(this.terrainMesh, false);
+              if (hits.length > 0) {
+                const pt = hits[0].point;
+                const { lng, lat } = this.worldToLngLat(pt.x, pt.z, this.currentHazard.bounds);
+                if (this.onClick) this.onClick({ lng, lat, worldX: pt.x, worldZ: pt.z, inside: true });
+              } else {
+                // Raycast against y=0 mathematical plane for outside-footprint clicks
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const intersectPt = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(plane, intersectPt)) {
+                  const { lng, lat } = this.worldToLngLat(intersectPt.x, intersectPt.z, this.currentHazard.bounds);
+                  if (this.onClick) this.onClick({ lng, lat, worldX: intersectPt.x, worldZ: intersectPt.z, inside: false });
+                }
+              }
+            }
+          });
+
+          // Wheel zoom in/out
+          dom.addEventListener(
+            'wheel',
+            (e) => {
+              e.preventDefault();
+              const delta = e.deltaY * 0.015;
+              this.rig.radius = clamp(this.rig.radius + delta, 8.5, 42);
+              this._syncCameraFromRig();
+              this._updateHudReadout();
+            },
+            { passive: false }
+          );
+
+          window.addEventListener('resize', () => this.resize());
+        }
+
+        resize() {
+          this.width = this.container.clientWidth || window.innerWidth;
+          this.height = this.container.clientHeight || window.innerHeight;
+          this.camera.aspect = this.width / this.height;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(this.width, this.height);
+        }
+
+        _syncCameraFromRig() {
+          const pitchRad = toRad(this.rig.pitchDeg);
+          const azimRad = toRad(this.rig.azimuthDeg);
+          const r = this.rig.radius;
+
+          const horiz = r * Math.sin(pitchRad);
+          const vert = r * Math.cos(pitchRad);
+
+          this.camera.position.set(
+            this.rig.targetX + horiz * Math.sin(azimRad),
+            this.rig.targetY + Math.max(0.5, vert),
+            this.rig.targetZ + horiz * Math.cos(azimRad)
+          );
+          this.camera.lookAt(this.rig.targetX, this.rig.targetY, this.rig.targetZ);
+
+          // Keep North-Up orientation when pitch is near 0
+          if (this.rig.pitchDeg < 1.0) {
+            this.camera.up.set(0, 0, -1);
+            this.camera.lookAt(this.rig.targetX, 0, this.rig.targetZ);
+          } else {
+            this.camera.up.set(0, 1, 0);
+            this.camera.lookAt(this.rig.targetX, this.rig.targetY, this.rig.targetZ);
+          }
+
+          this.terrainUniforms.uExtrusion.value = this.rig.extrusion;
+        }
+
+        _updateHudReadout() {
+          const elReadout = document.getElementById('cam-state-readout');
+          const elBadge = document.getElementById('dim-status-badge');
+          const btnQuick = document.getElementById('btn-quick-3d');
+          const btn2d = document.getElementById('btn-dim-2d');
+          const btn3d = document.getElementById('btn-dim-3d');
+
+          const pitch = Math.round(this.rig.pitchDeg);
+          const extPct = Math.round(this.rig.extrusion * 100);
+          if (this.is3D) {
+            if (elReadout) elReadout.textContent = `VIEW: 3D VOLUMETRIC RELIEF // PITCH ${pitch}° · EXTRUSION ${extPct}%`;
+            if (elBadge) elBadge.textContent = `3D RELIEF (${pitch}°)`;
+            if (btnQuick) btnQuick.textContent = 'ZOOM OUT 2D';
+            if (btn2d) btn2d.setAttribute('aria-pressed', 'false');
+            if (btn3d) btn3d.setAttribute('aria-pressed', 'true');
+            document.documentElement.setAttribute('data-dim', '3d');
+          } else {
+            if (elReadout) elReadout.textContent = 'VIEW: 2D NORTH-UP ORTHO // PITCH 0°';
+            if (elBadge) elBadge.textContent = '2D FLAT';
+            if (btnQuick) btnQuick.textContent = 'ZOOM IN 3D';
+            if (btn2d) btn2d.setAttribute('aria-pressed', 'true');
+            if (btn3d) btn3d.setAttribute('aria-pressed', 'false');
+            document.documentElement.setAttribute('data-dim', '2d');
+          }
+        }
+
+        // Smooth GSAP transition to 2D Flat North-Up Baseline (Stage 1 / Zoom Out)
+        animateTo2D({ duration = 1.15 } = {}) {
+          this.is3D = false;
+          this._updateHudReadout();
+          gsap.killTweensOf(this.rig);
+          gsap.to(this.rig, {
+            targetX: 0,
+            targetY: 0,
+            targetZ: 0,
+            radius: 25.5,
+            pitchDeg: 0,
+            azimuthDeg: 0,
+            extrusion: 0,
+            duration,
+            ease: 'power3.inOut',
+            onUpdate: () => {
+              this._syncCameraFromRig();
+              this._rebuildOverlaysHeight();
+              this._updateHudReadout();
+            },
+          });
+        }
+
+        // Smooth GSAP transition to 3D Volumetric Extrusion & Zoom-In on target
+        animateTo3D({ targetX = 0, targetZ = 0, radius = 16.5, pitchDeg = 58, azimuthDeg = -24, duration = 1.35 } = {}) {
+          this.is3D = true;
+          this._updateHudReadout();
+          gsap.killTweensOf(this.rig);
+          gsap.to(this.rig, {
+            targetX: clamp(targetX, -5, 5),
+            targetY: 0.35,
+            targetZ: clamp(targetZ, -4, 4),
+            radius,
+            pitchDeg,
+            azimuthDeg,
+            extrusion: 1.0,
+            duration,
+            ease: 'power3.out',
+            onUpdate: () => {
+              this._syncCameraFromRig();
+              this._rebuildOverlaysHeight();
+              this._updateHudReadout();
+            },
+          });
+        }
+
+        // Build dynamic heightmap texture per hazard & pass index so 3D extrusion reflects the active pass
+        _updateHeightMap(hazard, stepIndex, observedCount) {
+          const st = staticFor(hazard);
+          const elevField = new Float32Array(N_PIX);
+          const idx = Math.min(Math.max(0, stepIndex ?? observedCount - 1), observedCount - 1);
+
+          if (hazard.raster === 'sar') {
+            // Volcano: somma caldera + Nakadake cones + subtle dome inflation across passes
+            const inflation = (idx / Math.max(1, observedCount - 1)) * 0.14;
+            for (let i = 0; i < N_PIX; i++) {
+              const coneBoost = Math.exp(-(st.fromVent[i] * st.fromVent[i]) / 2.2) * inflation;
+              elevField[i] = clamp(st.elevation[i] + coneBoost, 0, 1);
+            }
+          } else if (hazard.raster === 'interferogram') {
+            // Seismic: fault scarp steps sharply upward at mainshock (pass 3)
+            const mainshock = hazard.geometry.mainshockIndex ?? 3;
+            const slip = idx < mainshock ? 0.04 : 0.28 + 0.03 * (idx - mainshock);
+            for (let i = 0; i < N_PIX; i++) {
+              const scarp = st.side[i] * slip * Math.exp(-st.dist[i] / 24);
+              elevField[i] = clamp(st.elevation[i] + scarp, 0, 1);
+            }
+          } else {
+            // Tsunami: propagating 3D sea-surface wave train advancing toward the Kyushu coast
+            const t = idx / Math.max(1, observedCount - 1);
+            const front = 100 - 75 * t;
+            const amp = 0.28 * (1 + 0.45 * t);
+            for (let i = 0; i < N_PIX; i++) {
+              if (st.land[i]) {
+                elevField[i] = clamp(st.elevation[i], 0, 1);
+              } else {
+                const d = st.dist[i];
+                const lambda = 14 + 0.1 * d;
+                const env = Math.exp(-((d - front) * (d - front)) / (22 * 22));
+                const wave = amp * env * Math.sin((TAU * (d - front)) / lambda);
+                elevField[i] = clamp(0.2 + wave, 0, 1);
+              }
+            }
+          }
+
+          this.currentElevationField = elevField;
+          const imgData = this.heightCtx.createImageData(RASTER_SIZE, RASTER_SIZE);
+          const d = imgData.data;
+          for (let i = 0; i < N_PIX; i++) {
+            const q = clamp(Math.round(elevField[i] * 255), 0, 255);
+            const o = i * 4;
+            d[o] = q;
+            d[o + 1] = q;
+            d[o + 2] = q;
+            d[o + 3] = 255;
+          }
+          this.heightCtx.putImageData(imgData, 0, 0);
+          this.heightTexture.needsUpdate = true;
+        }
+
+        _clearGroup(group) {
+          while (group.children.length > 0) {
+            const child = group.children.pop();
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          }
+        }
+
+        _buildFeatureLines(geojson, bounds, isForecast, targetGroup, isCompound = false) {
+          if (!geojson || !Array.isArray(geojson.features)) return;
+
+          for (const feat of geojson.features) {
+            if (!feat || !feat.geometry) continue;
+            const props = feat.properties || {};
+            const risk = props.risk;
+            const kind = props.kind;
+
+            let colorHex = 0xf5a524; // medium amber
+            if (risk === 'high') colorHex = 0xe5484d; // high red
+            else if (kind === 'fault') colorHex = 0xebf5ee; // mint cream fault trace
+
+            const rings = [];
+            if (feat.geometry.type === 'Polygon') {
+              rings.push(...feat.geometry.coordinates);
+            } else if (feat.geometry.type === 'LineString') {
+              rings.push(feat.geometry.coordinates);
+            } else if (feat.geometry.type === 'MultiLineString') {
+              rings.push(...feat.geometry.coordinates);
+            }
+
+            for (const coords of rings) {
+              if (!coords || coords.length < 2) continue;
+              const pts = coords.map(([lng, lat]) => {
+                const { x, z, u, v } = this.lngLatToWorld(lng, lat, bounds);
+                const y = this.sampleElevationWorld(u, v) + (isCompound ? 0.08 : 0.06);
+                return new THREE.Vector3(x, y, z);
+              });
+
+              const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+              let line;
+              // Lock #6: Risk extents & fault lines switch to dashed in Forecast mode!
+              if (isForecast) {
+                const mat = new THREE.LineDashedMaterial({
+                  color: colorHex,
+                  dashSize: 0.32,
+                  gapSize: 0.22,
+                  transparent: true,
+                  opacity: isCompound ? 0.65 : 0.95,
+                });
+                line = new THREE.Line(lineGeo, mat);
+                line.computeLineDistances();
+              } else {
+                const mat = new THREE.LineBasicMaterial({
+                  color: colorHex,
+                  transparent: true,
+                  opacity: isCompound ? 0.65 : 0.95,
+                });
+                line = new THREE.Line(lineGeo, mat);
+              }
+              targetGroup.add(line);
+            }
+          }
+        }
+
+        _rebuildOverlaysHeight() {
+          if (!this.currentView) return;
+          const v = this.currentView;
+          this._clearGroup(this.riskGroup);
+          if (v.showRisk && v.riskGeojson) {
+            this._buildFeatureLines(v.riskGeojson, v.hazard.bounds, v.isForecast, this.riskGroup, false);
+          }
+
+          this._clearGroup(this.compoundGroup);
+          if (v.compound && v.compoundGeojson) {
+            if (v.compoundGeojson.seismic) {
+              this._buildFeatureLines(v.compoundGeojson.seismic, v.hazard.bounds, v.isForecast, this.compoundGroup, true);
+            }
+            if (v.compoundGeojson.tsunami) {
+              this._buildFeatureLines(v.compoundGeojson.tsunami, v.hazard.bounds, v.isForecast, this.compoundGroup, true);
+            }
+          }
+
+          // Position 3D inspection reticle on terrain surface
+          if (v.point && v.showReticle) {
+            const { x, z, u, v: vv } = this.lngLatToWorld(v.point.lng, v.point.lat, v.hazard.bounds);
+            const y = this.sampleElevationWorld(u, vv) + 0.04;
+            this.reticleGroup.position.set(x, y, z);
+            this.reticleGroup.visible = true;
+            this.reticleBeam.visible = this.rig.extrusion > 0.08;
+            this.reticleTopDiamond.visible = this.rig.extrusion > 0.08;
+          } else {
+            this.reticleGroup.visible = false;
+          }
+        }
+
+        applyView(view) {
+          this.currentView = view;
+          this.currentHazard = view.hazard;
+
+          // 1. Update composite raster texture (base radar + optional change overlay)
+          this.compositeCtx.clearRect(0, 0, RASTER_SIZE, RASTER_SIZE);
+          if (view.rasterCanvas && view.rasterVisible) {
+            this.compositeCtx.drawImage(view.rasterCanvas, 0, 0);
+          }
+          if (view.showChange && view.changeCanvas) {
+            this.compositeCtx.drawImage(view.changeCanvas, 0, 0);
+          }
+          this.rasterTexture.needsUpdate = true;
+
+          // 2. Enforce Lock #1: rasterOpacity is strictly 0.35 on every forecast date
+          this.terrainUniforms.uOpacity.value = view.rasterVisible ? view.rasterOpacity : 0.0;
+          this.terrainUniforms.uIsForecast.value = view.isForecast ? 1.0 : 0.0;
+
+          // 3. Update heightmap for the current observed step (or last observed step in forecast)
+          this._updateHeightMap(view.hazard, view.imageIndex, view.observedCount);
+
+          // 4. Rebuild 3D risk extent lines & reticle
+          this._rebuildOverlaysHeight();
+        }
+
+        renderFrame(timeSec) {
+          this.terrainUniforms.uTime.value = timeSec;
+          if (this.reticleGroup.visible && this.reticleTopDiamond.visible) {
+            this.reticleTopDiamond.rotation.y = timeSec * 1.8;
+          }
+          this.renderer.render(this.scene, this.camera);
+        }
+      }
+
+      /* ========================================================================
+         MODULE 5: MAIN WORKSTATION STATE, RENDER() & CONTROLLER (js/main.js)
+         Enforces all 7 Forecast Locks in one unified render() pass.
+         ======================================================================== */
+      const POINT_SCALES = Object.freeze({
+        sar: { domain: [0, 1], map: (v) => v },
+        interferogram: { domain: [-20, 20], map: (v) => (v - 0.5) * 40 },
+        ssha: { domain: [-50, 50], map: (v) => (v - 0.5) * 100 },
+      });
+
+      const COPY = Object.freeze({
+        pointIdle: 'Click inside the radar footprint to inspect a point & zoom 3D.',
+        pointOutside: 'Outside radar footprint — no coverage',
+        pointWaiting: 'Point selected. Values appear once the observed rasters have loaded.',
+        pointUnavailable: 'Raster unavailable — no point values can be sampled.',
+        noTimeline: 'No timeline data.',
+        pwMismatch: 'Passwords do not match.',
+      });
+
+      const state = {
+        hazard: defaultHazard().id,
+        idx: 5, // Starts at Pass 06 / 06 (20 JUN 2026, "NOW")
+        mode: 'radar',
+        baseline: 0,
+        observedOpacity: 85,
+        showRisk: true,
+        showReticle: true,
+        compound: false,
+        point: null,
+        playing: false,
+        touring: false,
+        route: 'home',
+        errors: { map: '', asset: '' },
+      };
+
+      const cache = {
+        timelines: new Map(),
+        rasters: new Map(),
+        rasterStatus: new Map(),
+        changeCanvases: new Map(),
+      };
+
+      const telemetry = new TelemetryService(CONFIG, HAZARD_REGISTRY);
+      let viewport3D = null;
+      let playTimer = null;
+      let tourTimeouts = [];
+      let lastAnnounced = '';
+      let lastRiskSvg = '';
+      let lastPointSvg = '';
+      let lastTickSignature = '';
+      let lastBaselineSignature = '';
+      let dialogOpener = null;
+      let currentRoute = null;
+
+      const $ = (id) => document.getElementById(id);
+
+      const el = {
+        html: document.documentElement,
+        map: $('map'),
+        hazardSwitch: $('hazard-switch'),
+        compoundToggle: $('compound-toggle'),
+        targetName: $('target-name'),
+        targetCoords: $('target-coords'),
+        targetFootprint: $('target-footprint'),
+        modePill: $('mode-pill'),
+        menuToggle: $('menu-toggle'),
+        openMethod: $('open-method'),
+        openAbout: $('open-about'),
+        controls: $('controls'),
+        controlsDrawer: $('controls-drawer'),
+        passDate: $('pass-date'),
+        passIndex: $('pass-index'),
+        noPassAlert: $('no-pass-alert'),
+        btnRadar: $('btn-radar'),
+        btnChange: $('btn-change'),
+        baselineWrap: $('baseline-wrap'),
+        baseline: $('baseline'),
+        opacity: $('opacity'),
+        opacityReadout: $('opacity-readout'),
+        opacityLock: $('opacity-lock'),
+        toggleRisk: $('toggle-risk'),
+        toggleReticle: $('toggle-reticle'),
+        legendRadar: $('legend-radar'),
+        legendChange: $('legend-change'),
+        legendForecast: $('legend-forecast'),
+        legendRisk: $('legend-risk'),
+        evidence: $('evidence'),
+        evidenceDrawer: $('evidence-drawer'),
+        mapError: $('map-error'),
+        assetError: $('asset-error'),
+        observedCard: $('observed-card'),
+        observedPass: $('observed-pass'),
+        observedBaseline: $('observed-baseline'),
+        observedPoint: $('observed-point'),
+        forecastCard: $('forecast-card'),
+        forecastDate: $('forecast-date'),
+        forecastProb: $('forecast-prob'),
+        forecastLevel: $('forecast-level'),
+        forecastBar: $('forecast-bar'),
+        forecastDriver: $('forecast-driver'),
+        chartRisk: $('chart-risk'),
+        pointTitle: $('point-title'),
+        pointCoords: $('point-coords'),
+        chartPoint: $('chart-point'),
+        pointStatus: $('point-status'),
+        play: $('play'),
+        track: $('track'),
+        segObserved: $('seg-observed'),
+        nowTick: $('now-tick'),
+        segForecast: $('seg-forecast'),
+        dateSlider: $('date-slider'),
+        ticks: $('ticks'),
+        timelineDate: $('timeline-date'),
+        page: $('page'),
+        signinForm: $('signin-form'),
+        signupForm: $('signup-form'),
+        pwError: $('pw-error'),
+        notfound: $('notfound'),
+        signupPassword: $('signup-password'),
+        signupConfirm: $('signup-confirm'),
+        dlgMethod: $('dlg-method'),
+        dlgAbout: $('dlg-about'),
+        announcer: $('announcer'),
+        // 2D/3D & Comparison controls
+        btnDim2d: $('btn-dim-2d'),
+        btnDim3d: $('btn-dim-3d'),
+        camReset2d: $('cam-reset-2d'),
+        camOverview3d: $('cam-overview-3d'),
+        camFocusTarget: $('cam-focus-target'),
+        btnTour: $('btn-tour-choreography'),
+        tourStateLabel: $('tour-state-label'),
+        btnQuick3d: $('btn-quick-3d'),
+        btnToggleCompare: $('btn-toggle-compare'),
+        btnCloseCompare: $('btn-close-compare'),
+        comparisonStrip: $('comparison-strip'),
+      };
+
+      const pillMain = el.modePill.querySelector('.pill-main');
+      const pillSuffix = el.modePill.querySelector('.pill-suffix');
+      const riskSlot = el.chartRisk.querySelector('.chart-slot');
+      const pointSlot = el.chartPoint.querySelector('.chart-slot');
+      const pointCaption = el.chartPoint.querySelector('figcaption');
+      const playIcon = el.play.querySelector('.icon-play');
+      const pauseIcon = el.play.querySelector('.icon-pause');
+
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const isMobile = () => window.matchMedia('(max-width: 900px)').matches;
+
+      function setText(node, text) {
+        if (node && node.textContent !== text) node.textContent = text;
+      }
+      function setHidden(node, hidden) {
+        if (node && node.hidden !== Boolean(hidden)) node.hidden = Boolean(hidden);
+      }
+      function setAttr(node, name, value) {
+        if (!node) return;
+        const v = String(value);
+        if (node.getAttribute(name) !== v) node.setAttribute(name, v);
+      }
+      function capitalise(s) {
+        const str = String(s || '');
+        return str ? str[0].toUpperCase() + str.slice(1) : '';
+      }
+      function formatCoords(lng, lat) {
+        const ns = lat >= 0 ? 'N' : 'S';
+        const ew = lng >= 0 ? 'E' : 'W';
+        return `${Math.abs(lat).toFixed(3)}° ${ns}, ${Math.abs(lng).toFixed(3)}° ${ew}`;
+      }
+
+      function timelineFor(hazardId) {
+        const fetched = cache.timelines.get(hazardId);
+        if (fetched) return fetched;
+        return timelineOf(getHazard(hazardId));
+      }
+
+      function lastObservedIndex(timeline) {
+        let last = -1;
+        timeline.forEach((s, i) => {
+          if (s.kind === 'observed') last = i;
+        });
+        return last;
+      }
+
+      function changeCanvasFor(hazardId, baseline, idx, rasters) {
+        const key = `${hazardId}|${baseline}|${idx}`;
+        if (cache.changeCanvases.has(key)) return cache.changeCanvases.get(key);
+        const base = rasters[baseline];
+        const cur = rasters[idx];
+        if (!base || !cur) return null;
+        const canvas = telemetry.changeCanvas(base.imageData, cur.imageData, baseline === idx);
+        cache.changeCanvases.set(key, canvas);
+        return canvas;
+      }
+
+      /* ----------------------------------------------------------------------
+         deriveView(state): Pure derivation enforcing the 7 Forecast Locks
+         ---------------------------------------------------------------------- */
+      function deriveView(st) {
+        const hazard = getHazard(st.hazard) || defaultHazard();
+        const timeline = timelineFor(hazard.id);
+        const len = timeline.length;
+        const observedCount = timeline.filter((s) => s.kind === 'observed').length;
+        const forecastCount = len - observedCount;
+        const hasForecast = forecastCount > 0;
+
+        const idx = len && st.idx !== null && st.idx !== undefined ? Math.min(len - 1, Math.max(0, st.idx)) : null;
+        const step = idx === null ? null : timeline[idx];
+        const isForecast = Boolean(step && step.kind === 'forecast');
+
+        // LOCK 1: On forecast dates, show the last observed raster at strictly 0.35 opacity.
+        const imageIndex = idx === null ? null : isForecast ? observedCount - 1 : idx;
+        const rasterOpacity = isForecast ? CONFIG.forecastOpacity : st.observedOpacity / 100;
+
+        const rasters = cache.rasters.get(hazard.id) || null;
+        const rasterStatus = cache.rasterStatus.get(hazard.id) || 'idle';
+        const rastersReady = Boolean(rasters && rasters.length === observedCount && observedCount > 0);
+        const rasterVisible = !st.errors.asset;
+        const rasterCanvas = rastersReady && imageIndex !== null && rasters[imageIndex] ? rasters[imageIndex].canvas : null;
+
+        // LOCK 2: Difference layer cannot appear on a forecast date.
+        const showChange = !isForecast && st.mode === 'change' && rastersReady;
+        const changeCanvas = showChange ? changeCanvasFor(hazard.id, st.baseline, idx, rasters) : null;
+
+        const riskGeojson = step ? hazard.riskExtents(step.kind, idx) : { type: 'FeatureCollection', features: [] };
+        const probability = isForecast && Number.isFinite(Number(step.probability)) ? Number(step.probability) : null;
+        const level = probability === null ? null : levelFor(probability);
+        const driver = isForecast && step.driver ? String(step.driver) : '';
+
+        // LOCK 7: Point series has strictly observedCount values (6) or null — never forecast values.
+        const scale = POINT_SCALES[hazard.raster] || POINT_SCALES.sar;
+        let series = null;
+        const pointInside = Boolean(st.point && Number.isFinite(st.point.lng) && Number.isFinite(st.point.lat));
+        if (pointInside && rastersReady) {
+          const raw = rasters.map((r) => telemetry.sample(r.imageData, hazard.bounds, st.point.lng, st.point.lat));
+          if (raw.length === observedCount) {
+            series = raw.map((v) => (v === null ? null : Math.round(scale.map(v) * 100) / 100));
+          }
+        }
+
+        let pointStatus;
+        if (st.errors.asset) pointStatus = COPY.pointUnavailable;
+        else if (!st.point) pointStatus = COPY.pointIdle;
+        else if (st.point.outside) pointStatus = COPY.pointOutside;
+        else if (!series) pointStatus = COPY.pointWaiting;
+        else {
+          const n = series.filter((v) => v !== null).length;
+          pointStatus =
+            `${n} observed value${n === 1 ? '' : 's'} at ${formatCoords(st.point.lng, st.point.lat)}.` +
+            (hasForecast ? ' Nothing after NOW: no satellite pass has occurred.' : '');
+        }
+
+        const pointCoords = pointInside
+          ? formatCoords(st.point.lng, st.point.lat)
+          : formatCoords(hazard.coords[0], hazard.coords[1]);
+
+        let compoundGeojson = null;
+        if (st.compound) {
+          const kind = step ? step.kind : 'observed';
+          const ci = idx === null ? 0 : idx;
+          compoundGeojson = {
+            seismic: hazard.id === 'earthquake' ? null : HAZARD_REGISTRY.earthquake.riskExtents(kind, ci),
+            tsunami: hazard.id === 'tsunami' ? null : HAZARD_REGISTRY.tsunami.riskExtents(kind, ci),
+          };
+        }
+
+        return {
+          hazard,
+          timeline,
+          len,
+          observedCount,
+          forecastCount,
+          hasForecast,
+          idx,
+          step,
+          isForecast,
+          imageIndex,
+          rasterOpacity,
+          rasterVisible,
+          rasterCanvas,
+          rastersReady,
+          rasterStatus,
+          showChange,
+          changeCanvas,
+          riskGeojson,
+          showRisk: st.showRisk,
+          showReticle: st.showReticle,
+          point: pointInside ? st.point : null,
+          probability,
+          level,
+          driver,
+          series,
+          pointScale: scale,
+          pointStatus,
+          pointCoords,
+          compound: st.compound,
+          compoundGeojson,
+          footprint: footprintKm(hazard.bounds),
+        };
+      }
+
+      /* ----------------------------------------------------------------------
+         render(): Updates DOM & 3D Viewport in one pass
+         ---------------------------------------------------------------------- */
+      function renderTicks(view) {
+        const signature = view.timeline.map((s) => `${s.kind}:${s.date}`).join(',');
+        if (signature !== lastTickSignature) {
+          const frag = document.createDocumentFragment();
+          view.timeline.forEach((s, i) => {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.dataset.index = String(i);
+            btn.dataset.kind = s.kind === 'forecast' ? 'forecast' : 'observed';
+            btn.textContent = formatShort(s.date);
+            btn.setAttribute('aria-label', `${s.kind === 'forecast' ? 'Forecast' : 'Observed sample pass'}, ${formatSpoken(s.date)}`);
+            li.appendChild(btn);
+            frag.appendChild(li);
+          });
+          el.ticks.replaceChildren(frag);
+          lastTickSignature = signature;
+        }
+        el.ticks.querySelectorAll('button[data-index]').forEach((btn) => {
+          const active = Number(btn.dataset.index) === view.idx;
+          if (active) setAttr(btn, 'aria-current', 'true');
+          else if (btn.hasAttribute('aria-current')) btn.removeAttribute('aria-current');
+        });
+      }
+
+      function renderBaselineOptions(view) {
+        const observed = view.timeline.filter((s) => s.kind === 'observed');
+        const signature = `${view.hazard.id}|${observed.map((s) => s.date).join(',')}`;
+        if (signature !== lastBaselineSignature) {
+          const frag = document.createDocumentFragment();
+          observed.forEach((s, i) => {
+            const opt = document.createElement('option');
+            opt.value = String(i);
+            opt.textContent = formatDate(s.date);
+            frag.appendChild(opt);
+          });
+          el.baseline.replaceChildren(frag);
+          lastBaselineSignature = signature;
+        }
+        const want = String(Math.min(Math.max(0, state.baseline), Math.max(0, observed.length - 1)));
+        if (el.baseline.value !== want) el.baseline.value = want;
+      }
+
+      function render() {
+        const view = deriveView(state);
+        const { hazard, step, idx, isForecast, hasForecast, observedCount, forecastCount, len } = view;
+        const stepDate = step ? formatDate(step.date) : '—';
+
+        // Root state attributes
+        setAttr(el.html, 'data-mode', isForecast ? 'forecast' : 'observed');
+        setAttr(el.html, 'data-hazard', hazard.id);
+        setAttr(el.html, 'data-route', state.route);
+        if (hasForecast) {
+          if (el.html.hasAttribute('data-forecasts')) el.html.removeAttribute('data-forecasts');
+        } else {
+          setAttr(el.html, 'data-forecasts', 'none');
+        }
+
+        // Topbar
+        const radio = el.hazardSwitch.querySelector(`input[name="hazard"][value="${hazard.id}"]`);
+        if (radio && !radio.checked) radio.checked = true;
+        if (el.compoundToggle.checked !== state.compound) el.compoundToggle.checked = state.compound;
+        setText(el.targetName, `TARGET: ${hazard.targetName}`);
+        setText(el.targetCoords, formatCoords(hazard.coords[0], hazard.coords[1]));
+        setText(el.targetFootprint, `FOOTPRINT: ${view.footprint.label}`);
+
+        // LOCK 3: Mode pill turns pale-sky diamond with FORECAST MODE // MODEL PROJECTION
+        setText(pillMain, isForecast ? '◆ FORECAST MODE' : '● OBSERVED PASS');
+        setText(pillSuffix, isForecast ? ' // MODEL PROJECTION' : ' // MEASURED');
+
+        // Controls header & LOCK 4: NO SATELLITE PASS FOR THIS DATE
+        setText(el.passDate, stepDate);
+        if (!step) setText(el.passIndex, 'LOADING');
+        else if (isForecast) setText(el.passIndex, `FORECAST ${pad2(idx - observedCount + 1)} / ${pad2(forecastCount)}`);
+        else setText(el.passIndex, `PASS ${pad2(idx + 1)} / ${pad2(observedCount)}`);
+        setHidden(el.noPassAlert, !isForecast);
+
+        // LOCK 2: View mode buttons disabled & baseline hidden on forecast dates
+        const changeBlocked = isForecast || !view.rastersReady;
+        if (el.btnRadar.disabled !== isForecast) el.btnRadar.disabled = isForecast;
+        if (el.btnChange.disabled !== changeBlocked) el.btnChange.disabled = changeBlocked;
+        setAttr(el.btnRadar, 'aria-pressed', state.mode === 'radar' ? 'true' : 'false');
+        setAttr(el.btnChange, 'aria-pressed', state.mode === 'change' ? 'true' : 'false');
+        setHidden(el.baselineWrap, isForecast || state.mode !== 'change');
+        renderBaselineOptions(view);
+
+        // LOCK 1: Opacity slider locks to 35% on forecast dates without mutating state.observedOpacity
+        const opacityValue = isForecast ? 35 : state.observedOpacity;
+        if (el.opacity.disabled !== isForecast) el.opacity.disabled = isForecast;
+        if (Number(el.opacity.value) !== opacityValue) el.opacity.value = String(opacityValue);
+        setAttr(el.opacity, 'aria-valuetext', isForecast ? 'Locked at 35 percent, context only' : `${opacityValue} percent`);
+        setText(el.opacityReadout, `${opacityValue}%`);
+        setHidden(el.opacityLock, !isForecast);
+
+        if (el.toggleRisk.checked !== state.showRisk) el.toggleRisk.checked = state.showRisk;
+        if (el.toggleReticle.checked !== state.showReticle) el.toggleReticle.checked = state.showReticle;
+
+        // Legend
+        setHidden(el.legendRadar, isForecast || state.mode === 'change');
+        setHidden(el.legendChange, !(state.mode === 'change' && !isForecast));
+        setHidden(el.legendForecast, !isForecast);
+        setHidden(el.legendRisk, !state.showRisk);
+        const changeTexts = el.legendChange.querySelectorAll('.legend-text');
+        if (changeTexts[0]) setText(changeTexts[0], capitalise(hazard.changeLabels.darker));
+        if (changeTexts[1]) setText(changeTexts[1], capitalise(hazard.changeLabels.brighter));
+        const suffix = isForecast ? ' (projected extent, dashed)' : ' (measured extent)';
+        el.legendRisk.querySelectorAll('li').forEach((li) => {
+          const mark = li.querySelector('.legend-mark');
+          const text = li.querySelector('.legend-text');
+          const risk = mark ? mark.dataset.risk : '';
+          const label = hazard.riskLabels[risk] || risk;
+          setText(text, `${capitalise(label)}${suffix}`);
+        });
+
+        // Evidence status cards (LOCK 5: Forecast card + exact disclaimer)
+        setHidden(el.observedCard, isForecast);
+        setHidden(el.forecastCard, !isForecast);
+        if (step && !isForecast) {
+          setText(el.observedPass, `${pad2(idx + 1)} / ${pad2(observedCount)} · ${stepDate}`);
+          const observed = view.timeline.filter((s) => s.kind === 'observed');
+          const base = observed[state.baseline];
+          setText(
+            el.observedBaseline,
+            state.mode === 'change' && base ? `${formatDate(base.date)} · change view` : 'None · radar image view'
+          );
+        }
+        let pointText = 'None';
+        if (view.point) pointText = view.pointCoords;
+        else if (state.point && state.point.outside) pointText = 'Outside radar footprint';
+        setText(el.observedPoint, pointText);
+
+        if (isForecast) {
+          setText(el.forecastDate, stepDate);
+          const pct = view.probability === null ? null : Math.round(view.probability * 100);
+          setText(el.forecastProb, pct === null ? '—%' : `${pct}%`);
+          setText(el.forecastLevel, view.level ? view.level.toUpperCase() : '—');
+          setAttr(el.forecastLevel, 'data-level', view.level || 'low');
+          el.forecastBar.style.setProperty('--p', String(pct === null ? 0 : pct));
+          setAttr(el.forecastBar.parentElement, 'aria-label', `Sample probability bar, ${pct === null ? 'no value' : `${pct} percent`}`);
+          setText(el.forecastDriver, view.driver || 'Simulated driver: —');
+        }
+
+        // Evidence SVG Charts (LOCK 6 & LOCK 7)
+        const riskSvg = riskChart({ timeline: view.timeline, activeIndex: idx, label: hazard.primaryMetricLabel });
+        if (riskSvg !== lastRiskSvg) {
+          riskSlot.innerHTML = riskSvg;
+          lastRiskSvg = riskSvg;
+        }
+        const pointSvg = pointChart({
+          values: view.series,
+          timeline: view.timeline,
+          activeIndex: idx,
+          label: hazard.pointSeriesLabel,
+          unit: hazard.pointUnit,
+          noun: hazard.pointNoun,
+          yDomain: view.pointScale.domain,
+          emptyMessage: state.point && state.point.outside ? 'No coverage' : 'No point selected',
+        });
+        if (pointSvg !== lastPointSvg) {
+          pointSlot.innerHTML = pointSvg;
+          lastPointSvg = pointSvg;
+        }
+        setText(el.pointTitle, hazard.pointSeriesLabel);
+        setText(el.pointCoords, view.pointCoords);
+        setText(pointCaption, `No future ${hazard.pointNoun} values — ever.`);
+        setText(el.pointStatus, view.pointStatus);
+
+        // Timeline controls
+        const sliderMax = Math.max(0, len - 1);
+        setAttr(el.dateSlider, 'max', sliderMax);
+        if (el.dateSlider.disabled !== (len < 2)) el.dateSlider.disabled = len < 2;
+        if (idx !== null && Number(el.dateSlider.value) !== idx) el.dateSlider.value = String(idx);
+        const spoken = step
+          ? isForecast
+            ? `Forecast, ${formatSpoken(step.date)}`
+            : `Observed sample pass, ${formatSpoken(step.date)}`
+          : COPY.noTimeline;
+        setAttr(el.dateSlider, 'aria-valuetext', spoken);
+
+        const obs = hasForecast ? observedCount - 0.5 : Math.max(1, observedCount);
+        const fc = hasForecast ? forecastCount - 0.5 : 0;
+        el.track.style.setProperty('--obs', String(obs));
+        el.track.style.setProperty('--fc', String(fc));
+
+        renderTicks(view);
+        setText(el.timelineDate, step ? (isForecast ? `FORECAST · ${stepDate}` : stepDate) : '—');
+
+        setAttr(el.play, 'aria-label', state.playing ? 'Pause' : 'Play');
+        setHidden(playIcon, state.playing);
+        setHidden(pauseIcon, !state.playing);
+
+        // Apply derived state to the 2D/3D WebGL Viewport
+        if (viewport3D) {
+          viewport3D.applyView(view);
+        }
+
+        // Screen reader polite announcement
+        const announceKey = step ? `${hazard.id}|${idx}` : '';
+        if (announceKey && announceKey !== lastAnnounced) {
+          lastAnnounced = announceKey;
+          setText(el.announcer, spoken);
+        }
+      }
+
+      /* ----------------------------------------------------------------------
+         Render the 4 Before/After Multi-Stage Comparison Thumbnails
+         ---------------------------------------------------------------------- */
+      function renderComparisonThumbnails(hazardId) {
+        const hazard = getHazard(hazardId) || defaultHazard();
+        const rasters = cache.rasters.get(hazard.id);
+        if (!rasters || rasters.length < 6) return;
+
+        // Thumbnail 1: Stage 01 — Before (Pass 01, 21 APR 2026, Flat 2D)
+        const c1 = $('thumb-stage-1');
+        if (c1) {
+          const ctx = c1.getContext('2d');
+          ctx.drawImage(rasters[0].canvas, 0, 0, c1.width, c1.height);
+          ctx.strokeStyle = 'rgba(235,245,238,0.45)';
+          ctx.strokeRect(4, 4, c1.width - 8, c1.height - 8);
+        }
+
+        // Thumbnail 2: Stage 02 — Change Detection (Pass 06 minus Pass 01, Blue/Orange Δ)
+        const c2 = $('thumb-stage-2');
+        if (c2) {
+          const ctx = c2.getContext('2d');
+          ctx.drawImage(rasters[5].canvas, 0, 0, c2.width, c2.height);
+          const diffCanvas = changeCanvasFor(hazard.id, 0, 5, rasters);
+          if (diffCanvas) ctx.drawImage(diffCanvas, 0, 0, c2.width, c2.height);
+          ctx.strokeStyle = '#FF8C28';
+          ctx.strokeRect(4, 4, c2.width - 8, c2.height - 8);
+        }
+
+        // Thumbnail 3: Stage 03 — Clicked 3D Extruded Relief with Reticle Beacon
+        const c3 = $('thumb-stage-3');
+        if (c3) {
+          const ctx = c3.getContext('2d');
+          ctx.fillStyle = '#07090E';
+          ctx.fillRect(0, 0, c3.width, c3.height);
+          // Faux perspective trapezoid preview of Pass 06 with elevation contour lines & reticle laser
+          ctx.save();
+          ctx.translate(c3.width / 2, c3.height / 2 + 8);
+          ctx.scale(1, 0.56);
+          ctx.rotate(-0.32);
+          ctx.drawImage(rasters[5].canvas, -58, -45, 116, 90);
+          ctx.strokeStyle = '#E5484D';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, 22, 0, TAU);
+          ctx.stroke();
+          ctx.restore();
+          // Vertical 3D reticle beam
+          ctx.strokeStyle = '#BFD1E5';
+          ctx.setLineDash([3, 2]);
+          ctx.beginPath();
+          ctx.moveTo(c3.width / 2, c3.height / 2 + 6);
+          ctx.lineTo(c3.width / 2, 12);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Thumbnail 4: Stage 04 — After / Forecast Lock (35% Dimmed Context + Dashed Rings)
+        const c4 = $('thumb-stage-4');
+        if (c4) {
+          const ctx = c4.getContext('2d');
+          ctx.fillStyle = '#07090E';
+          ctx.fillRect(0, 0, c4.width, c4.height);
+          ctx.save();
+          ctx.globalAlpha = 0.35; // Locked 35% context
+          ctx.drawImage(rasters[5].canvas, 0, 0, c4.width, c4.height);
+          ctx.restore();
+          // Dashed risk ring
+          ctx.strokeStyle = '#E5484D';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(c4.width / 2, c4.height / 2, 24, 0, TAU);
+          ctx.stroke();
+          ctx.strokeStyle = '#F5A524';
+          ctx.beginPath();
+          ctx.arc(c4.width / 2, c4.height / 2, 34, 0, TAU);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      /* ----------------------------------------------------------------------
+         Load Hazard Timeline & Rasters
+         ---------------------------------------------------------------------- */
+      async function loadHazard(hazardId) {
+        const hazard = getHazard(hazardId);
+        if (!hazard) return;
+        const timeline = await telemetry.getTimeline(hazardId);
+        cache.timelines.set(hazardId, timeline);
+        if (state.idx === null || state.idx >= timeline.length) {
+          state.idx = Math.max(0, lastObservedIndex(timeline));
+        }
+        render();
+
+        const observed = telemetry.observedSteps(hazardId);
+        if (!cache.rasters.has(hazardId)) {
+          cache.rasterStatus.set(hazardId, 'loading');
+          const rasters = await Promise.all(observed.map((_, i) => telemetry.getRaster(hazardId, i)));
+          cache.rasters.set(hazardId, rasters);
+          cache.rasterStatus.set(hazardId, 'ready');
+        }
+        render();
+        renderComparisonThumbnails(hazardId);
+      }
+
+      /* ----------------------------------------------------------------------
+         Play Timer & Automated 2D -> 3D Timeline Tour Choreography
+         ---------------------------------------------------------------------- */
+      function stopTour() {
+        tourTimeouts.forEach((t) => clearTimeout(t));
+        tourTimeouts = [];
+        state.touring = false;
+        setText(el.tourStateLabel, 'START');
+      }
+
+      function stopPlaying() {
+        if (playTimer !== null) {
+          clearInterval(playTimer);
+          playTimer = null;
+        }
+        state.playing = false;
+      }
+
+      function startPlaying() {
+        stopTour();
+        stopPlaying();
+        const len = timelineFor(state.hazard).length;
+        if (len < 2) return;
+        state.playing = true;
+        playTimer = setInterval(() => {
+          const n = timelineFor(state.hazard).length;
+          state.idx = ((state.idx === null ? -1 : state.idx) + 1) % n;
+          render();
+        }, Math.max(100, Number(CONFIG.playIntervalMs) || 1150));
+      }
+
+      // Automated Multi-Stage Choreography Tour:
+      // 1. Starts in 2D Flat Pass 01 (Before)
+      // 2. Steps to Pass 06 with Change Detection (Blue/Orange)
+      // 3. Clicks the active vent/fault and zooms in to 3D Extruded Relief
+      // 4. Steps across NOW into Forecast Pass 09 (26 JUL 2026) showing all 7 Forecast Locks in 3D
+      // 5. Zooms back out to 2D Observed Pass 06
+      function startChoreographyTour() {
+        if (state.touring) {
+          stopTour();
+          return;
+        }
+        stopPlaying();
+        stopTour();
+        state.touring = true;
+        setText(el.tourStateLabel, 'STOP');
+
+        const hazard = getHazard(state.hazard) || defaultHazard();
+
+        const schedule = (fn, delayMs) => {
+          const id = setTimeout(fn, delayMs);
+          tourTimeouts.push(id);
+        };
+
+        // Step A (0ms): 2D Flat North-Up at Pass 01 (21 APR 2026)
+        activateStageCard('before-2d');
+        state.idx = 0;
+        state.mode = 'radar';
+        state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+        if (viewport3D) viewport3D.animateTo2D({ duration: 0.9 });
+        render();
+
+        // Step B (2200ms): Pass 06 (20 JUN 2026) Change Detection vs Baseline Pass 01
+        schedule(() => {
+          activateStageCard('change-2d');
+          state.idx = 5;
+          state.mode = 'change';
+          state.baseline = 0;
+          render();
+        }, 2200);
+
+        // Step C (4600ms): Zoom In & Extrude 2D -> 3D Relief at Target Coordinate
+        schedule(() => {
+          activateStageCard('extrude-3d');
+          state.mode = 'radar';
+          state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+          render();
+          if (viewport3D) {
+            const { x, z } = viewport3D.lngLatToWorld(hazard.coords[0], hazard.coords[1], hazard.bounds);
+            viewport3D.animateTo3D({ targetX: x, targetZ: z, radius: 13.5, pitchDeg: 60, azimuthDeg: -28, duration: 1.5 });
+          }
+        }, 4600);
+
+        // Step D (7400ms): Cross NOW into Forecast Pass 09 (26 JUL 2026) — All 7 Forecast Locks Engage!
+        schedule(() => {
+          activateStageCard('forecast-lock');
+          state.idx = 8; // 26 JUL 2026 Peak Forecast
+          render();
+          if (viewport3D) {
+            viewport3D.animateTo3D({ targetX: 0, targetZ: 0, radius: 17.5, pitchDeg: 52, azimuthDeg: 22, duration: 1.5 });
+          }
+        }, 7400);
+
+        // Step E (10600ms): Return to Observed NOW (20 JUN 2026) & Zoom Out to 2D Baseline
+        schedule(() => {
+          state.idx = 5;
+          render();
+          if (viewport3D) viewport3D.animateTo2D({ duration: 1.3 });
+          stopTour();
+        }, 10600);
+      }
+
+      function activateStageCard(stageName) {
+        document.querySelectorAll('.stage-card').forEach((card) => {
+          card.setAttribute('data-active', card.dataset.stage === stageName ? 'true' : 'false');
+        });
+      }
+
+      /* ----------------------------------------------------------------------
+         Event Listeners & Router
+         ---------------------------------------------------------------------- */
+      function setIndex(i) {
+        const len = timelineFor(state.hazard).length;
+        if (!len || !Number.isFinite(i)) return;
+        stopPlaying();
+        stopTour();
+        state.idx = Math.min(len - 1, Math.max(0, Math.round(i)));
+        render();
+      }
+
+      function switchHazard(hazardId) {
+        const hazard = getHazard(hazardId);
+        if (!hazard || hazardId === state.hazard) return;
+        stopPlaying();
+        stopTour();
+        state.hazard = hazardId;
+        state.idx = Math.max(0, lastObservedIndex(timelineFor(hazardId)));
+        state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+        state.mode = 'radar';
+        state.baseline = 0;
+        render();
+        loadHazard(hazardId);
+      }
+
+      function bindEvents() {
+        el.dateSlider.addEventListener('input', () => setIndex(Number(el.dateSlider.value)));
+
+        el.ticks.addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-index]');
+          if (!btn || !el.ticks.contains(btn)) return;
+          setIndex(Number(btn.dataset.index));
+        });
+
+        const chartClick = (e) => {
+          const hit = e.target.closest('[data-index]');
+          if (!hit) return;
+          setIndex(Number(hit.getAttribute('data-index')));
+        };
+        el.chartRisk.addEventListener('click', chartClick);
+        el.chartPoint.addEventListener('click', chartClick);
+
+        el.play.addEventListener('click', () => {
+          if (state.playing) stopPlaying();
+          else startPlaying();
+          render();
+        });
+
+        el.btnRadar.addEventListener('click', () => {
+          if (el.btnRadar.disabled) return;
+          state.mode = 'radar';
+          render();
+        });
+        el.btnChange.addEventListener('click', () => {
+          if (el.btnChange.disabled) return;
+          state.mode = 'change';
+          render();
+        });
+
+        el.baseline.addEventListener('change', () => {
+          const v = Number(el.baseline.value);
+          if (Number.isFinite(v)) state.baseline = v;
+          render();
+        });
+
+        el.opacity.addEventListener('input', () => {
+          if (deriveView(state).isForecast) return;
+          const v = Number(el.opacity.value);
+          if (Number.isFinite(v)) state.observedOpacity = Math.min(100, Math.max(0, v));
+          render();
+        });
+
+        el.toggleRisk.addEventListener('change', () => {
+          state.showRisk = el.toggleRisk.checked;
+          render();
+        });
+        el.toggleReticle.addEventListener('change', () => {
+          state.showReticle = el.toggleReticle.checked;
+          render();
+        });
+        el.compoundToggle.addEventListener('change', () => {
+          state.compound = el.compoundToggle.checked;
+          render();
+        });
+
+        el.hazardSwitch.addEventListener('change', (e) => {
+          const input = e.target;
+          if (input && input.name === 'hazard' && input.checked) switchHazard(input.value);
+        });
+
+        // 2D / 3D Dimension & Camera Preset Buttons
+        el.btnDim2d.addEventListener('click', () => {
+          stopTour();
+          if (viewport3D) viewport3D.animateTo2D();
+        });
+        el.btnDim3d.addEventListener('click', () => {
+          stopTour();
+          if (viewport3D) viewport3D.animateTo3D({ targetX: 0, targetZ: 0, radius: 16.5, pitchDeg: 58, azimuthDeg: -24 });
+        });
+        el.camReset2d.addEventListener('click', () => {
+          stopTour();
+          if (viewport3D) viewport3D.animateTo2D();
+        });
+        el.camOverview3d.addEventListener('click', () => {
+          stopTour();
+          if (viewport3D) viewport3D.animateTo3D({ targetX: 0, targetZ: 0, radius: 18.0, pitchDeg: 54, azimuthDeg: -22 });
+        });
+        el.camFocusTarget.addEventListener('click', () => {
+          stopTour();
+          const hazard = getHazard(state.hazard) || defaultHazard();
+          const pt = state.point && !state.point.outside ? state.point : { lng: hazard.coords[0], lat: hazard.coords[1] };
+          state.point = pt;
+          render();
+          if (viewport3D) {
+            const { x, z } = viewport3D.lngLatToWorld(pt.lng, pt.lat, hazard.bounds);
+            viewport3D.animateTo3D({ targetX: x, targetZ: z, radius: 12.2, pitchDeg: 62, azimuthDeg: -30 });
+          }
+        });
+        el.btnQuick3d.addEventListener('click', () => {
+          stopTour();
+          if (!viewport3D) return;
+          if (viewport3D.is3D) {
+            viewport3D.animateTo2D();
+          } else {
+            const hazard = getHazard(state.hazard) || defaultHazard();
+            const pt = state.point && !state.point.outside ? state.point : { lng: hazard.coords[0], lat: hazard.coords[1] };
+            state.point = pt;
+            render();
+            const { x, z } = viewport3D.lngLatToWorld(pt.lng, pt.lat, hazard.bounds);
+            viewport3D.animateTo3D({ targetX: x, targetZ: z, radius: 14.5, pitchDeg: 58, azimuthDeg: -25 });
+          }
+        });
+
+        el.btnTour.addEventListener('click', startChoreographyTour);
+
+        // Multi-stage Before/After Comparison Strip toggle & cards
+        el.btnToggleCompare.addEventListener('click', () => {
+          setHidden(el.comparisonStrip, !el.comparisonStrip.hidden);
+        });
+        el.btnCloseCompare.addEventListener('click', () => {
+          setHidden(el.comparisonStrip, true);
+        });
+
+        document.querySelectorAll('.stage-card').forEach((card) => {
+          card.addEventListener('click', () => {
+            stopTour();
+            stopPlaying();
+            const stage = card.dataset.stage;
+            activateStageCard(stage);
+            const hazard = getHazard(state.hazard) || defaultHazard();
+
+            if (stage === 'before-2d') {
+              state.idx = 0; // Pass 01: 21 APR 2026
+              state.mode = 'radar';
+              render();
+              if (viewport3D) viewport3D.animateTo2D();
+            } else if (stage === 'change-2d') {
+              state.idx = 5; // Pass 06: 20 JUN 2026
+              state.mode = 'change';
+              state.baseline = 0;
+              render();
+              if (viewport3D) viewport3D.animateTo2D();
+            } else if (stage === 'extrude-3d') {
+              state.idx = 5;
+              state.mode = 'radar';
+              state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+              render();
+              if (viewport3D) {
+                const { x, z } = viewport3D.lngLatToWorld(hazard.coords[0], hazard.coords[1], hazard.bounds);
+                viewport3D.animateTo3D({ targetX: x, targetZ: z, radius: 13.5, pitchDeg: 60, azimuthDeg: -26 });
+              }
+            } else if (stage === 'forecast-lock') {
+              state.idx = 8; // 26 JUL 2026 (Forecast peak)
+              state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+              render();
+              if (viewport3D) {
+                viewport3D.animateTo3D({ targetX: 0, targetZ: 0, radius: 16.5, pitchDeg: 55, azimuthDeg: 18 });
+              }
+            }
+          });
+        });
+
+        // Mobile menu toggle
+        el.menuToggle.addEventListener('click', () => {
+          const expanded = el.menuToggle.getAttribute('aria-expanded') === 'true';
+          el.menuToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        });
+
+        // Dialogs
+        const bindDialog = (opener, dialog) => {
+          opener.addEventListener('click', () => {
+            dialogOpener = opener;
+            if (typeof dialog.showModal === 'function') dialog.showModal();
+            else dialog.setAttribute('open', '');
+          });
+          dialog.querySelectorAll('.dialog-close').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              if (typeof dialog.close === 'function') dialog.close();
+              else dialog.removeAttribute('open');
+            });
+          });
+          dialog.addEventListener('close', () => {
+            if (dialogOpener && typeof dialogOpener.focus === 'function') dialogOpener.focus();
+            dialogOpener = null;
+          });
+        };
+        bindDialog(el.openMethod, el.dlgMethod);
+        bindDialog(el.openAbout, el.dlgAbout);
+
+        // Prototype Sign in / Sign up forms (no credentials logged or sent)
+        el.signinForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          if (!el.signinForm.checkValidity()) {
+            el.signinForm.reportValidity();
+            return;
+          }
+          el.signinForm.reset();
+          window.location.hash = '#/';
+        });
+
+        el.signupForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          if (!el.signupForm.checkValidity()) {
+            el.signupForm.reportValidity();
+            return;
+          }
+          if (el.signupPassword.value !== el.signupConfirm.value) {
+            setText(el.pwError, COPY.pwMismatch);
+            setHidden(el.pwError, false);
+            el.signupConfirm.setAttribute('aria-invalid', 'true');
+            el.signupConfirm.focus();
+            return;
+          }
+          setHidden(el.pwError, true);
+          el.signupConfirm.removeAttribute('aria-invalid');
+          el.signupForm.reset();
+          window.location.hash = '#/signin';
+        });
+
+        const clearPwError = () => {
+          if (!el.pwError.hidden) {
+            setHidden(el.pwError, true);
+            el.signupConfirm.removeAttribute('aria-invalid');
+          }
+        };
+        el.signupPassword.addEventListener('input', clearPwError);
+        el.signupConfirm.addEventListener('input', clearPwError);
+
+        window.addEventListener('hashchange', route);
+      }
+
+      /* ----------------------------------------------------------------------
+         Map Click Handler: Samples Point Series & Zooms In to 3D Extruded View
+         ---------------------------------------------------------------------- */
+      function onMapClick({ lng, lat, worldX, worldZ, inside }) {
+        if (state.route !== 'home') return;
+        stopTour();
+        const hazard = getHazard(state.hazard) || defaultHazard();
+        if (inside && lng >= hazard.bounds.west && lng <= hazard.bounds.east && lat >= hazard.bounds.south && lat <= hazard.bounds.north) {
+          state.point = { lng, lat };
+          render();
+          // Clicking inside the footprint automatically extrudes and zooms into 3D around the clicked point
+          if (viewport3D) {
+            activateStageCard('extrude-3d');
+            viewport3D.animateTo3D({
+              targetX: worldX,
+              targetZ: worldZ,
+              radius: 13.8,
+              pitchDeg: 58,
+              azimuthDeg: viewport3D.is3D ? viewport3D.rig.azimuthDeg : -24,
+              duration: 1.25,
+            });
+          }
+        } else {
+          state.point = { outside: true };
+          render();
+        }
+      }
+
+      /* ----------------------------------------------------------------------
+         Hash Router (#/, #/signin, #/signup, 404)
+         ---------------------------------------------------------------------- */
+      function parseRoute(hash) {
+        const h = String(hash || '');
+        if (h === '' || h === '#' || h === '#/') return { name: 'home', anchor: null };
+        if (h === '#/signin') return { name: 'signin', anchor: null };
+        if (h === '#/signup') return { name: 'signup', anchor: null };
+        if (!h.startsWith('#/')) {
+          const target = document.getElementById(h.slice(1));
+          if (target) return { name: 'home', anchor: target };
+        }
+        return { name: 'notfound', anchor: null };
+      }
+
+      function route() {
+        const { name } = parseRoute(window.location.hash);
+        const previous = currentRoute;
+
+        if (previous === 'signin' && name !== 'signin') el.signinForm.reset();
+        if (previous === 'signup' && name !== 'signup') {
+          el.signupForm.reset();
+          setHidden(el.pwError, true);
+        }
+
+        if (name !== 'home') {
+          stopPlaying();
+          stopTour();
+        }
+        state.route = name;
+        currentRoute = name;
+        el.menuToggle.setAttribute('aria-expanded', 'false');
+
+        setHidden(el.signinForm, name !== 'signin');
+        setHidden(el.signupForm, name !== 'signup');
+        setHidden(el.notfound, name !== 'notfound');
+        setHidden(el.page, name === 'home');
+
+        render();
+      }
+
+      /* ----------------------------------------------------------------------
+         Boot & Window Onload Animation Loop
+         ---------------------------------------------------------------------- */
+      window.onload = function () {
+        const hazard = getHazard(state.hazard) || defaultHazard();
+        state.idx = Math.max(0, lastObservedIndex(timelineFor(state.hazard)));
+        state.point = { lng: hazard.coords[0], lat: hazard.coords[1] };
+
+        bindEvents();
+
+        try {
+          viewport3D = new TelemetryViewport3D(el.map, { onClick: onMapClick });
+        } catch (err) {
+          state.errors.map = `3D WebGL viewport unavailable (${err && err.message ? err.message : 'init error'}). Controls and evidence still work.`;
+        }
+
+        loadHazard(state.hazard);
+        route();
+
+        if (isMobile()) {
+          el.controlsDrawer.open = false;
+          el.evidenceDrawer.open = false;
+          setHidden(el.comparisonStrip, true);
+        }
+
+        render();
+
+        // Start Three.js render loop
+        const clock = new THREE.Clock();
+        function animateLoop() {
+          requestAnimationFrame(animateLoop);
+          if (viewport3D && state.route === 'home') {
+            viewport3D.renderFrame(clock.getElapsedTime());
+          }
+        }
+        animateLoop();
+      };
+    })();
+  </script>
+</body>
+</html>
