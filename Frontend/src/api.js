@@ -50,6 +50,21 @@ export const api = {
   // Supplementary NASA datasets for the event's area (stored by the backend, also used by the AI)
   context: (eventId) => request(`/api/events/${id(eventId)}/context`),
 
+  // Ask about any place: what NISAR, quakes and other NASA datasets have for a box.
+  // `bbox` is [west, south, east, north]; the backend allows at most 5 degrees a side.
+  nisarSearch: (bbox, start, end) =>
+    request(`/api/nisar/search?bbox=${bbox.join(',')}&start=${start}&end=${end}&products=GCOV,GUNW,GOFF,SME2`),
+  quakes: (bbox, days = 90) =>
+    request(`/api/discover/earthquakes?minMagnitude=4.5&days=${days}&bbox=${bbox.join(',')}`),
+  datasetContext: (bbox, start, end) =>
+    request(
+      `/api/datasets/context?bbox=${bbox.join(',')}&start=${start}&end=${end}&sources=gpm,smap,hls,terrain,grace&limit=1`,
+    ),
+
+  // Start tracking (signed-in users only)
+  trackArea: (body) => request('/api/ingest', { method: 'POST', body }),
+  trackQuake: (usgsId) => request('/api/events/earthquake', { method: 'POST', body: { usgsId } }),
+
   // AI
   summary: (eventId) => request(`/api/events/${id(eventId)}/summary`),
   ask: (eventId, question, chatId) =>

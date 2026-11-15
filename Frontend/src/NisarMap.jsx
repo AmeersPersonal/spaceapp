@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapView.css";
 import "./NisarMap.css";
 import { api } from "./api.js";
+import { useAuth } from "./auth.jsx";
+import AreaExplorer from "./AreaExplorer.jsx";
 import { loadBrowseImage } from "./browseImage.js";
+import { JAPAN_BBOX, areaAround, contains, wrapLng, worldMask } from "./explore.js";
 import { studyArea } from "./studyArea.js";
 
 // The map fed by the backend catalog instead of the bundled sample data.
-// Two kinds of NISAR imagery, in order of preference:
+//
+// Signed out: Japan is highlighted (the rest of the world is dimmed) and only Japan's
+// events are offered; clicking elsewhere asks the visitor to sign in.
+// Signed in: any event is available, and clicking a spot queries it (AreaExplorer)
+// and offers the events that cover it.
+//
+// An event is shown with, in order of preference:
 //   1. processed tile layers (event.layers), once the processor has run;
 //   2. ASF browse previews of each catalogued scene, placed by footprint.
 // With neither, the event's area and acquisition dates are shown on their own.
@@ -38,6 +48,8 @@ const rectangle = ([w, s, e, n]) => ({
   },
 });
 
+const emptyCollection = { type: "FeatureCollection", features: [] };
+
 // The box that holds the event area and every scene footprint.
 function unionBounds(event, scenes) {
   const boxes = [event.bbox, ...scenes.map((s) => s.bounds)].filter(Boolean);
@@ -52,12 +64,20 @@ function unionBounds(event, scenes) {
 
 const layerId = (sceneId) => `scene-${sceneId}`;
 const wideScreen = () => window.innerWidth > 900;
+const centreInJapan = (e) =>
+  Boolean(e.bbox) && contains(JAPAN_BBOX, (e.bbox[0] + e.bbox[2]) / 2, (e.bbox[1] + e.bbox[3]) / 2);
 
-function NisarMap() {
+function NisarMap({ onOpenSample }) {
+  const { status: authStatus } = useAuth();
+  const signedIn = authStatus === "signed-in";
+  const showJapan = authStatus === "signed-out" || authStatus === "unavailable";
+
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const markerRef = useRef(null);
   const addedRef = useRef(new Set()); // scene IDs currently on the map
-  const pickRef = useRef(() => null); // finds the visible scene under a point
+  const clickRef = useRef(() => {}); // latest click and hover behaviour, read by the map's listeners
+  const hoverRef = useRef(() => "");
 
   const [mapReady, setMapReady] = useState(false);
   const [events, setEvents] = useState(null);
@@ -72,6 +92,9 @@ function NisarMap() {
   const [opacity, setOpacity] = useState(0.85);
   const [infoOpen, setInfoOpen] = useState(wideScreen);
   const [selectedId, setSelectedId] = useState(null);
+  const [japan, setJapan] = useState(null); // Japan's outline (GeoJSON)
+  const [probe, setProbe] = useState(null); // the clicked spot: { id, lng, lat, bbox }
+  const [prompt, setPrompt] = useState(false); // signed-out visitor clicked outside the showcase
 
   // Step 1: the map, created once.
   useEffect(() => {
@@ -86,29 +109,42 @@ function NisarMap() {
     map.touchZoomRotate.disableRotation();
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     map.on("load", () => {
-      map.addSource("aoi", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      // Japan showcase: dim the world, outline the country.
+      map.addSource("japan-mask", { type: "geojson", data: emptyCollection });
+      map.addSource("japan", { type: "geojson", data: emptyCollection });
+      map.addLayer({ id: "japan-mask", type: "fill", source: "japan-mask", paint: { "fill-color": "#1e0f1c", "fill-opacity": 0.55 }, layout: { visibility: "none" } });
+      map.addLayer({ id: "japan-glow", type: "line", source: "japan", paint: { "line-color": "#BFD1E5", "line-width": 7, "line-opacity": 0.28, "line-blur": 5 }, layout: { visibility: "none" } });
+      map.addLayer({ id: "japan-line", type: "line", source: "japan", paint: { "line-color": "#BFD1E5", "line-width": 1.8 }, layout: { visibility: "none" } });
+
+      map.addSource("aoi", { type: "geojson", data: emptyCollection });
       map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#BFD1E5", "fill-opacity": 0.06 } });
       map.addLayer({ id: "aoi-line", type: "line", source: "aoi", paint: { "line-color": "#BFD1E5", "line-width": 1.5, "line-dasharray": [2, 2] } });
       mapRef.current = map;
       setMapReady(true);
     });
-    // Click a scene on the map to open its details; the pointer shows what is clickable.
-    map.on("click", (e) => {
-      const scene = pickRef.current(e.lngLat.lng, e.lngLat.lat);
-      if (scene) {
-        setSelectedId(scene.id);
-        setInfoOpen(true);
-      }
-    });
+    map.on("click", (e) => clickRef.current(e.lngLat));
     map.on("mousemove", (e) => {
-      map.getCanvas().style.cursor = pickRef.current(e.lngLat.lng, e.lngLat.lat) ? "pointer" : "";
+      map.getCanvas().style.cursor = hoverRef.current(e.lngLat);
     });
     const added = addedRef.current;
     return () => {
       mapRef.current = null;
+      markerRef.current = null;
       added.clear();
       setMapReady(false);
       map.remove();
+    };
+  }, []);
+
+  // Japan's outline is a small static file.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/data/japan.geojson")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Japan outline unavailable"))))
+      .then((data) => !cancelled && setJapan(data))
+      .catch(() => {}); // the showcase still works without the highlight
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -117,25 +153,32 @@ function NisarMap() {
     let cancelled = false;
     api
       .events()
-      .then(({ events: list }) => {
-        if (cancelled) return;
-        setEvents(list);
-        // Start on an event that already has something to show.
-        const best = list.find((e) => e.sceneCount > 0) ?? list[0];
-        if (best) setEventId(best.id);
-      })
+      .then(({ events: list }) => !cancelled && setEvents(list))
       .catch((error) => !cancelled && setListError(error.message));
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Step 3: the chosen event's scenes and layers.
+  // Signed-out visitors see Japan's events only.
+  const visibleEvents = useMemo(() => {
+    if (!events) return null;
+    return signedIn ? events : events.filter(centreInJapan);
+  }, [events, signedIn]);
+
+  // The event on screen: the user's pick if it is visible, else the first one with scenes.
+  const activeId = useMemo(() => {
+    if (!visibleEvents) return "";
+    if (visibleEvents.some((e) => e.id === eventId)) return eventId;
+    return (visibleEvents.find((e) => e.sceneCount > 0) ?? visibleEvents[0])?.id ?? "";
+  }, [visibleEvents, eventId]);
+
+  // Step 3: the active event's scenes and layers.
   useEffect(() => {
-    if (!eventId) return;
+    if (!activeId) return;
     let cancelled = false;
     api
-      .event(eventId)
+      .event(activeId)
       .then((data) => {
         if (cancelled) return;
         setDetailError("");
@@ -152,16 +195,17 @@ function NisarMap() {
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [activeId]);
 
-  const event = detail?.event ?? null;
-  const scenes = useMemo(() => detail?.scenes ?? [], [detail]);
+  const current = activeId && detail?.event?.id === activeId ? detail : null;
+  const event = current?.event ?? null;
+  const scenes = useMemo(() => current?.scenes ?? [], [current]);
 
   // Processed tiles, if any: use the first layer's dates.
-  const tileLayer = detail?.layers?.[0]?.layer ?? null;
+  const tileLayer = current?.layers?.[0]?.layer ?? null;
   const tileEntries = useMemo(
-    () => (detail?.layers ?? []).filter((l) => l.layer === tileLayer).sort((a, b) => a.date.localeCompare(b.date)),
-    [detail, tileLayer],
+    () => (current?.layers ?? []).filter((l) => l.layer === tileLayer).sort((a, b) => a.date.localeCompare(b.date)),
+    [current, tileLayer],
   );
   const previewScenes = useMemo(() => scenes.filter((s) => s.browseUrl && s.bounds), [scenes]);
   const mode = tileEntries.length ? "tiles" : previewScenes.length ? "previews" : "area";
@@ -185,16 +229,50 @@ function NisarMap() {
     });
   }, [event, scenes]);
 
-  // Step 4: draw the event's area and frame it.
+  const fitJapan = useCallback(() => {
+    mapRef.current?.fitBounds([[JAPAN_BBOX[0], JAPAN_BBOX[1]], [JAPAN_BBOX[2], JAPAN_BBOX[3]]], {
+      padding: { top: 150, bottom: 110, left: wideScreen() ? 370 : 30, right: 70 },
+      duration: 900,
+    });
+  }, []);
+
+  // Japan highlight on for signed-out visitors, off once signed in.
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map) return;
-    map.getSource("aoi").setData({
-      type: "FeatureCollection",
-      features: event?.bbox ? [rectangle(event.bbox)] : [],
-    });
-    fitToData();
-  }, [mapReady, event, fitToData]);
+    if (japan) {
+      map.getSource("japan").setData(japan);
+      map.getSource("japan-mask").setData(worldMask(japan));
+    }
+    const visibility = showJapan && japan ? "visible" : "none";
+    for (const id of ["japan-mask", "japan-glow", "japan-line"]) map.setLayoutProperty(id, "visibility", visibility);
+  }, [mapReady, japan, showJapan]);
+
+  // Step 4: outline the clicked area, or else the event's area, and frame what is on show.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const box = probe?.bbox ?? event?.bbox;
+    map.getSource("aoi").setData({ type: "FeatureCollection", features: box ? [rectangle(box)] : [] });
+  }, [mapReady, event, probe]);
+
+  useEffect(() => {
+    if (!mapReady) return;
+    if (event) fitToData();
+    else if (showJapan) fitJapan();
+  }, [mapReady, event, showJapan, fitToData, fitJapan]);
+
+  // A pin on the clicked spot.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    if (!probe) {
+      markerRef.current?.remove();
+      return;
+    }
+    if (!markerRef.current) markerRef.current = new maplibregl.Marker({ color: "#ffffff" });
+    markerRef.current.setLngLat([probe.lng, probe.lat]).addTo(map);
+  }, [mapReady, probe]);
 
   // Step 5: load every preview image once and work out where it goes.
   useEffect(() => {
@@ -216,11 +294,11 @@ function NisarMap() {
     };
   }, [mode, previewScenes]);
 
-  // Step 6: keep the map's image layers in step with the placed previews.
+  // Step 6: keep the map's image layers in step with the placed previews of the event on show.
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map) return;
-    const wanted = new Set(Object.keys(placed));
+    const wanted = new Set(Object.keys(placed).filter((id) => previewScenes.some((s) => s.id === id)));
     for (const id of [...addedRef.current]) {
       if (!wanted.has(id)) {
         if (map.getLayer(layerId(id))) map.removeLayer(layerId(id));
@@ -238,7 +316,7 @@ function NisarMap() {
       addedRef.current.add(id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- opacity is applied by the next effect
-  }, [mapReady, placed]);
+  }, [mapReady, placed, previewScenes]);
 
   // Show only the previews acquired on the chosen date.
   useEffect(() => {
@@ -252,18 +330,33 @@ function NisarMap() {
     }
   }, [mapReady, placed, previewScenes, currentDate, opacity]);
 
-  // Which visible scene sits under a map point (footprint boxes), for click and hover.
+  // Clicking and hovering: a scene on the map opens its details; anywhere else either
+  // queries that spot (signed in) or asks the visitor to sign in. Read through refs so the
+  // map's listeners always see the latest state.
   useEffect(() => {
-    pickRef.current = (lng, lat) =>
+    const sceneAt = (lng, lat) =>
       mode === "previews" && currentDate
         ? previewScenes.find(
-            (s) =>
-              day(s.acquiredAt) === currentDate &&
-              addedRef.current.has(s.id) &&
-              lng >= s.bounds[0] && lng <= s.bounds[2] && lat >= s.bounds[1] && lat <= s.bounds[3],
+            (s) => day(s.acquiredAt) === currentDate && addedRef.current.has(s.id) && contains(s.bounds, lng, lat),
           ) ?? null
         : null;
-  }, [mode, currentDate, previewScenes, placed]);
+    clickRef.current = ({ lng: rawLng, lat }) => {
+      const lng = wrapLng(rawLng);
+      const scene = sceneAt(lng, lat);
+      if (scene) {
+        setProbe(null);
+        setSelectedId(scene.id);
+      } else if (signedIn) {
+        setProbe({ id: Date.now(), lng, lat, bbox: areaAround(lng, lat) });
+      } else if (showJapan) {
+        setPrompt(true);
+      } else {
+        return;
+      }
+      setInfoOpen(true);
+    };
+    hoverRef.current = ({ lng, lat }) => (sceneAt(wrapLng(lng), lat) ? "pointer" : signedIn ? "crosshair" : "");
+  }, [mode, currentDate, previewScenes, placed, signedIn, showJapan]);
 
   // Processed tiles for the chosen date.
   useEffect(() => {
@@ -299,10 +392,34 @@ function NisarMap() {
     return () => clearInterval(timer);
   }, [playing, dates.length]);
 
+  // Choosing an event (from the picker, the list or a click result) leaves any area query.
+  const openEvent = (id) => {
+    setProbe(null);
+    setPrompt(false);
+    setEventId(id);
+  };
+
+  // A new event was just started from a click result: add it to the list right away
+  // (the catalog list is cached for a minute) and open it.
+  const onTracked = (item) => {
+    setEvents((list) => [item, ...(list ?? []).filter((e) => e.id !== item.id)]);
+    openEvent(item.id);
+  };
+
   const onDate = currentDate ? scenes.filter((s) => day(s.acquiredAt) === currentDate) : [];
   const selected = scenes.find((s) => s.id === selectedId) ?? null;
   const loadingPreviews = mode === "previews" && Object.keys(placed).length + failed < previewScenes.length;
   const lastIndex = Math.max(0, dates.length - 1);
+  const japanOnly = showJapan && !event;
+  const exploring = signedIn && probe;
+  const headTitle = event ? event.name : japanOnly ? "Japan" : "NISAR data";
+  const headSub = event
+    ? `${plural(scenes.length, "scene")} · ${plural(dates.length, "date")}`
+    : japanOnly
+      ? "Showcase region"
+      : signedIn
+        ? "Click the map to explore"
+        : "Loading…";
 
   return (
     <div className="sx">
@@ -311,14 +428,14 @@ function NisarMap() {
       <div className="sx-nisar-top">
         <select
           className="sx-select sx-event-select"
-          value={eventId}
-          onChange={(e) => setEventId(e.target.value)}
-          disabled={!events?.length}
+          value={activeId}
+          onChange={(e) => openEvent(e.target.value)}
+          disabled={!visibleEvents?.length}
           aria-label="Event"
         >
-          {!events && <option>Loading events…</option>}
-          {events?.length === 0 && <option>No events yet</option>}
-          {events?.map((e) => (
+          {!visibleEvents && <option>Loading events…</option>}
+          {visibleEvents?.length === 0 && <option>{signedIn ? "No events yet" : "No Japan events yet"}</option>}
+          {visibleEvents?.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}
             </option>
@@ -330,123 +447,193 @@ function NisarMap() {
             Zoom to data
           </button>
         )}
+        {showJapan && event && (
+          <button className="sx-fit" onClick={fitJapan} title="Back to all of Japan">
+            All of Japan
+          </button>
+        )}
       </div>
 
       <aside className="sx-info">
-        <button className="sx-info-head" onClick={() => setInfoOpen((o) => !o)} aria-expanded={infoOpen}>
-          <span className="sx-info-title">{event ? event.name : "NISAR data"}</span>
-          <span className="sx-info-sub">
-            {event ? `${plural(scenes.length, "scene")} · ${plural(dates.length, "date")}` : events?.length === 0 ? "No events" : "Loading…"}
-          </span>
-          <span className="sx-chevron" aria-hidden="true">{infoOpen ? "▾" : "▸"}</span>
-        </button>
+        {exploring ? (
+          <AreaExplorer
+            key={probe.id}
+            probe={probe}
+            events={events}
+            onClose={() => setProbe(null)}
+            onOpenEvent={openEvent}
+            onTracked={onTracked}
+          />
+        ) : (
+          <>
+            <button className="sx-info-head" onClick={() => setInfoOpen((o) => !o)} aria-expanded={infoOpen}>
+              <span className="sx-info-title">{headTitle}</span>
+              <span className="sx-info-sub">{headSub}</span>
+              <span className="sx-chevron" aria-hidden="true">{infoOpen ? "▾" : "▸"}</span>
+            </button>
 
-        {infoOpen && (
-          <div className="sx-info-body">
-            {listError && <p className="sx-error">{listError}</p>}
-            {detailError && <p className="sx-error">{detailError}</p>}
-            {events?.length === 0 && (
-              <p className="sx-note">
-                The catalog has no events yet. Ingest an area or register an earthquake, or switch to the sample data.
-              </p>
-            )}
-            {event && (
-              <>
-                {mode === "tiles" && <p className="sx-note">Showing processed layer “{tileLayer}”.</p>}
-                {mode === "previews" && (
-                  <p className="sx-note">
-                    ASF’s preview image of each scene (an HH/HV colour composite). Quick-look pictures, not
-                    measurements or change maps.
-                    {loadingPreviews && " Loading previews…"}
-                    {failed > 0 && ` ${plural(failed, "preview")} could not be loaded.`}
-                  </p>
-                )}
-                {mode === "area" && (
-                  <p className="sx-note">
-                    {scenes.length
-                      ? "These scenes have no preview or footprint stored yet (re-run the ingest to add them), and none are processed into map tiles. The dashed box is the tracked area."
-                      : "No scenes found for this area yet. The dashed box is the tracked area."}
-                  </p>
-                )}
+            {infoOpen && (
+              <div className="sx-info-body">
+                {listError && <p className="sx-error">{listError}</p>}
+                {detailError && <p className="sx-error">{detailError}</p>}
 
-                {onDate.length > 0 && (
+                {japanOnly && (
                   <>
-                    <h3 className="sx-info-h">{formatDate(currentDate)}</h3>
-                    <ul className="sx-scenes">
-                      {onDate.map((s) => (
-                        <li key={s.id}>
-                          <button
-                            className={`sx-scene${s.id === selectedId ? " sx-scene-active" : ""}`}
-                            onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
-                          >
-                            <strong>{s.product}</strong> · {s.polarizations.join("/") || "—"}
-                            {s.flightDirection ? ` · ${s.flightDirection.toLowerCase()}` : ""}
-                            <span className="sx-scene-status">{String(s.status).replaceAll("_", " ")}</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    <p className="sx-text">
+                      Japan sits on the Pacific Ring of Fire: volcanoes, large earthquakes and heavy rain
+                      reshape its ground every year. NISAR’s radar sees those changes through cloud and at night.
+                    </p>
+                    {visibleEvents?.length === 0 && (
+                      <p className="sx-note">No NISAR events for Japan are catalogued yet.</p>
+                    )}
+                    {visibleEvents?.length > 0 && (
+                      <ul className="sx-scenes">
+                        {visibleEvents.map((e) => (
+                          <li key={e.id}>
+                            <button className="sx-scene" onClick={() => openEvent(e.id)}>
+                              <strong>{e.name}</strong>
+                              <span className="sx-scene-status">
+                                {e.type} · {plural(e.sceneCount ?? 0, "scene")}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {onOpenSample && (
+                      <button className="sx-action sx-action-quiet" onClick={onOpenSample}>
+                        See the Mount Aso demo
+                      </button>
+                    )}
                   </>
                 )}
-                {selected && (
-                  <dl className="sx-detail">
-                    <div><dt>Acquired</dt><dd>{formatDate(day(selected.acquiredAt))}, {formatTime(selected.acquiredAt)}</dd></div>
-                    {selected.pathNumber != null && <div><dt>Track / frame</dt><dd>{selected.pathNumber} / {selected.frameNumber ?? "—"}</dd></div>}
-                    {selected.productionConfig && <div><dt>Processing</dt><dd>{selected.productionConfig === "UR" ? "Urgent response" : selected.productionConfig === "PR" ? "Standard production" : selected.productionConfig}</dd></div>}
-                    <div><dt>Scene</dt><dd className="sx-scene-id">{selected.id}</dd></div>
-                  </dl>
+
+                {event && (
+                  <>
+                    {mode === "tiles" && <p className="sx-note">Showing processed layer “{tileLayer}”.</p>}
+                    {mode === "previews" && (
+                      <p className="sx-note">
+                        ASF’s preview image of each scene (an HH/HV colour composite). Quick-look pictures, not
+                        measurements or change maps.
+                        {loadingPreviews && " Loading previews…"}
+                        {failed > 0 && ` ${plural(failed, "preview")} could not be loaded.`}
+                      </p>
+                    )}
+                    {mode === "area" && (
+                      <p className="sx-note">
+                        {scenes.length
+                          ? "These scenes have no preview or footprint stored yet (re-run the ingest to add them), and none are processed into map tiles. The dashed box is the tracked area."
+                          : "No scenes found for this area yet. The dashed box is the tracked area."}
+                      </p>
+                    )}
+
+                    {onDate.length > 0 && (
+                      <>
+                        <h3 className="sx-info-h">{formatDate(currentDate)}</h3>
+                        <ul className="sx-scenes">
+                          {onDate.map((s) => (
+                            <li key={s.id}>
+                              <button
+                                className={`sx-scene${s.id === selectedId ? " sx-scene-active" : ""}`}
+                                onClick={() => setSelectedId(s.id === selectedId ? null : s.id)}
+                              >
+                                <strong>{s.product}</strong> · {s.polarizations.join("/") || "—"}
+                                {s.flightDirection ? ` · ${s.flightDirection.toLowerCase()}` : ""}
+                                <span className="sx-scene-status">{String(s.status).replaceAll("_", " ")}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {selected && (
+                      <dl className="sx-detail">
+                        <div><dt>Acquired</dt><dd>{formatDate(day(selected.acquiredAt))}, {formatTime(selected.acquiredAt)}</dd></div>
+                        {selected.pathNumber != null && <div><dt>Track / frame</dt><dd>{selected.pathNumber} / {selected.frameNumber ?? "—"}</dd></div>}
+                        {selected.productionConfig && <div><dt>Processing</dt><dd>{selected.productionConfig === "UR" ? "Urgent response" : selected.productionConfig === "PR" ? "Standard production" : selected.productionConfig}</dd></div>}
+                        <div><dt>Scene</dt><dd className="sx-scene-id">{selected.id}</dd></div>
+                      </dl>
+                    )}
+                    {mode === "previews" && !selected && (
+                      <p className="sx-note">Tip: click a scene on the map for its details.</p>
+                    )}
+                  </>
                 )}
-                {mode === "previews" && !selected && (
-                  <p className="sx-note">Tip: click a scene on the map for its details.</p>
+
+                {signedIn && !event && events?.length === 0 && (
+                  <p className="sx-note">
+                    The catalog has no events yet. Click anywhere on the map to see what NISAR has there and start tracking it.
+                  </p>
                 )}
-                <p className="sx-credit">NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC.</p>
-              </>
+                {signedIn && !event && events?.length > 0 && (
+                  <p className="sx-note">Click anywhere on the map to see what NISAR and NASA have for that spot, or pick an event above.</p>
+                )}
+                {signedIn && event && (
+                  <p className="sx-note">Click empty map to explore any other spot.</p>
+                )}
+
+                {showJapan && (
+                  <div className={`sx-cta${prompt ? " sx-cta-attn" : ""}`}>
+                    <strong>{prompt ? "Sign in to explore that spot" : "Explore anywhere"}</strong>
+                    <span>
+                      Signed-in users can click any place on Earth to see its NISAR scenes, nearby earthquakes and
+                      NASA data, and start tracking it.
+                    </span>
+                    <Link to="/signin" className="sx-action">Sign in</Link>
+                  </div>
+                )}
+                <p className="sx-credit">
+                  NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. Country outline: Natural Earth.
+                </p>
+              </div>
             )}
-          </div>
+          </>
         )}
       </aside>
 
-      <div className="sx-controls sx-controls-compact">
-        <div className="sx-row">
-          <button
-            className="sx-play"
-            onClick={() => setPlaying((p) => !p)}
-            disabled={dates.length < 2}
-            aria-label={playing ? "Pause" : "Play"}
-          >
-            {playing ? "❚❚" : "▶"}
-          </button>
-          <input
-            className="sx-slider sx-grow"
-            type="range"
-            min="0"
-            max={lastIndex}
-            step="1"
-            value={Math.min(dateIndex, lastIndex)}
-            disabled={dates.length < 2}
-            onChange={(e) => {
-              setPlaying(false);
-              setDateIndex(Number(e.target.value));
-            }}
-            aria-label="Acquisition date"
-          />
-          <span className="sx-date">{currentDate ? formatDate(currentDate) : "No dates"}</span>
-        </div>
-        <div className="sx-row">
-          <label className="sx-inline sx-grow">
-            Opacity
+      {event && (
+        <div className="sx-controls sx-controls-compact">
+          <div className="sx-row">
+            <button
+              className="sx-play"
+              onClick={() => setPlaying((p) => !p)}
+              disabled={dates.length < 2}
+              aria-label={playing ? "Pause" : "Play"}
+            >
+              {playing ? "❚❚" : "▶"}
+            </button>
             <input
               className="sx-slider sx-grow"
               type="range"
               min="0"
-              max="1"
-              step="0.05"
-              value={opacity}
-              onChange={(e) => setOpacity(Number(e.target.value))}
+              max={lastIndex}
+              step="1"
+              value={Math.min(dateIndex, lastIndex)}
+              disabled={dates.length < 2}
+              onChange={(e) => {
+                setPlaying(false);
+                setDateIndex(Number(e.target.value));
+              }}
+              aria-label="Acquisition date"
             />
-          </label>
+            <span className="sx-date">{currentDate ? formatDate(currentDate) : "No dates"}</span>
+          </div>
+          <div className="sx-row">
+            <label className="sx-inline sx-grow">
+              Opacity
+              <input
+                className="sx-slider sx-grow"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={opacity}
+                onChange={(e) => setOpacity(Number(e.target.value))}
+              />
+            </label>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
