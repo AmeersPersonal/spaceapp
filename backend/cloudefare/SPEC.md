@@ -33,7 +33,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `vitest.config.js` | `@cloudflare/vitest-plugin` config (local bindings, D1 migrations, offline env). |
 | `package.json` / `.npmrc` | Deps and scripts. `.npmrc` sets `legacy-peer-deps` to work around an npm 10 peer-resolution crash with vitest 4. |
 | `.dev.vars.example` | Template for local secrets. |
-| `.env.local` / `.dev.vars` | Ignored local Auth0 and service credentials, loaded explicitly by `npm run dev`. |
+| `.dev.vars` | Ignored local Auth0 and service credentials, loaded automatically by Wrangler. |
 
 ## Interfaces
 
@@ -102,7 +102,7 @@ Params `{ingestId, eventId, wkt, start, end, products, maxScenes}`. Steps: `mark
 ### Env vars / secrets
 Vars: `GOOGLE_GEOCODE_URL` (optional override), `AI_GATEWAY_ID`, `LLM_MODEL`, `EMBEDDING_MODEL`, `ASF_SEARCH_URL`, `PROCESSOR_URL`, `MAX_SCENES_PER_INGEST`, `CORS_ORIGIN`. Secrets: `EARTHDATA_TOKEN`, `INGEST_API_KEY`, `PROCESSOR_TOKEN`, `GOOGLE_MAPS_API_KEY`, `FIRMS_MAP_KEY` (separate from Earthdata Login; see `.dev.vars.example`).
 
-Auth0 requires `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`, and secrets `AUTH0_CLIENT_SECRET`, `AUTH0_SESSION_ENCRYPTION_KEY` (32+ characters). `EVENT_CONTEXT=off` stops provider queries for event context and serves only stored rows (tests set it). Optional `FRONTEND_URL` (the browser app's URL, e.g. `http://localhost:5173/`): `/auth/login` returns there after sign-in, `GET /` redirects browsers (`Accept: text/html`) there, and its origin is accepted for protected writes; see [AUTH0.md](AUTH0.md). `INGEST_API_KEY` is legacy and no longer grants write access. `npm run dev` explicitly loads `.dev.vars` then `.env.local` on port 8787; both files must exist. Never commit local credentials.
+Auth0 requires `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL`, and secrets `AUTH0_CLIENT_SECRET`, `AUTH0_SESSION_ENCRYPTION_KEY` (32+ characters). `EVENT_CONTEXT=off` stops provider queries for event context and serves only stored rows (tests set it). Optional `FRONTEND_URL` (the browser app's URL, e.g. `http://localhost:5173/`): `/auth/login` returns there after sign-in, `GET /` redirects browsers (`Accept: text/html`) there, and its origin is accepted for protected writes; see [AUTH0.md](AUTH0.md). `INGEST_API_KEY` is legacy and no longer grants write access. `npm run dev` starts Wrangler on port 8787 and automatically loads `.dev.vars`; `.env.local` is no longer required. Never commit local credentials.
 
 ### Dataset handlers
 `listDatasets(env)`, `parseDatasetQuery(URLSearchParams)`, `fetchDataset(source, query, env, deps)`, and `datasetContext(query, env, deps)` are exported from `events.js`. All provider adapters support `deps.fetch`; query validation applies to direct callers too. Generic event messages support `{type:'dataset', source, bbox, start, end, ...}` and `{type:'dataset_context', sources?, bbox, start, end, ...}`. Results are returned to callers; no raster download, D1 persistence, R2 upload or AI prompt enrichment is triggered. Calls have a 10-second timeout and streamed response limits (2 MB, 4 MB for GEOS). CMR requests are anonymous; Earthdata credentials belong in the external download processor.
@@ -145,6 +145,8 @@ Remaining limitations:
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+
+- 2026-11-14 - Consolidated local Worker credentials into .dev.vars, configured frontend return URL, simplified local startup, and isolated test FRONTEND_URL from local credentials.
 - 2026-11-14 - Scenes now keep their ASF footprint bounding box (`bounds`, migration 0004) alongside `browseUrl`, so the frontend can show real NISAR browse images before tiles exist.
 - 2026-11-14 - Added stored regional context: migration `0003_event_context.sql`, `eventContext.js`, `GET /api/events/:id/context`; `/api/ask`, `/api/chat` and event summaries now receive a compact `regionalContext` (dataset counts and a few examples, no links) and are told it is not NISAR data. Provider failures never block an answer. 15 new tests; suite is 220.
 - 2026-11-14 - Connected the frontend: optional `FRONTEND_URL` returns a finished login/logout to the browser app, accepts its origin for protected writes and forwards `screen_hint` to Auth0; browsers on `/` are redirected there. The Vite dev server proxies `/api`, `/auth` and `/tiles` to this Worker. 205 tests pass. Local proxy and catalog reads verified; real sign-in through the frontend still needs the Auth0 client secret in `.env.local`.
