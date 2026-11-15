@@ -324,6 +324,28 @@ targets the `DB` binding in this production config; local migrations continue to
 use `wrangler.jsonc`. Run `npm run deploy:check` from `backend/cloudefare` after
 filling every placeholder.
 
+### Using a custom domain for production login
+
+Add the hostname to the Worker's **Settings → Domains & Routes → Custom Domain**,
+then keep its mapping in the ignored production config so later deployments
+preserve it. For the current deployment:
+
+```jsonc
+"workers_dev": true,
+"routes": [{ "pattern": "doomsday.compare", "custom_domain": true }]
+```
+
+Set production `APP_BASE_URL=https://doomsday.compare` and
+`FRONTEND_URL=https://doomsday.compare/`. The latter sends browser visits to the
+old Worker root to the new frontend. Start sign-in on the custom hostname;
+the login transaction cookie and callback must use the same hostname.
+
+In **Auth0 → Applications → Earth Replay → Settings → Application URIs**, add
+`https://doomsday.compare/auth/callback` to **Allowed Callback URLs** and
+`https://doomsday.compare` to **Allowed Logout URLs**, keeping existing entries.
+Save the Auth0 changes before deploying the new origin configuration. Changing
+the DNS/custom domain alone does not update these authentication settings.
+
 ### First processor deployment or a processor update
 
 Routine `npm run deploy` preserves an **already deployed** processor container.

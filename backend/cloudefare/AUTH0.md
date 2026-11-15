@@ -64,6 +64,32 @@ The Vite dev server (port 5173) proxies `/api`, `/auth` and `/tiles` to the Work
 
 ## Production and verification
 
+### Custom hostname transition (2026-11-15)
+
+The custom hostname `doomsday.compare` serves the same Worker. Its production
+configuration must use `APP_BASE_URL=https://doomsday.compare` and
+`FRONTEND_URL=https://doomsday.compare/`, with the hostname retained in Wrangler
+`routes` as a Custom Domain. Keep `workers_dev=true` to retain the original API
+endpoint. Browser visits to the original root are forwarded to the custom frontend;
+start login on the custom hostname so its transaction cookie reaches the callback.
+
+The Auth0 application must additionally allow
+`https://doomsday.compare/auth/callback` as a callback and
+`https://doomsday.compare` as a logout URL. Preserve the localhost and original
+Worker entries. A login started on the custom hostname with the old callback
+fails because the transaction cookie belongs to another hostname. Auth0 also
+rejects the new callback until its allowlist is updated. These two mismatches
+were independently reproduced against the live endpoints.
+
+The origin configuration was published as Worker version
+`933b95b5-a141-4755-b034-68269f4e0907` after the Auth0 callback/logout allowlist
+entries were saved and independently verified. All 17 existing auth tests and
+the deployment dry run passed. A live browser reached Auth0's login form with
+the Secure/HttpOnly transaction cookie scoped to `doomsday.compare`; live
+redirect checks confirmed the matching callback and the original root's redirect
+to the new frontend. A complete end-user sign-in has not been repeated by the
+agent. Earlier verification below refers to the original Worker hostname.
+
 The merged integration is deployed at `https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`, version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`. Wrangler config sets `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` and `APP_BASE_URL`. Auth0 secrets were uploaded through Wrangler stdin, with a new production-only session key. Existing service secrets and production vars were preserved (`--keep-vars`). Both chat migrations are applied remotely. Local env files are not uploaded automatically. The Auth0 application allows the production callback/logout URLs. `CORS_ORIGIN` remains `*`; cross-origin frontend authentication still requires an exact allowlist and a compatible same-site deployment.
 
 Run `npm test`. Auth tests use the actual SDK, encrypted cookies and an RSA-signed test ID token, with Auth0 discovery/token/JWKS calls mocked. They cover callback exchange, forged/expired/missing sessions, logout, CSRF/origin and JSON checks, CORS, fail-closed configuration, no-store headers and the three protected operations. Browser sign-in with a real end-user account is still a manual check.

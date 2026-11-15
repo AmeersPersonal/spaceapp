@@ -1,11 +1,43 @@
 # Deployment verification
 
-Target: https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev
+Primary frontend: https://doomsday.compare
+Retained API endpoint: https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev
 
-## Current release — November 15, 2026
+## Current release — custom-domain authentication, November 15, 2026
 
-Source: `2047d80` on `main`. Active Worker version:
-`6957adc2-26c2-475b-b0b1-83c71967f904` (100% of traffic).
+Active Worker version: `933b95b5-a141-4755-b034-68269f4e0907` at 100% traffic.
+Deployment: `46707f74-1c84-494a-ba17-2d36872502f3`.
+Previous version: `6957adc2-26c2-475b-b0b1-83c71967f904`.
+Verified at approximately 2026-11-15 09:58 UTC / 04:58 EST.
+
+The custom domain initially served the app but login sent its callback to the
+original Worker hostname, losing the host-scoped transaction cookie. Auth0 also
+rejected the new callback until its allowlist was saved. Production now uses
+`APP_BASE_URL=https://doomsday.compare` and `FRONTEND_URL=https://doomsday.compare/`,
+retains the Custom Domain route and keeps the original `workers.dev` endpoint.
+
+- All 17 existing auth regressions and the frontend build/deployment dry run passed.
+- Auth0 accepted the new callback and logout origin before publication.
+- Live `/auth/login` uses `https://doomsday.compare/auth/callback`; an isolated
+  browser reached Auth0's actual login form and retained a Secure/HttpOnly
+  host-only transaction cookie on `doomsday.compare`, without runtime exceptions.
+- The original Worker root redirects HTML browser visits to the custom domain;
+  anonymous logout returns there too. Catalog reads returned 10 events and
+  anonymous profile reads returned the expected 401.
+- Resource bindings, DO namespaces, migration tag, asset routing, container
+  association and all 11 secret binding names matched the preceding deployment.
+- No application JS, database migrations, secret values or processor image were
+  changed for this origin fix. End-user sign-in completion still requires a user
+  to retry from the custom domain; no user credentials were entered by the agent.
+
+Concurrent main update `30a1e18` (feature `7fcbac7`) changes only `workstation/`
+and handoff documentation. It does not alter `Frontend/`, backend application
+code or deployment configuration. Production still serves `Frontend/dist`.
+
+## Initial frontend/API release — November 15, 2026
+
+Source: `2047d80` on `main`. Worker version:
+`6957adc2-26c2-475b-b0b1-83c71967f904` (100% of traffic at that time).
 Deployment: `eee1df29-c960-407d-9d64-340d846e118a`.
 Verified at approximately 2026-11-15 09:01 UTC / 04:01 EST.
 

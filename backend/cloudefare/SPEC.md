@@ -167,11 +167,21 @@ resolved successfully; a remote migration list reported no pending migrations.
 The deployed browser E2E passed real Auth0 login, saved AI conversations, confirmed logout and rejected protected access, re-login to the same identity, exact history restoration and continued generation after reload. Workers AI returned real answers. Wrangler is now authenticated through browser OAuth; an API token is not required for this interactive deployment. The earlier unauthenticated local-startup failure does not describe current production status. Processor-to-R2 notification delivery and frontend cookie integration still need separate checks. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
 
 ## Status
+Custom-domain login configuration is deployed as version
+`933b95b5-a141-4755-b034-68269f4e0907` with `APP_BASE_URL` and `FRONTEND_URL`
+on `https://doomsday.compare`, an explicit Custom Domain route and retained
+`workers.dev` API endpoint. Auth0 callback/logout allowlists were updated;
+live checks confirm the matching callback, accepted login/logout destinations,
+Secure/HttpOnly cookie on the custom hostname and successful Auth0 login-form
+rendering. The original Worker root redirects browser visits to the custom domain.
+See [AUTH0.md](AUTH0.md#custom-hostname-transition-2026-11-15).
+
 Production configuration was reconciled against active Worker version
 `33bf1c32-efe8-4412-81de-fd410c39c619` on 2026-11-15, including its `Processor`
 binding, `v2` migration tag, model routing and existing container image. Source
-`2047d80` was then published to the existing production URL as version
-`6957adc2-26c2-475b-b0b1-83c71967f904` at 100% traffic. Live bindings, vars,
+`2047d80` was first published to the existing production URL as version
+`6957adc2-26c2-475b-b0b1-83c71967f904`, followed by the custom-domain origin
+update above. Resource bindings, service vars,
 secret binding names, DO namespaces and processor configuration were preserved.
 Frontend/API smoke checks and isolated desktop/mobile browser checks passed;
 see [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
@@ -197,6 +207,7 @@ Remaining limitations:
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-15 - Fixed custom-domain login origin configuration and persisted the doomsday.compare Worker route; verified saved Auth0 callback/logout allowlists, 17 auth tests, dry run and live login-form/cookie/redirect behavior, then deployed version 933b95b5-a141-4755-b034-68269f4e0907 with existing resources and secrets preserved.
 - 2026-11-15 - Deployed source 2047d80 as version 6957adc2-26c2-475b-b0b1-83c71967f904 at the existing URL after 266 backend tests and frontend lint/build; verified preserved bindings/processor and live HTTP/browser behavior, retaining the known tile-template limitation.
 - 2026-11-15 - Separated local and production Wrangler configs; deployment explicitly preserves remote vars/secrets and the existing processor container, with a tracked placeholder template, frontend-build/dry-run command and setup instructions for routine and first container releases.
 - 2026-11-15 - Fixed local event Ask HTTP 500 caused by uncaught Vectorize binding errors; shared caption retrieval now uses the existing D1 fallback. Added authenticated route regressions for events with and without captions.
