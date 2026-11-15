@@ -22,6 +22,8 @@ export default defineConfig({
           FIRMS_MAP_KEY: '',
           GOOGLE_MAPS_API_KEY: '',
           PROCESSOR_URL: '',
+          // Dataset-context refreshes would call NASA providers; tests opt in with a mocked fetch.
+          EVENT_CONTEXT: 'off',
           // Per-use-case model routing is configured in wrangler.jsonc; tests start with it off and opt in per test.
           MODEL_CAPTION: '',
           MODEL_ASK: '',

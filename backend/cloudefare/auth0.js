@@ -3,6 +3,11 @@ import { sessionAccess } from './sessionManger.js';
 
 const middlewareByEnv = new WeakMap();
 
+/** Origin of the optional FRONTEND_URL (the browser app that proxies or calls this API), or null. */
+export function frontendOrigin(env) {
+  try { return env.FRONTEND_URL ? new URL(env.FRONTEND_URL).origin : null; } catch { return null; }
+}
+
 /** Only these operations require a user; catalog, tiles and replay remain public. */
 export async function authenticate(c, next) {
   const access = sessionAccess(c.req.method, c.req.path);
@@ -45,7 +50,7 @@ export async function authenticate(c, next) {
     if (protectedRequest && access.write) {
       // JSON plus an exact origin allowlist prevents cross-site form/cookie requests.
       const origin = c.req.header('origin');
-      const allowed = [new URL(env.APP_BASE_URL).origin, ...((env.CORS_ORIGIN || '').split(',').map(s => s.trim()))];
+      const allowed = [new URL(env.APP_BASE_URL).origin, frontendOrigin(env), ...((env.CORS_ORIGIN || '').split(',').map(s => s.trim()))];
       if ((origin && !allowed.includes(origin)) || (!origin && c.req.header('sec-fetch-site') === 'cross-site')) {
         return c.json({ error: 'forbidden', message: 'Request origin is not allowed' }, 403);
       }
@@ -67,7 +72,14 @@ export async function authenticate(c, next) {
 }
 
 export function mountAuthRoutes(app) {
-  app.get('/auth/login', login({ redirectAfterLogin: '/api/auth/me' }));
+  // With FRONTEND_URL set, a finished login lands on the frontend instead of the profile JSON.
+  // The SDK only honours it on the API's own hostname (localhost dev); otherwise it falls back
+  // to "/", which the API root forwards to FRONTEND_URL for browsers. `screen_hint=signup`
+  // opens Auth0's sign-up screen.
+  app.get('/auth/login', (c, next) => login({
+    redirectAfterLogin: frontendOrigin(c.env) ? c.env.FRONTEND_URL : '/api/auth/me',
+    forwardAuthorizationParams: ['screen_hint'],
+  })(c, next));
   app.get('/auth/callback', callback());
   app.get('/auth/logout', logout());
   app.get('/api/auth/me', (c) => {

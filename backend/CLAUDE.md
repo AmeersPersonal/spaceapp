@@ -45,6 +45,7 @@ GET /api/chats/:id/messages?limit&after (ordered owned message history)
 POST /api/chats/:id/messages {content} (append a user message; requires login and JSON)
 GET /api/events
 GET /api/events/:id (scenes, dates, polarizations)
+GET /api/events/:id/context (stored supplementary NASA datasets for the event area; refreshed when older than 6 h and given to the AI as context)
 GET /tiles/:event/:layer/:date/:z/:x/:y.png
 GET /api/discover/earthquakes?minMagnitude&days&bbox (recent USGS quakes + suggested ingest)
 POST /api/events/earthquake {usgsId} (requires Auth0 session and JSON; register a quake as an event and start an ingest)

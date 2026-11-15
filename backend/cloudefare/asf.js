@@ -33,6 +33,20 @@ export function buildSearchUrl({ baseUrl = DEFAULT_ASF_SEARCH_URL, wkt, start, e
 const toIsoStart = (d) => (d.length === 10 ? `${d}T00:00:00Z` : d);
 const toIsoEnd = (d) => (d.length === 10 ? `${d}T23:59:59Z` : d);
 
+/** Bounding box [west, south, east, north] of a scene's footprint polygon, or null if unusable. */
+export function footprintBounds(geometry) {
+  const ring = geometry?.type === 'Polygon' ? geometry.coordinates?.[0] : null;
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+  let [w, s, e, n] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const point of ring) {
+    const [x, y] = Array.isArray(point) ? point : [];
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 180 || Math.abs(y) > 90) return null;
+    [w, s, e, n] = [Math.min(w, x), Math.min(s, y), Math.max(e, x), Math.max(n, y)];
+  }
+  // A footprint crossing the antimeridian would produce a bbox spanning the globe.
+  return e - w > 180 ? null : [w, s, e, n];
+}
+
 /** Normalize one ASF GeoJSON feature into the scene shape stored in D1. Returns null if unusable. */
 export function normalizeFeature(feature) {
   const p = feature?.properties;
@@ -52,6 +66,7 @@ export function normalizeFeature(feature) {
     productionConfig: p.productionConfiguration ?? null,
     url: p.url,
     browseUrl: browse.find((b) => b.endsWith('_LATLON.png')) ?? browse[0] ?? null,
+    bounds: footprintBounds(feature.geometry),
   };
 }
 

@@ -1,0 +1,41 @@
+/* Switch between the backend's NISAR data and the bundled sample, floating over the map
+   just under the navbar, at the left, so it never meets the navbar pills. */
+.source-switch {
+  position: fixed;
+  top: 62px;
+  left: 20px;
+  z-index: 31;
+  display: flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(42, 20, 40, 0.82);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(191, 209, 229, 0.22);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+
+.source-switch button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: #BFD1E5;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.source-switch button.active {
+  background: #BFD1E5;
+  color: #2a1428;
+}
+
+/* The sample map's own badge and nudge start below the switch. */
+.sx .sx-topleft {
+  top: 106px;
+}
+
+.sx .sx-hint {
+  top: 106px;
+}

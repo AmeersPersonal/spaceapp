@@ -7,11 +7,15 @@ FIRMS_MAP_KEY=
 # Auth0 browser login (use a Regular Web Application with client_secret_post).
 # The MCP credential helper writes domain/client credentials to .env.local;
 # `npm run dev` loads that file after .dev.vars, preserving other service secrets.
+# Both files must exist or the dev server will not start.
 AUTH0_DOMAIN=
 AUTH0_CLIENT_ID=
 AUTH0_CLIENT_SECRET=
 AUTH0_SESSION_ENCRYPTION_KEY=
 APP_BASE_URL=http://localhost:8787
+# Optional URL of the browser app (Frontend/, Vite on port 5173). Login/logout return there
+# and its origin may send protected writes through the dev proxy.
+# FRONTEND_URL=http://localhost:5173/
 # Optional exact frontend origin(s), comma-separated. Never use * with credentials.
 # CORS_ORIGIN=http://localhost:5173
 # Shared secret sent to the Python processor as a bearer token.

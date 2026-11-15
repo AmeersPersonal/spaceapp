@@ -74,6 +74,26 @@ a {
   color: #EBF5EE;
 }
 
+.nav-user {
+  align-self: center;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #EBF5EE;
+  font-size: 0.92rem;
+}
+
+.auth-form .button {
+  text-align: center;
+}
+
+.auth-note {
+  margin: 0;
+  text-align: center;
+  color: #D8BFAA;
+}
+
 /* Used by the auth and 404 pages, which sit under the fixed navbar. */
 .page {
   display: flex;

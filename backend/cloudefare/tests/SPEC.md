@@ -19,6 +19,8 @@ Vitest suites for the Cloudflare Worker. They run inside workerd through `@cloud
 | `agents.test.js` | Agent routing and models, chat (consults, shared thread, failure and foreign-conversation paths), summary, forecast math, scene stats, and the `/api/agents`, `/api/chat`, summary and predict routes. |
 | `routing.test.js` | Per-use-case model chains, outside-provider calls through the AI Gateway (mocked fetch), fallback on errors/empty answers/missing keys, reasoning settings. |
 | `datasets.test.js` | Seven NASA source adapters, query validation, CMR pagination, FIRMS CSV parsing and key handling, GEOS initialization/valid-time filtering, response limits, partial context, generic event integration and API routes. Provider calls are mocked. |
+| `eventContext.test.js` | Context window, refresh/store (partial failures, FIRMS key and five-day window, good data kept over failures), freshness and throttling, `EVENT_CONTEXT=off`, prompt compaction, prompt/cache-key inclusion, `GET /api/events/:id/context`, and ask using stored context. Providers are mocked. |
+| `sceneBounds.test.js` | Footprint bounding boxes from ASF geometry (including missing/invalid/antimeridian), storage on ingest, backfill on re-discovery, and `scenes[].bounds` in `GET /api/events/:id`. |
 | `ai.test.js` | AI Gateway wrapper and AIManger: captions, search, answers and failure paths. |
 | `asf.test.js` | ASF URL building, normalizing the recorded NISAR response, and upstream error classification. |
 | `oAuth.test.js` | JWT expiry, Earthdata headers, the ingest key middleware and constant-time compare. |
@@ -42,6 +44,9 @@ The merged suite passed 203 tests across 14 files on 2026-11-14. It covers both 
 Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. The deployed Worker browser E2E also passed; frontend integration remains separate.
 
 ## Changelog
+- 2026-11-14 - Added `sceneBounds.test.js` for scene footprint bounds.
+- 2026-11-14 - Added `eventContext.test.js` (15 tests); `resetDb()` clears `event_context`; vitest config sets `EVENT_CONTEXT=off` so other suites never query NASA providers.
+- 2026-11-14 - Added two `auth0.test.js` cases for `FRONTEND_URL`: post-login return and `screen_hint`, write-origin allowlist (including an invalid URL), and the browser redirect on `/`. Suite is 205 tests.
 - 2026-11-14 - Fresh deployment run passed all 203 tests; recorded separate successful real Auth0/AI persistence browser checks.
 - 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
 - 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.

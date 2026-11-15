@@ -17,7 +17,7 @@ import {
   listScenesForEvent,
   tileKey,
 } from './dataManger.js';
-import { authenticate, mountAuthRoutes } from './auth0.js';
+import { authenticate, frontendOrigin, mountAuthRoutes } from './auth0.js';
 import { HTTPException } from 'hono/http-exception';
 import { chatHistory, getChat, limitChatBody, mountChatRoutes, saveChatMessages } from './chats.js';
 import { normalizeRoomCode } from './sessionManger.js';
@@ -26,6 +26,7 @@ import { AIError } from './AI/AIGateway.js';
 import { describeAgents } from './AI/agents.js';
 import { ChatError, getThread, runChat, validateChatRequest } from './AI/chat.js';
 import { forecastEvent, parseHorizon } from './AI/forecast.js';
+import { describeContext, ensureEventContext, promptContext } from './eventContext.js';
 import { summarizeEvent, summaryCacheKey } from './AI/summary.js';
 import {
   EventError,
@@ -90,8 +91,11 @@ async function readJson(c) {
   }
 }
 
-app.get('/', (c) =>
-  c.json({
+app.get('/', (c) => {
+  // Browsers that land on the API root (after Auth0 logout, or login from another hostname)
+  // are sent on to the frontend; API clients still get the service description.
+  if (frontendOrigin(c.env) && c.req.header('accept')?.includes('text/html')) return c.redirect(c.env.FRONTEND_URL);
+  return c.json({
     service: 'earth-replay-api',
     routes: [
       'GET /auth/login',
@@ -105,6 +109,7 @@ app.get('/', (c) =>
       'POST /api/chats/:id/messages',
       'GET /api/events',
       'GET /api/events/:id',
+      'GET /api/events/:id/context',
       'GET /tiles/:event/:layer/:date/:z/:x/:y.png',
       'GET /api/discover/earthquakes',
       'POST /api/events/earthquake',
@@ -124,8 +129,8 @@ app.get('/', (c) =>
       'WS /api/room/:code',
     ],
     credit: DATA_CREDIT,
-  }),
-);
+  });
+});
 
 // ---------- catalog ----------
 
@@ -156,6 +161,15 @@ app.get('/api/events/:id', async (c) => {
   });
   if (!detail) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
   return c.json({ ...detail, credit: DATA_CREDIT });
+});
+
+/** Stored supplementary NASA datasets for the event's area; refreshed when missing or older than six hours. */
+app.get('/api/events/:id/context', async (c) => {
+  const id = c.req.param('id');
+  if (!SAFE_ID_RE.test(id)) return badRequest(c, ['invalid event id']);
+  const event = await getEvent(c.env.DB, id);
+  if (!event) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
+  return c.json({ ...describeContext(id, await ensureEventContext(c.env, event)), credit: DATA_CREDIT });
 });
 
 // ---------- tiles ----------
@@ -327,10 +341,10 @@ app.post('/api/ask', limitChatBody, async (c) => {
   if (!event) return c.json({ error: 'not_found', message: `event ${eventId} not found` }, 404);
   try {
     if (chatId) {
-      const [history, scenes] = await Promise.all([
-        chatHistory(c.env.DB, owner, chatId), listScenesForEvent(c.env.DB, eventId),
+      const [history, scenes, regionalContext] = await Promise.all([
+        chatHistory(c.env.DB, owner, chatId), listScenesForEvent(c.env.DB, eventId), eventContextForPrompt(c.env, event),
       ]);
-      const result = await answerQuestion(c.env, { event, scenes, question, history, privateConversation: true });
+      const result = await answerQuestion(c.env, { event, scenes, question, history, privateConversation: true, regionalContext });
       const messages = await saveChatMessages(c.env.DB, owner, chatId, [
         { role: 'user', content: question },
         { role: 'assistant', content: result.answer, metadata: result },
@@ -340,8 +354,8 @@ app.post('/api/ask', limitChatBody, async (c) => {
     }
     const key = cacheKeys.answer(eventId, await hashQuestion(question));
     const result = await cached(c.env.CACHE, key, ANSWER_CACHE_TTL, async () => {
-      const scenes = await listScenesForEvent(c.env.DB, eventId);
-      return answerQuestion(c.env, { event, scenes, question });
+      const [scenes, regionalContext] = await Promise.all([listScenesForEvent(c.env.DB, eventId), eventContextForPrompt(c.env, event)]);
+      return answerQuestion(c.env, { event, scenes, question, regionalContext });
     });
     return c.json(result);
   } catch (err) {
@@ -352,6 +366,9 @@ app.post('/api/ask', limitChatBody, async (c) => {
     throw err;
   }
 });
+
+/** Stored supplementary datasets in prompt form; null (never an error) when none are available. */
+const eventContextForPrompt = async (env, event) => promptContext(await ensureEventContext(env, event));
 
 const aiUnavailable = (c, what, err) => {
   console.error(`${what} failed`, err.message);
@@ -368,8 +385,8 @@ app.post('/api/chat', async (c) => {
   const event = await getEvent(c.env.DB, eventId);
   if (!event) return c.json({ error: 'not_found', message: `event ${eventId} not found` }, 404);
   try {
-    const scenes = await listScenesForEvent(c.env.DB, eventId);
-    return c.json(await runChat(c.env, { event, scenes, message, conversationId, requestedAgent: agent }));
+    const [scenes, regionalContext] = await Promise.all([listScenesForEvent(c.env.DB, eventId), eventContextForPrompt(c.env, event)]);
+    return c.json(await runChat(c.env, { event, scenes, message, conversationId, requestedAgent: agent, regionalContext }));
   } catch (err) {
     if (err instanceof ChatError) return c.json({ error: err.code, message: err.message }, err.status);
     if (err instanceof AIError) return aiUnavailable(c, 'chat', err);
@@ -391,13 +408,14 @@ app.get('/api/events/:id/summary', async (c) => {
   const event = await getEvent(c.env.DB, id);
   if (!event) return c.json({ error: 'not_found', message: `event ${id} not found` }, 404);
   try {
-    const [scenes, layers, captions] = await Promise.all([
+    const [scenes, layers, captions, regionalContext] = await Promise.all([
       listScenesForEvent(c.env.DB, id),
       listLayersForEvent(c.env.DB, id),
       listCaptionsForEvent(c.env.DB, id),
+      eventContextForPrompt(c.env, event),
     ]);
-    const result = await cached(c.env.CACHE, summaryCacheKey(event, scenes, captions), SUMMARY_CACHE_TTL, () =>
-      summarizeEvent(c.env, { event, scenes, captions, layers }),
+    const result = await cached(c.env.CACHE, summaryCacheKey(event, scenes, captions, regionalContext), SUMMARY_CACHE_TTL, () =>
+      summarizeEvent(c.env, { event, scenes, captions, layers, regionalContext }),
     );
     return c.json(result);
   } catch (err) {

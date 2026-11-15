@@ -112,6 +112,7 @@ function sceneFromRow(row) {
     productionConfig: row.production_config,
     url: row.url,
     browseUrl: row.browse_url,
+    bounds: parse(row.bounds, null),
     status: row.status,
     error: row.error,
     ingestId: row.ingest_id,
@@ -124,10 +125,10 @@ export async function upsertScenes(db, eventId, ingestId, scenes) {
   if (!scenes.length) return 0;
   const stmt = db.prepare(
     `INSERT INTO scenes (id, event_id, product, acquired_at, acquired_end, polarizations, flight_direction,
-                         path_number, frame_number, production_config, url, browse_url, ingest_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         path_number, frame_number, production_config, url, browse_url, bounds, ingest_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET ingest_id = excluded.ingest_id, url = excluded.url,
-       browse_url = excluded.browse_url, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+       browse_url = excluded.browse_url, bounds = COALESCE(excluded.bounds, scenes.bounds), updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
   );
   await db.batch(
     scenes.map((s) =>
@@ -144,6 +145,7 @@ export async function upsertScenes(db, eventId, ingestId, scenes) {
         s.productionConfig ?? null,
         s.url,
         s.browseUrl ?? null,
+        s.bounds ? json(s.bounds) : null,
         ingestId,
       ),
     ),

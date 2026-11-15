@@ -1,0 +1,196 @@
+/* Events page: catalog list on the left, the chosen event on the right. */
+.ev {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 28px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 6.5rem 20px 4rem;
+}
+
+.ev h1 {
+  margin: 0 0 14px;
+  font-size: 1.4rem;
+}
+
+.ev h2 {
+  margin: 0 0 8px;
+  font-size: 1.6rem;
+}
+
+.ev h3 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+.ev-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ev-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid #3d1f3a;
+  border-radius: 8px;
+  background: #2a1428;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.ev-item:hover,
+.ev-item-active {
+  border-color: #BFD1E5;
+}
+
+.ev-item-name {
+  color: #EBF5EE;
+  font-weight: 600;
+}
+
+.ev-item-meta,
+.ev-muted {
+  color: #D8BFAA;
+  font-size: 0.88rem;
+}
+
+.ev-eyebrow {
+  margin: 0 0 4px;
+  color: #D8BFAA;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ev-text,
+.ev-answer {
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ev-answer {
+  margin: 0 0 8px;
+}
+
+.ev-question {
+  margin: 0 0 4px;
+  color: #BFD1E5;
+  font-weight: 600;
+}
+
+.ev-turn + .ev-turn {
+  margin-top: 14px;
+}
+
+.ev-fine {
+  color: #D8BFAA;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.ev-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.ev-facts dt {
+  color: #D8BFAA;
+  font-size: 0.78rem;
+}
+
+.ev-facts dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.ev-card {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #3d1f3a;
+  border-radius: 10px;
+  background: #2a1428;
+}
+
+.ev-sources {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ev-sources li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ev-source-name {
+  font-weight: 600;
+}
+
+.ev-source-meta {
+  color: #D8BFAA;
+  font-size: 0.85rem;
+}
+
+.ev-ask {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ev-ask input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem;
+  border: 1px solid #3d1f3a;
+  border-radius: 6px;
+  background: #1e0f1c;
+  color: #EBF5EE;
+  font-size: 1rem;
+}
+
+.ev-ask input:focus {
+  outline: none;
+  border-color: #BFD1E5;
+}
+
+.ev .button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ev-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ev-table th,
+.ev-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #3d1f3a;
+  text-align: left;
+}
+
+.ev-table th {
+  color: #D8BFAA;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .ev {
+    grid-template-columns: 1fr;
+  }
+}

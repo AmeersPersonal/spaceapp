@@ -3,7 +3,7 @@
 
 import { AGENT_IDS, agentModel, agentPinned, getAgent, routeMessage, systemPromptFor } from './agents.js';
 import { generateTextDetailed } from './AIGateway.js';
-import { AI_DISCLAIMER, buildEventContext, retrieveCaptions } from './AIManger.js';
+import { AI_DISCLAIMER, REGIONAL_CONTEXT_RULE, buildEventContext, retrieveCaptions } from './AIManger.js';
 import { DATA_CREDIT, addMessages, createConversation, getConversation, listMessages } from '../dataManger.js';
 
 export const HISTORY_WINDOW = 12;
@@ -72,7 +72,7 @@ function primaryMessages(agent, context, history, message, notes) {
     {
       role: 'system',
       content:
-        `${systemPromptFor(agent)} You are chatting with a user about one event. Cite scene IDs you rely on. Keep answers under 150 words. ` +
+        `${systemPromptFor(agent)} You are chatting with a user about one event. Cite scene IDs you rely on. Keep answers under 150 words. ${REGIONAL_CONTEXT_RULE} ` +
         'Earlier assistant turns are prefixed with the specialist who wrote them; do not add such a prefix yourself.',
     },
     ...historyToMessages(history),
@@ -84,7 +84,7 @@ function primaryMessages(agent, context, history, message, notes) {
  * Handle one chat turn. Throws ChatError (unknown/foreign conversation) or AIError (primary model failed;
  * nothing is stored in that case). Failed consultations are skipped and reported in `consultsFailed`.
  */
-export async function runChat(env, { event, scenes, message, conversationId, requestedAgent }) {
+export async function runChat(env, { event, scenes, message, conversationId, requestedAgent, regionalContext = null }) {
   let history = [];
   if (conversationId) {
     const conv = await getConversation(env.DB, conversationId);
@@ -94,7 +94,7 @@ export async function runChat(env, { event, scenes, message, conversationId, req
 
   const { primary, consults } = routeMessage({ message, eventType: event.type, requestedAgent });
   const captions = await retrieveCaptions(env, event.id, message);
-  const context = buildEventContext(event, scenes, captions);
+  const context = buildEventContext(event, scenes, captions, regionalContext);
 
   const settled = await Promise.allSettled(
     consults.map((a) =>

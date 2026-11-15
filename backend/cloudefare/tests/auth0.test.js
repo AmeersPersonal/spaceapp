@@ -113,6 +113,28 @@ describe('Auth0 login and API protection', () => {
     expect((await call('/api/ask', { method: 'POST', headers: { cookie, 'content-type': 'application/json' }, body: '{}' })).status).toBe(400);
   });
 
+  it('returns a finished login to FRONTEND_URL and accepts that origin for writes', async () => {
+    mockDiscovery();
+    const env = { FRONTEND_URL: 'https://api.test:5173/' };
+    const started = await call('/auth/login?screen_hint=signup', {}, env);
+    expect(new URL(started.headers.get('location')).searchParams.get('screen_hint')).toBe('signup');
+    const cookie = await sessionCookie();
+    const post = (origin, overrides) => call('/api/ask', { method: 'POST', headers: { cookie, origin, 'content-type': 'application/json' }, body: '{}' }, overrides);
+    expect((await post('https://api.test:5173', env)).status).toBe(400);
+    expect((await post('https://api.test:5173', {})).status).toBe(403);
+    expect((await post('https://evil.test', env)).status).toBe(403);
+    expect((await post('https://api.test:5173', { FRONTEND_URL: 'not a url' })).status).toBe(403);
+  });
+
+  it('sends browsers on the API root to FRONTEND_URL but keeps JSON for API clients', async () => {
+    const env = { FRONTEND_URL: 'http://localhost:5173/' };
+    const browser = await call('/', { headers: { accept: 'text/html,application/xhtml+xml' } }, env);
+    expect(browser.status).toBe(302);
+    expect(browser.headers.get('location')).toBe('http://localhost:5173/');
+    expect((await call('/', { headers: { accept: 'application/json' } }, env)).status).toBe(200);
+    expect((await call('/', { headers: { accept: 'text/html' } })).status).toBe(200);
+  });
+
   it('rejects a callback without a matching login transaction', async () => {
     mockDiscovery();
     const res = await call('/auth/callback?code=forged&state=wrong');

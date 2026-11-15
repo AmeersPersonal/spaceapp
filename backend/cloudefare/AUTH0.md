@@ -6,7 +6,7 @@ The Worker uses `@auth0/auth0-hono` 1.2.6 and its authorization-code flow with P
 
 | Route | Behavior |
 |---|---|
-| `GET /auth/login` | Redirect to Auth0 Universal Login. Successful login returns to `/api/auth/me`. |
+| `GET /auth/login` | Redirect to Auth0 Universal Login. Successful login returns to `FRONTEND_URL` when set, otherwise `/api/auth/me`. `?screen_hint=signup` opens Auth0's sign-up screen. |
 | `GET /auth/callback` | SDK callback; requires the login transaction cookie and valid code/ID token. |
 | `GET /auth/logout` | Clear the local session and redirect through Auth0 logout, then back to the API root. |
 | `GET /api/auth/me` | `{user:{sub,name?,email?,picture?}}`; 401 when logged out. Never returns tokens. |
@@ -37,6 +37,7 @@ Required Worker environment:
 | `AUTH0_CLIENT_SECRET` | Application secret, server-side only. |
 | `AUTH0_SESSION_ENCRYPTION_KEY` | Cryptographically random cookie-encryption secret, at least 32 characters. |
 | `APP_BASE_URL` | Exact Worker origin: `http://localhost:8787` locally, HTTPS in production. |
+| `FRONTEND_URL` | Optional URL of the browser app (`http://localhost:5173/` locally). Login and logout return the browser there and its origin may send protected writes. |
 | `CORS_ORIGIN` | Optional comma-separated exact frontend origins. `*` permits public reads but never credentialed cross-origin requests. |
 
 Registered callbacks: `http://localhost:8787/auth/callback` and `https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev/auth/callback`. Registered logout URLs are the corresponding origins. The MCP server automatically set `skip_non_verifiable_callback_uri_confirmation_prompt=true` for localhost callbacks.
@@ -55,7 +56,11 @@ const response = await fetch(`${apiOrigin}/api/ask`, {
 if (response.status === 401) window.location.assign(`${apiOrigin}/auth/login`);
 ```
 
-For a frontend on another origin, set `CORS_ORIGIN` to its exact origin; the Worker sends credentialed CORS headers only for that allowlist. Write requests also validate Origin (or reject `Sec-Fetch-Site: cross-site` when Origin is absent). Keep frontend and API on the same site, such as `app.example.com` and `api.example.com`, or proxy the API through the frontend origin. An unrelated frontend domain cannot use these SameSite=Lax cookies for cross-site fetches. Login currently lands on the profile JSON; the frontend owner can connect a landing page in a later change. Frontend UI is maintained outside this repository.
+For a frontend on another origin, set `CORS_ORIGIN` to its exact origin; the Worker sends credentialed CORS headers only for that allowlist. Write requests also validate Origin (or reject `Sec-Fetch-Site: cross-site` when Origin is absent). Keep frontend and API on the same site, such as `app.example.com` and `api.example.com`, or proxy the API through the frontend origin. An unrelated frontend domain cannot use these SameSite=Lax cookies for cross-site fetches. Without `FRONTEND_URL`, login lands on the profile JSON.
+
+### Frontend in this repository (`Frontend/`)
+
+The Vite dev server (port 5173) proxies `/api`, `/auth` and `/tiles` to the Worker (`VITE_API_TARGET`, default `http://localhost:8787`), so the app uses relative URLs and one origin. Cookies are scoped to the host, not the port, so the session cookie set at `localhost:8787/auth/callback` is sent with requests to `localhost:5173`. Flow: the app links to `/auth/login` (or `?screen_hint=signup`) → Auth0 → `http://localhost:8787/auth/callback` → redirect to `FRONTEND_URL`. Logout: `/auth/logout` → Auth0 → API root → redirect to `FRONTEND_URL`. The SDK only accepts a post-login return URL on the API's own hostname; on any other hostname it falls back to `/`, which then forwards browsers to `FRONTEND_URL`. Set `FRONTEND_URL=http://localhost:5173/` in `.env.local`. Sign-in does not work when the dev proxy targets the deployed Worker, because Auth0 returns to that Worker's host and the cookie never reaches localhost. Verified locally on 2026-11-14: proxy, public catalog reads, 503 handling without a client secret and the root redirect. A real sign-in through the frontend is not yet verified.
 
 ## Production and verification
 
