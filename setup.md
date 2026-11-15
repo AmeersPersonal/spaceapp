@@ -245,6 +245,105 @@ Tests use local bindings and mocked external services; they do not require
 real Auth0 end-user login. Build `Frontend/dist` first when the Wrangler
 configuration includes the `ASSETS` binding.
 
+## Production deployment configuration
+
+Production uses **`backend/cloudefare/wrangler.production.jsonc`**. Like the
+local `wrangler.jsonc`, this file is intentionally ignored by Git. Obtain the
+configured copy from the maintainer, or create your own using the example below.
+`npm run deploy` requires this production file and fails if it is missing.
+
+The production copy was reconciled with the active Worker on 2026-11-15. It
+includes the existing resource bindings, the `PROCESSOR` Durable Object and
+its `v2` migration, all seven `MODEL_*` routing variables, and the current
+processor image. Keep credentials in Cloudflare secrets, outside either config.
+
+From the repository root, validate the deployment without publishing:
+
+```powershell
+npm --prefix backend/cloudefare run deploy:check
+```
+
+This builds the frontend and runs Wrangler with `--dry-run`. To publish the
+Worker and frontend when ready:
+
+```powershell
+npm --prefix backend/cloudefare run deploy
+```
+
+The deployment script explicitly selects the production config, uses
+`--keep-vars` to retain additional dashboard variables, and uses
+`--containers-rollout none` to preserve the deployed processor container.
+Variables explicitly listed in the config still override their remote values;
+reconcile them again if production settings change. Existing secrets are
+retained. The script does not rebuild or roll out Python processor changes;
+those require a separate container release. Continue using `npm run dev` for
+local development, with its existing `wrangler.jsonc`.
+
+The known tile-template issue described below remains separate from this
+configuration work. A successful dry run does not verify rendered radar tiles
+or end-to-end production behavior.
+
+### Create your own production configuration
+
+The tracked [wrangler.production.example.jsonc](backend/cloudefare/wrangler.production.example.jsonc)
+contains the complete configuration structure with `YOUR_*` placeholders.
+From the repository root, copy it only if a production config does not exist:
+
+```powershell
+$productionConfig = "backend/cloudefare/wrangler.production.jsonc"
+if (Test-Path $productionConfig) {
+    throw "Production config already exists; edit it instead of overwriting it."
+}
+Copy-Item backend/cloudefare/wrangler.production.example.jsonc $productionConfig
+```
+
+Fill these fields in the copied file:
+
+| Field | Where to find the value |
+| --- | --- |
+| `account_id` | `npx wrangler whoami` after `npx wrangler login --device`. |
+| `name` and `APP_BASE_URL` | Your Worker name and deployed URL in the Cloudflare dashboard. The example name is `earth-replay-api`. |
+| `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` | Your Auth0 Regular Web Application. Allow `APP_BASE_URL/auth/callback` as a callback and `APP_BASE_URL` as a logout URL. |
+| `DB.database_id` | `npx wrangler d1 list --json`. |
+| `CACHE.id` | `npx wrangler kv namespace list`. |
+| `containers[0].image` | For existing production, copy its full image URI from `npx wrangler containers list --json`, including the digest. |
+| Resource names and `MODEL_*` variables | Match your existing resources and model routes. See [the Cloudflare guide](backend/cloudefare/cloudflare.md) for creating resources and configuring AI Gateway. |
+
+Run those Wrangler commands from `backend/cloudefare`. Preserve existing
+Durable Object class names and migration history; this example uses the project's
+`v1` ReplayRoom and `v2` Processor migrations. For an existing Worker, inspect
+`npx wrangler deployments list` and `npx wrangler versions view <VERSION_ID>`
+and reconcile its bindings and non-secret variables before deploying. The
+template is a starting point, not a live snapshot.
+
+Set production credentials with `npx wrangler secret put <SECRET_NAME> --config wrangler.production.jsonc`,
+including Auth0 secrets and any required provider or processor tokens.
+`.dev.vars` is for local development; deployment does not upload it as production
+secrets. Keep the configured production file ignored. `npm run db:migrate:remote`
+targets the `DB` binding in this production config; local migrations continue to
+use `wrangler.jsonc`. Run `npm run deploy:check` from `backend/cloudefare` after
+filling every placeholder.
+
+### First processor deployment or a processor update
+
+Routine `npm run deploy` preserves an **already deployed** processor container.
+For a new Cloudflare account or a deliberate Python processor release, complete
+the resource/secret setup in the Cloudflare guide, install and start Docker,
+and set `containers[0].image` to `./processor/Dockerfile` in your production config.
+Then, from `backend/cloudefare`:
+
+```powershell
+npm run build:frontend
+npx wrangler deploy --config wrangler.production.jsonc --keep-vars
+```
+
+This command **publishes** the Worker and builds, pushes and rolls out the
+processor container. It deliberately omits `--containers-rollout none`. After
+verifying that release, use `npx wrangler containers list --json` to find its
+image URI and pin that URI in your production config. Resume `npm run deploy`
+for routine Worker/frontend updates. No container release was performed as
+part of the configuration reconciliation described above.
+
 ## Troubleshooting
 
 | Symptom | Check |

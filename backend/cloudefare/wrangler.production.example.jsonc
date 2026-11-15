@@ -1,0 +1,95 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Copy to wrangler.production.jsonc and replace every YOUR_* placeholder.
+  // See ../../setup.md. Never put credentials in either configuration file.
+  "name": "earth-replay-api",
+  "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "traces": { "enabled": true } },
+  "keep_vars": true,
+
+  "vars": {
+    "AUTH0_DOMAIN": "YOUR_AUTH0_TENANT.us.auth0.com",
+    "AUTH0_CLIENT_ID": "YOUR_AUTH0_CLIENT_ID",
+    "APP_BASE_URL": "https://earth-replay-api.YOUR_WORKERS_SUBDOMAIN.workers.dev",
+    "AI_GATEWAY_ID": "earth-replay",
+    "LLM_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "EMBEDDING_MODEL": "@cf/baai/bge-base-en-v1.5",
+    "MODEL_ASK": "@cf/meta/llama-3.3-70b-instruct-fp8-fast,google-ai-studio/gemini-3.1-flash-lite",
+    "MODEL_CAPTION": "groq/qwen/qwen3.8-27b",
+    "MODEL_CHAT": "google-ai-studio/gemini-3.1-flash-lite,groq/qwen/qwen3.8-27b",
+    "MODEL_CONSULT": "groq/qwen/qwen3.8-27b",
+    "MODEL_FALLBACK": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+    "MODEL_FORECAST": "google-ai-studio/gemini-3.1-flash-lite,groq/qwen/qwen3.8-27b",
+    "MODEL_SUMMARY": "google-ai-studio/gemini-3.1-flash-lite",
+    "ASF_SEARCH_URL": "https://api.daac.asf.alaska.edu/services/search/param",
+    "PROCESSOR_URL": "",
+    "MAX_SCENES_PER_INGEST": "25",
+    "CORS_ORIGIN": "*"
+  },
+
+  "assets": {
+    "directory": "../../Frontend/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/", "/api/*", "/auth/*", "/tiles/*", "/internal/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "earth-replay",
+      "database_id": "YOUR_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "TILES", "bucket_name": "earth-replay-tiles" }],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "YOUR_KV_NAMESPACE_ID" }],
+
+  "queues": {
+    "producers": [{ "binding": "INGEST_QUEUE", "queue": "earth-replay-ingest" }],
+    "consumers": [
+      {
+        "queue": "earth-replay-ingest",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "earth-replay-ingest-dlq"
+      },
+      { "queue": "earth-replay-ingest-dlq", "max_batch_size": 10, "max_retries": 1 }
+    ]
+  },
+  "workflows": [
+    { "name": "earth-replay-ingest", "binding": "INGEST_WORKFLOW", "class_name": "IngestWorkflow" }
+  ],
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "REPLAY_ROOM", "class_name": "ReplayRoom" },
+      { "name": "PROCESSOR", "class_name": "Processor" }
+    ]
+  },
+  // For this project's v1/v2 history. Match an existing Worker's history before deploying.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["ReplayRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["Processor"] }
+  ],
+  "containers": [
+    {
+      "name": "earth-replay-api-processor",
+      "class_name": "Processor",
+      // For an existing deployment, copy the image URI from `wrangler containers list --json`.
+      // For a first container release, use "./processor/Dockerfile"; see setup.md.
+      "image": "registry.cloudflare.com/YOUR_CLOUDFLARE_ACCOUNT_ID/earth-replay-api-processor@sha256:YOUR_PROCESSOR_IMAGE_DIGEST",
+      // Keep max_instances aligned with PROCESSOR_INSTANCES in processor.js.
+      "max_instances": 2,
+      "instance_type": "basic"
+    }
+  ],
+
+  "ai": { "binding": "AI" },
+  "vectorize": [{ "binding": "VECTORS", "index_name": "earth-replay-captions" }],
+  "triggers": { "crons": ["0 */6 * * *"] }
+}

@@ -42,3 +42,4 @@ Thumbs.db
 
 # Cloudflare config (kept local)
 wrangler.jsonc
+wrangler.production.jsonc
