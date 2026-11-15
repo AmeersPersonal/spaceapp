@@ -41,9 +41,13 @@ The merged suite passed 203 tests across 14 files on 2026-11-14. It covers both 
 - A separate live browser check passed real Auth0 login, two owned conversations, confirmed logout, rejected protected access, re-login, exact history restoration and continued generation. This is deployment evidence, not part of the mocked automated suite; see [../DEPLOYMENT_VERIFICATION.md](../DEPLOYMENT_VERIFICATION.md).
 
 ## Status
+Ask regression coverage includes unavailable Vectorize with and without stored captions; the authenticated route must return an answer and event-scoped fallback sources instead of HTTP 500.
+On 2026-11-15, all 266 tests across 18 files passed with `npm.cmd test -- --maxWorkers=2`. The initial default-concurrency run passed 265 tests but timed out in `cron poller > starts an ingest for each watched event and records the poll time`; the lower-concurrency full run passed that test too, without changing its timeout or assertions.
+
 Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. The deployed Worker browser E2E also passed; frontend integration remains separate.
 
 ## Changelog
+- 2026-11-15 - Added two authenticated `/api/ask` regression cases for the local `Binding VECTORS needs to be run remotely` failure, checking answers and stored-caption sources.
 - 2026-11-15 - Added `outlook.test.js` (12 tests: outlook query, cell maths, AI wording and fallback, `/api/outlook`, event pictures and `/api/events/:id/media`), 2 `events.test.js` cases for the discover `start`/`end` period, and an `auth0.test.js` case for the hosted frontend. Suite is 241 tests.
 - 2026-11-14 - Added `sceneBounds.test.js` for scene footprint bounds.
 - 2026-11-14 - Added `eventContext.test.js` (15 tests); `resetDb()` clears `event_context`; vitest config sets `EVENT_CONTEXT=off` so other suites never query NASA providers.

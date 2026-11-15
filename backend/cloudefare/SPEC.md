@@ -137,6 +137,8 @@ Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/
 The deployed browser E2E passed real Auth0 login, saved AI conversations, confirmed logout and rejected protected access, re-login to the same identity, exact history restoration and continued generation after reload. Workers AI returned real answers. Wrangler is now authenticated through browser OAuth; an API token is not required for this interactive deployment. The earlier unauthenticated local-startup failure does not describe current production status. Processor-to-R2 notification delivery and frontend cookie integration still need separate checks. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
 
 ## Status
+Local Ask and specialist chat tolerate unavailable Vectorize search, logging the failure and using recent event captions (or catalog metadata when none exist). No Cloudflare secret changes are required for this fallback.
+
 Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E passed against the deployed Worker.
 
 Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. The merged backend is now deployed as version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`, with production Auth0 configuration/secrets. Both `0002_chats.sql` and `0002_chat_stats.sql` are applied remotely. Existing production vars/secrets were preserved. Live login redirects, anonymous-access rejection and browser conversation persistence across confirmed logout and re-login all passed.
@@ -149,6 +151,7 @@ Remaining limitations:
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-15 - Fixed local event Ask HTTP 500 caused by uncaught Vectorize binding errors; shared caption retrieval now uses the existing D1 fallback. Added authenticated route regressions for events with and without captions.
 - 2026-11-15 - Added `GET /api/outlook` (`outlook.js`) and `GET /api/events/:id/media` (`media.js`); `/api/discover/earthquakes` accepts a `start`+`end` period in place of `days`. The Worker also serves the built frontend as static assets (`ASSETS` binding; `/` gives browsers the app and API clients the JSON description; a finished login returns to `/`). 241 tests pass. Outlook, media and the period query are deployed and checked live.
 - 2026-11-14 - Consolidated local Worker credentials into .dev.vars, configured frontend return URL, simplified local startup, and isolated test FRONTEND_URL from local credentials.
 - 2026-11-14 - Scenes now keep their ASF footprint bounding box (`bounds`, migration 0004) alongside `browseUrl`, so the frontend can show real NISAR browse images before tiles exist.

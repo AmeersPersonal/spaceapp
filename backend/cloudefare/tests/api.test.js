@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { createExecutionContext, env, introspectWorkflow, waitOnExecutionContext } from 'cloudflare:test';
 import worker, { parseTileCoords } from '../worker.js';
 import { sessionCookie } from './auth0-helpers.js';
-import { tileKey, upsertLayers } from '../dataManger.js';
+import { insertCaption, tileKey, upsertLayers } from '../dataManger.js';
 import { fakeAI, resetDb, SAMPLE_EVENT, seedEvent, seedScenes, testEnv } from './helpers.js';
 
 beforeEach(resetDb);
@@ -137,6 +137,28 @@ describe('POST /api/ingest + GET /api/ingest/:id', () => {
 });
 
 describe('POST /api/ask', () => {
+  it.each([false, true])('answers when Vectorize is unavailable (stored captions: %s)', async (hasCaption) => {
+    await seedEvent();
+    const [scene] = await seedScenes();
+    if (hasCaption) {
+      await insertCaption(env.DB, {
+        id: 'cap_recent', eventId: SAMPLE_EVENT.id, sceneId: scene.id,
+        text: 'A stored observation for this event.', model: 'test',
+      });
+    }
+    const e = testEnv({
+      AI: fakeAI({ response: 'The available event data is limited.' }),
+      VECTORS: { query: async () => { throw new Error('Binding VECTORS needs to be run remotely'); } },
+    });
+    const res = await post('/api/ask', { eventId: SAMPLE_EVENT.id, question: 'What data is available here?' }, e);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      eventId: SAMPLE_EVENT.id,
+      answer: 'The available event data is limited.',
+      sources: hasCaption ? [{ captionId: 'cap_recent', sceneId: scene.id, score: null }] : [],
+    });
+  });
+
   it('answers questions about an event and caches the answer in KV', async () => {
     await seedEvent();
     await seedScenes();

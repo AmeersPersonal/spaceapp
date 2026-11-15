@@ -1,7 +1,7 @@
 // AI features: scene captions that hypothesize the physical driver of observed change,
 // Vectorize-backed semantic search over captions, and grounded answers for POST /api/ask.
 
-import { AIError, embed, generateTextDetailed } from './AIGateway.js';
+import { embed, generateTextDetailed } from './AIGateway.js';
 import { DATA_CREDIT, getCaptionsByIds, insertCaption, listCaptionsForEvent } from '../dataManger.js';
 
 export const AI_DISCLAIMER =
@@ -107,7 +107,8 @@ export async function retrieveCaptions(env, eventId, query, topK = 5) {
   try {
     captions = await searchCaptions(env, eventId, query, topK);
   } catch (err) {
-    if (!(err instanceof AIError)) throw err; // search is best-effort: fall back to recency
+    // Vectorize can throw a plain Error, including when its binding is unavailable locally.
+    console.warn('caption search unavailable; using recent captions', err?.message);
   }
   return captions.length ? captions : listCaptionsForEvent(env.DB, eventId, topK);
 }
