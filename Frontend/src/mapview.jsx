@@ -4,6 +4,7 @@ import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./MapView.css";
 import { basemapStyle, studyAreas } from "./studyArea.js";
+import { useBottomInset, useTopInset } from "./useBottomInset.js";
 
 // Vite needs to be told where MapLibre's background worker file is.
 maplibregl.setWorkerUrl(workerUrl);
@@ -437,6 +438,8 @@ function MapView() {
   const [opacity, setOpacity] = useState(0.85);
   const [showRisk, setShowRisk] = useState(true);
   const [point, setPoint] = useState(null); // clicked location
+  const controlsRef = useBottomInset(); // keeps the attribution above the controls bar
+  const pickerRef = useTopInset(); // keeps the phone prompt below the scenario picker
   const [panelOpen, setPanelOpen] = useState(false); // detail card, opened by clicking the map
 
   const step = TIMELINE[dateIndex] ?? TIMELINE[LAST_OBSERVED];
@@ -680,7 +683,7 @@ function MapView() {
       </div>
 
       {/* Pick a disaster. Each one is a separate study area. */}
-      <nav className="sx-picker" aria-label="Disasters">
+      <nav ref={pickerRef} className="sx-picker" aria-label="Disasters">
         {studyAreas.map((a) => (
           <button
             key={a.id}
@@ -703,7 +706,7 @@ function MapView() {
         </button>
       )}
 
-      <div className={`sx-controls${panelOpen ? " sx-controls-shift" : ""}`}>
+      <div ref={controlsRef} className={`sx-controls${panelOpen ? " sx-controls-shift" : ""}`}>
         {/* The track under the slider: how much is data, how much is model. */}
         <div className="sx-timeline" aria-hidden="true">
           <div className="sx-tl-past" style={{ width: `${NOW_PERCENT}%` }}>

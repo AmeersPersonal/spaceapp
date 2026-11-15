@@ -177,3 +177,96 @@ a {
   color: #ff6b6b;
   margin: 0;
 }
+
+/* ---------- Phones ---------- */
+
+/* Pills never break onto two lines; the links shrink before they overflow. */
+.brand,
+.nav-links a {
+  white-space: nowrap;
+}
+
+.nav-links {
+  min-width: 0;
+}
+
+.nav-user {
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+@media (max-width: 900px) {
+  .navbar {
+    padding: 14px 12px;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 600px) {
+  .brand,
+  .nav-links a {
+    padding: 8px 12px;
+  }
+
+  .brand {
+    font-size: 1rem;
+  }
+
+  .nav-links {
+    gap: 6px;
+  }
+
+  .nav-links a {
+    font-size: 0.85rem;
+  }
+
+  .nav-user {
+    max-width: 84px;
+    font-size: 0.85rem;
+  }
+
+  .page {
+    padding-top: 5.5rem;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .navbar {
+    padding: 12px 8px;
+    gap: 4px;
+  }
+
+  .brand,
+  .nav-links a {
+    padding: 8px 9px;
+  }
+
+  .brand {
+    font-size: 0.92rem;
+  }
+
+  .nav-links {
+    gap: 4px;
+  }
+
+  .nav-links a {
+    font-size: 0.8rem;
+  }
+
+  .nav-user {
+    display: none;
+  }
+}
+
+/* Links inside sentences ("Sign up", "Sign in") get a finger-sized hit area. */
+@media (pointer: coarse) {
+  .auth-note a {
+    display: inline-block;
+    padding: 8px 4px;
+  }
+}

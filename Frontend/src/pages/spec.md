@@ -1,5 +1,31 @@
 # src/pages — Spec
 
+## Current integration
+
+The original form descriptions below are historical. Current sign-in and
+sign-up pages hand off to Auth0 through `/auth/login`; `auth.jsx` supplies
+session state and the forms never collect or log passwords.
+
+`Home` switches between `NisarMap` and the seven-area sample `MapView`.
+`Home.css` keeps the sample scenario picker below the date/sample badges
+and includes the phone/touch rules from the live-map branch. On phones,
+the sample prompt follows the measured bottom of the scenario picker,
+leaving the picker, attribution and playback controls clear.
+
+`Events` is registered at `/events` and `/events/:eventId`. It supports the
+date-range catalog, scene metadata, regional context, AI briefing, pictures
+and the signed-in question flow. The other routes remain `/`, `/signin`,
+`/signup` and the not-found fallback.
+
+Verification: frontend lint/build plus desktop and phone browser checks of
+both map modes, sample scenario selection and the observation/forecast
+controls. The merge retains existing responsive spacing and adds no new
+dependencies or API contracts.
+
+## Changelog
+
+- 2026-11-15 - Preserve the sample scenario picker and live-map mobile rules together; keep the phone prompt clear of the picker and playback controls.
+
 ## Component contract
 
 Every page component:

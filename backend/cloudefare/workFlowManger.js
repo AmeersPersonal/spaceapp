@@ -10,6 +10,7 @@ import { WorkflowEntrypoint } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { AsfError, NISAR_PRODUCTS, searchNisar } from './asf.js';
 import { processorHeaders } from './oAuth.js';
+import { callContainer } from './processor.js';
 import { captionScene } from './AI/AIManger.js';
 import {
   createIngest,
@@ -240,15 +241,22 @@ export class IngestWorkflow extends WorkflowEntrypoint {
 
 // ---------- Queue consumer ----------
 
-class PermanentError extends Error {}
+export class PermanentError extends Error {}
 
-/** Send a scene to the external processor. Marks it processing, or awaiting_processor when none is configured. */
+/**
+ * Send a scene to the processor and record how it went.
+ *  - PROCESSOR_URL set: an external processor, which reports back through R2 notifications.
+ *  - else the PROCESSOR container binding: the Cloudflare-hosted processor, which reports back through the Worker's
+ *    /internal/processor routes while this call waits, so the scene is already `ready` when it answers.
+ *  - neither: the scene stays `awaiting_processor`.
+ */
 export async function dispatchScene(env, body, fetchImpl = fetch) {
   const scene = await getScene(env.DB, body.sceneId);
   if (!scene) throw new PermanentError(`unknown scene ${body.sceneId}`);
-  if (scene.status === 'ready') return 'already-ready';
+  if (scene.status === 'ready' && !body.force) return 'already-ready'; // `force` draws it again
   const event = await getEvent(env.DB, scene.eventId);
-  if (!env.PROCESSOR_URL) {
+  const container = !env.PROCESSOR_URL && Boolean(env.PROCESSOR) && Boolean(env.APP_BASE_URL);
+  if (!env.PROCESSOR_URL && !container) {
     await setSceneStatus(env.DB, scene.id, 'awaiting_processor');
     return 'awaiting_processor';
   }
@@ -258,9 +266,32 @@ export async function dispatchScene(env, body, fetchImpl = fetch) {
     product: scene.product,
     url: scene.url,
     polarizations: scene.polarizations,
+    acquiredAt: scene.acquiredAt,
     bbox: event?.bbox ?? null,
+    callbackBase: env.APP_BASE_URL ?? null,
     output: { tilePrefix: `tiles/${scene.eventId}/`, manifestKey: manifestKey(scene.eventId, scene.id) },
   };
+
+  if (container) {
+    await setSceneStatus(env.DB, scene.id, 'processing');
+    // The token travels with the job (Worker to container only), so replacing the secret needs no restart.
+    const res = await callContainer(env, { ...job, ...(env.EARTHDATA_TOKEN ? { earthdataToken: env.EARTHDATA_TOKEN } : {}) });
+    const result = await res.json().catch(() => ({}));
+    if (res.status === 424) {
+      // Earthdata Login refused EARTHDATA_TOKEN: retrying cannot help until the token is replaced.
+      console.error('processor: Earthdata token rejected; set a new EARTHDATA_TOKEN and ingest again');
+      await setSceneStatus(env.DB, scene.id, 'awaiting_processor', 'Earthdata Login rejected the token');
+      return 'awaiting_processor';
+    }
+    if (res.status >= 400 && res.status < 500 && res.status !== 429) throw new PermanentError(`processor rejected job: HTTP ${res.status} ${result.error ?? ''}`.trim());
+    if (!res.ok) throw new Error(`processor unavailable: HTTP ${res.status} ${result.error ?? ''}`.trim());
+    if (result.status === 'skipped') {
+      await setSceneStatus(env.DB, scene.id, 'awaiting_processor', String(result.reason ?? 'nothing to draw').slice(0, 300));
+      return 'skipped';
+    }
+    return 'ready';
+  }
+
   const res = await fetchImpl(env.PROCESSOR_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...processorHeaders(env) },

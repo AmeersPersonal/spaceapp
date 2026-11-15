@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
+import DateRange from '../DateRange.jsx'
+import { centreInJapan, lastMonths, overlapsRange, statusLabel } from '../explore.js'
 import './Events.css'
 
 // Live data from the Earth Replay API: the catalog of tracked events, what
@@ -17,7 +19,7 @@ function formatDay(iso) {
   })
 }
 
-function EventList({ selectedId }) {
+function EventList({ selectedId, range }) {
   const [events, setEvents] = useState(null)
   const [error, setError] = useState('')
 
@@ -38,22 +40,31 @@ function EventList({ selectedId }) {
     return <p className="ev-muted">No events have been registered yet.</p>
   }
 
+  // Events whose dates touch the chosen period (the open one always stays in the list).
+  const shown = events.filter((e) => e.id === selectedId || overlapsRange(e, range))
+
   return (
-    <ul className="ev-list">
-      {events.map((event) => (
-        <li key={event.id}>
-          <Link
-            to={`/events/${event.id}`}
-            className={event.id === selectedId ? 'ev-item ev-item-active' : 'ev-item'}
-          >
-            <span className="ev-item-name">{event.name}</span>
-            <span className="ev-item-meta">
-              {event.type} · {event.sceneCount ?? 0} scenes
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <>
+      <p className="ev-muted ev-count">
+        {shown.length} of {events.length} event{events.length === 1 ? '' : 's'} in this period
+      </p>
+      {shown.length === 0 && <p className="ev-muted">No events in this period. Try a longer one.</p>}
+      <ul className="ev-list">
+        {shown.map((event) => (
+          <li key={event.id}>
+            <Link
+              to={`/events/${event.id}`}
+              className={event.id === selectedId ? 'ev-item ev-item-active' : 'ev-item'}
+            >
+              <span className="ev-item-name">{event.name}</span>
+              <span className="ev-item-meta">
+                {event.type} · {event.sceneCount ?? 0} scenes
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 
@@ -84,6 +95,130 @@ function Briefing({ eventId }) {
       {state.status === 'done' && (
         <>
           <p className="ev-answer">{state.data.summary}</p>
+          <p className="ev-fine">{state.data.disclaimer}</p>
+        </>
+      )}
+    </section>
+  )
+}
+
+// Pictures: USGS impact maps of the earthquake, related NASA photographs and links to more.
+// Images stay on USGS and NASA servers; each opens its source page.
+function Pictures({ eventId }) {
+  const [state, setState] = useState({ status: 'loading' })
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .media(eventId)
+      .then((data) => !cancelled && setState({ status: 'done', data }))
+      .catch((err) => !cancelled && setState({ status: 'error', message: err.message }))
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
+
+  const data = state.status === 'done' ? state.data : null
+  const empty = data && data.images.length + data.photos.length + data.links.length === 0
+  const figure = (item) => (
+    <a key={item.url} className="ev-figure" href={item.page ?? item.url} target="_blank" rel="noreferrer">
+      <img src={item.url} alt={item.title} loading="lazy" />
+      <span className="ev-figure-title">{item.title}</span>
+      <span className="ev-source-meta">
+        {item.credit}
+        {item.date ? ` · ${formatDay(item.date)}` : ''}
+      </span>
+    </a>
+  )
+
+  return (
+    <section className="ev-card">
+      <h3>Photos and impact maps</h3>
+      {state.status === 'loading' && <p className="ev-muted">Looking for pictures…</p>}
+      {state.status === 'error' && <p className="error">{state.message}</p>}
+      {empty && (
+        <p className="ev-muted">No pictures are linked to this event: it has no place name or hazard type to search for.</p>
+      )}
+      {data && data.images.length > 0 && (
+        <>
+          <p className="ev-muted">Impact maps for this earthquake</p>
+          <div className="ev-gallery">{data.images.map(figure)}</div>
+        </>
+      )}
+      {data && data.photos.length > 0 && (
+        <>
+          <p className="ev-muted">Related photos from NASA (search: “{data.photoQuery}”)</p>
+          <div className="ev-gallery">{data.photos.map(figure)}</div>
+        </>
+      )}
+      {data && data.links.length > 0 && (
+        <ul className="ev-links">
+          {data.links.map((link) => (
+            <li key={link.url}>
+              <a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {data && !empty && (
+        <p className="ev-fine">
+          {data.note} {data.credit}
+        </p>
+      )}
+    </section>
+  )
+}
+
+// A projection from this event's own NISAR time series, written on request.
+function Projection({ eventId }) {
+  const [state, setState] = useState({ status: 'idle' })
+
+  const load = () => {
+    setState({ status: 'loading' })
+    api
+      .predict(eventId)
+      .then((data) => setState({ status: 'done', data }))
+      .catch((err) => setState({ status: 'error', message: err.message }))
+  }
+
+  return (
+    <section className="ev-card">
+      <h3>What may come next</h3>
+      {state.status === 'idle' && (
+        <button className="button" onClick={load}>Project this event forward</button>
+      )}
+      {state.status === 'loading' && <p className="ev-muted">Projecting…</p>}
+      {state.status === 'error' && (
+        <>
+          <p className="error">{state.message}</p>
+          <button className="button secondary" onClick={load}>Try again</button>
+        </>
+      )}
+      {state.status === 'done' && (
+        <>
+          {state.data.observations.nextExpectedAcquisition && (
+            <p className="ev-text">
+              Next NISAR pass expected around <strong>{formatDay(state.data.observations.nextExpectedAcquisition)}</strong>{' '}
+              (it has returned about every {state.data.observations.cadenceDays} days).
+            </p>
+          )}
+          {state.data.narrative && <p className="ev-answer">{state.data.narrative}</p>}
+          {!state.data.narrative && <p className="ev-muted">{state.data.reason ?? 'There is not enough data to project yet.'}</p>}
+          {state.data.metrics.length > 0 && (
+            <ul className="ev-sources">
+              {state.data.metrics.map((m) => (
+                <li key={m.key}>
+                  <span className="ev-source-name">
+                    {m.product} {m.metric}: {m.direction}
+                  </span>
+                  <span className="ev-source-meta">
+                    {m.latest.value} on {formatDay(m.latest.date)} → about {m.projected.value} ({m.projected.low} to{' '}
+                    {m.projected.high}) by {formatDay(m.projected.date)} · {m.confidence} confidence
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="ev-fine">{state.data.disclaimer}</p>
         </>
       )}
@@ -211,6 +346,7 @@ function AskBox({ eventId }) {
 
 function EventDetail({ eventId }) {
   const [state, setState] = useState({ status: 'loading' })
+  const signedIn = useAuth().status === 'signed-in'
 
   useEffect(() => {
     let cancelled = false
@@ -227,6 +363,8 @@ function EventDetail({ eventId }) {
   if (state.status === 'error') return <p className="error">{state.message}</p>
 
   const { event, scenes, dates, polarizations, layers } = state.data
+  // The map shows signed-out visitors Japan's events only, so only offer the replay where it can open.
+  const canReplayOnMap = dates.length > 1 && (signedIn || centreInJapan(event))
   const layerNames = [...new Set(layers.map((l) => l.layer))]
 
   return (
@@ -234,6 +372,17 @@ function EventDetail({ eventId }) {
       <p className="ev-eyebrow">{event.type}</p>
       <h2>{event.name}</h2>
       {event.description && <p className="ev-text">{event.description}</p>}
+      {canReplayOnMap && (
+        // Opens the map on this event and plays its scenes from the first date.
+        <Link className="button ev-replay" to={`/?event=${encodeURIComponent(event.id)}&replay=1`}>
+          ▶ Replay on the map
+        </Link>
+      )}
+      {dates.length > 1 && !canReplayOnMap && (
+        <p className="ev-muted">
+          <Link to="/signin">Sign in</Link> to replay this event on the map.
+        </p>
+      )}
 
       <dl className="ev-facts">
         <div>
@@ -266,8 +415,10 @@ function EventDetail({ eventId }) {
         </div>
       </dl>
 
+      <Pictures eventId={eventId} />
       <RegionalContext eventId={eventId} />
       <Briefing eventId={eventId} />
+      <Projection eventId={eventId} />
       <AskBox eventId={eventId} />
 
       {scenes.length > 0 && (
@@ -286,7 +437,7 @@ function EventDetail({ eventId }) {
                 <tr key={scene.id}>
                   <td>{formatDay(scene.acquiredAt)}</td>
                   <td>{scene.product}</td>
-                  <td>{String(scene.status).replaceAll('_', ' ')}</td>
+                  <td>{statusLabel(scene.status)}</td>
                 </tr>
               ))}
             </tbody>
@@ -303,12 +454,14 @@ function EventDetail({ eventId }) {
 
 function Events() {
   const { eventId } = useParams()
+  const [range, setRange] = useState(() => lastMonths(6)) // last 6 months until changed
 
   return (
     <div className="ev">
       <aside className="ev-side">
         <h1>Events</h1>
-        <EventList selectedId={eventId} />
+        <DateRange value={range} onChange={setRange} allowAll label="Show events from" />
+        <EventList selectedId={eventId} range={range} />
       </aside>
       <section className="ev-main">
         {eventId ? (

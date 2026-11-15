@@ -114,7 +114,9 @@ describe('queue consumer', () => {
   it('marks scenes awaiting_processor when no processor is configured', async () => {
     await seedEvent();
     const [scene] = await seedScenes();
-    const result = await runBatch('earth-replay-ingest', [msg({ type: 'process', eventId: SAMPLE_EVENT.id, sceneId: scene.id })]);
+    // wrangler.jsonc now binds the processor container, so "none configured" is stated explicitly.
+    const e = testEnv({ PROCESSOR: undefined, PROCESSOR_URL: '' });
+    const result = await runBatch('earth-replay-ingest', [msg({ type: 'process', eventId: SAMPLE_EVENT.id, sceneId: scene.id })], e);
     expect(result.explicitAcks).toHaveLength(1);
     expect((await getScene(env.DB, scene.id)).status).toBe('awaiting_processor');
   });

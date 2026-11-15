@@ -1,5 +1,29 @@
 # src — Spec
 
+## Merged sample-map behavior
+
+`mapview.jsx` keeps the multi-area sample explorer from `main`: `studyAreas`
+supplies all seven scenarios, `basemapStyle` supplies the shared map style,
+and each selection rebuilds its own observed/forecast timeline. Switching
+areas resets playback, the baseline, pixel data and the selected point.
+The existing `studyArea` export remains the default-area compatibility seam
+used by the live NISAR map; the single-area notes below describe that shape.
+
+The sample map also uses the inset hooks from `useBottomInset.js`. Its
+controls publish their measured height to `--sx-bottom-inset`, keeping
+attribution above the controls. The scenario picker publishes its bottom
+edge to `--sx-top-inset`, keeping the phone prompt below the picker and
+clear of attribution. Both the multi-area imports and inset hooks must
+survive merges.
+
+Verification: run `npm run lint` and `npm run build` from `Frontend`, then
+exercise every sample selector, observed/change/forecast controls and a
+phone viewport in a browser. Forecast dates must remain visibly modeled.
+
+## Changelog
+
+- 2026-11-15 - Merge the multi-area sample explorer with the responsive inset hook while preserving scenario and playback behavior.
+
 ## `studyArea.js` — the configuration contract
 
 A single exported object. This is the only file to edit when swapping sample

@@ -11,7 +11,7 @@ function Home() {
 
   return (
     <>
-      {source === 'nisar' ? <NisarMap /> : <MapView />}
+      {source === 'nisar' ? <NisarMap onOpenSample={() => setSource('sample')} /> : <MapView />}
       <div className="source-switch" role="group" aria-label="Map data">
         <button className={source === 'nisar' ? 'active' : ''} onClick={() => setSource('nisar')}>
           NISAR data

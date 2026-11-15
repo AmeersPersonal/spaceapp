@@ -85,6 +85,22 @@ describe('USGS earthquakes', () => {
     expect(bad.errors).toHaveLength(3);
   });
 
+  it('accepts an explicit date range for discovery and validates it', () => {
+    expect(parseDiscoverQuery(new URLSearchParams('start=2026-05-14&end=2026-11-14')).value).toMatchObject({ start: '2026-05-14', end: '2026-11-14' });
+    expect(parseDiscoverQuery(new URLSearchParams('start=2026-05-14')).errors).toEqual(['start and end must be given together']);
+    expect(parseDiscoverQuery(new URLSearchParams('start=2026-11-14&end=2026-05-14')).errors).toEqual(['start must be on or before end']);
+    expect(parseDiscoverQuery(new URLSearchParams('start=2025-01-01&end=2026-11-14')).errors).toEqual(['start and end must span at most 366 days']);
+    expect(parseDiscoverQuery(new URLSearchParams('start=soon&end=2026-11-14')).errors).toHaveLength(1);
+  });
+
+  it('builds the USGS URL for an explicit period, covering its last day but not the future', () => {
+    const url = new URL(buildUsgsUrl({ minMagnitude: 6, start: '2026-05-14', end: '2026-06-01', now: NOW }));
+    expect(url.searchParams.get('starttime')).toBe('2026-05-14T00:00:00');
+    expect(url.searchParams.get('endtime')).toBe('2026-06-01T23:59:59');
+    const open = new URL(buildUsgsUrl({ minMagnitude: 6, start: '2026-05-14', end: '2026-11-14', now: NOW }));
+    expect(open.searchParams.get('endtime')).toBe('2026-11-14T12:00:00');
+  });
+
   it('builds the USGS URL with time window and optional bbox', () => {
     const url = new URL(buildUsgsUrl({ minMagnitude: 6, days: 30, bbox: [-90, 0, -70, 10], now: NOW }));
     expect(url.searchParams.get('starttime')).toBe('2026-10-15T12:00:00');
@@ -277,6 +293,10 @@ describe('HTTP routes', () => {
     expect(body.credit.supplementary).toMatch(/USGS/);
     await call('/api/discover/earthquakes?minMagnitude=7');
     expect(spy).toHaveBeenCalledTimes(1);
+    // A different period is a different query, not a cache hit.
+    expect((await call('/api/discover/earthquakes?minMagnitude=7&start=2026-01-01&end=2026-03-01')).status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect((await call('/api/discover/earthquakes?start=2026-01-01')).status).toBe(400);
   });
   it('discover validates input and hides upstream details on failure', async () => {
     expect((await call('/api/discover/earthquakes?days=0')).status).toBe(400);

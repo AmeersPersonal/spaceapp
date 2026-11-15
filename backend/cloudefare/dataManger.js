@@ -255,6 +255,14 @@ export async function getIngest(db, id) {
 
 // ---------- captions ----------
 
+/** Delete a scene's captions (used when the scene is processed again). Returns the removed ids. */
+export async function deleteCaptionsForScene(db, sceneId) {
+  const { results } = await db.prepare('SELECT id FROM captions WHERE scene_id = ?').bind(sceneId).all();
+  if (results.length) await db.prepare('DELETE FROM captions WHERE scene_id = ?').bind(sceneId).run();
+  return results.map((r) => r.id);
+}
+
+
 export async function insertCaption(db, caption) {
   await db
     .prepare('INSERT INTO captions (id, event_id, scene_id, text, model) VALUES (?, ?, ?, ?, ?)')

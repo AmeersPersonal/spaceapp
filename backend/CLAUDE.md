@@ -47,7 +47,7 @@ GET /api/events
 GET /api/events/:id (scenes, dates, polarizations)
 GET /api/events/:id/context (stored supplementary NASA datasets for the event area; refreshed when older than 6 h and given to the AI as context)
 GET /tiles/:event/:layer/:date/:z/:x/:y.png
-GET /api/discover/earthquakes?minMagnitude&days&bbox (recent USGS quakes + suggested ingest)
+GET /api/discover/earthquakes?minMagnitude&days&start&end&bbox (USGS quakes for the last `days` or a start/end period + suggested ingest)
 POST /api/events/earthquake {usgsId} (requires Auth0 session and JSON; register a quake as an event and start an ingest)
 GET /api/nisar/search?bbox&start&end&products (preview NISAR scenes, no ingest)
 GET /api/geocode?q (place name to AOI, needs GOOGLE_MAPS_API_KEY)
@@ -62,6 +62,8 @@ POST /api/chat {eventId, message, conversationId?, agent?} (multi-agent chat; sp
 GET /api/chat/:conversationId (stored thread)
 GET /api/events/:id/summary (AI briefing per event)
 GET /api/events/:id/predict?horizonDays (modeled projection from NISAR-derived stats)
+GET /api/outlook?bbox&horizonDays (modeled seismic outlook per grid cell from the USGS catalog, with AI-worded scenarios; never an observation)
+GET /api/events/:id/media (USGS impact maps, related NASA photos and photo links for an event)
 WS /api/room/:code (replay sync)
 
 Changing any route or payload shape requires updating the owning folder's spec and this list in the same turn.

@@ -50,6 +50,28 @@ export const api = {
   // Supplementary NASA datasets for the event's area (stored by the backend, also used by the AI)
   context: (eventId) => request(`/api/events/${id(eventId)}/context`),
 
+  // Ask about any place: what NISAR, quakes and other NASA datasets have for a box.
+  // `bbox` is [west, south, east, north]; the backend allows at most 5 degrees a side.
+  nisarSearch: (bbox, start, end) =>
+    request(`/api/nisar/search?bbox=${bbox.join(',')}&start=${start}&end=${end}&products=GCOV,GUNW,GOFF,SME2`),
+  quakes: (bbox, start, end) =>
+    request(`/api/discover/earthquakes?minMagnitude=4.5&start=${start}&end=${end}&bbox=${bbox.join(',')}`),
+  datasetContext: (bbox, start, end) =>
+    request(
+      `/api/datasets/context?bbox=${bbox.join(',')}&start=${start}&end=${end}&sources=gpm,smap,hls,terrain,grace&limit=1`,
+    ),
+
+  // Start tracking (signed-in users only)
+  trackArea: (body) => request('/api/ingest', { method: 'POST', body }),
+  trackQuake: (usgsId) => request('/api/events/earthquake', { method: 'POST', body: { usgsId } }),
+
+  // Modeled earthquake outlook for a region, with AI-worded scenarios (never an observation)
+  outlook: (bbox, horizonDays = 30) => request(`/api/outlook?bbox=${bbox.join(',')}&horizonDays=${horizonDays}`),
+  // USGS impact maps, related NASA photos and photo links for an event
+  media: (eventId) => request(`/api/events/${id(eventId)}/media`),
+  // Modeled projection from the event's own NISAR time series
+  predict: (eventId) => request(`/api/events/${id(eventId)}/predict`),
+
   // AI
   summary: (eventId) => request(`/api/events/${id(eventId)}/summary`),
   ask: (eventId, question, chatId) =>

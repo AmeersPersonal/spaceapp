@@ -725,3 +725,73 @@
     top: 66px;
   }
 }
+
+/* ---------- Phones and touch ---------- */
+
+@media (max-width: 900px) {
+  /* Attribution sits above the controls bar, not behind it (see useBottomInset.js). */
+  .sx .maplibregl-ctrl-bottom-right {
+    bottom: var(--sx-bottom-inset, 0px);
+  }
+
+  .sx .maplibregl-ctrl-attrib {
+    max-width: calc(100vw - 24px);
+  }
+
+  /* iOS zooms the whole page when a focused field's text is under 16px. */
+  .sx-select {
+    font-size: 16px;
+  }
+
+  .sx-controls {
+    padding: 12px;
+  }
+
+  .sx-row {
+    gap: 10px;
+  }
+
+  .sx-date {
+    min-width: 0;
+  }
+}
+
+/* Short screens (a phone on its side): the controls bar gets slimmer. */
+@media (max-height: 480px) {
+  .sx-controls {
+    gap: 6px;
+    padding: 8px 12px;
+    bottom: 8px;
+  }
+
+  .sx-timeline {
+    display: none;
+  }
+}
+
+/* Finger-sized targets. */
+@media (pointer: coarse) {
+  .sx-slider {
+    height: 32px;
+  }
+
+  .sx-close,
+  .sx-close-x {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sx-toggle button {
+    padding: 9px 12px;
+  }
+
+  .sx .maplibregl-ctrl-group button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sx-inline input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+}

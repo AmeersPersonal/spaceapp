@@ -52,3 +52,81 @@
     max-height: none;
   }
 }
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 900px) {
+  .source-switch {
+    left: 12px;
+  }
+
+  /* The sample map's nudge sits under its date badge, and its detail sheet
+     opens below the switch instead of underneath it. */
+  .sx .sx-hint {
+    top: 152px;
+    max-width: calc(100% - 24px);
+  }
+
+  .sx .sx-panel {
+    top: 106px;
+    max-height: min(52vh, calc(100% - 106px - 12px));
+  }
+
+  .sx .sx-topleft {
+    right: 60px; /* clear of the zoom buttons */
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+@media (pointer: coarse) {
+  .source-switch button {
+    padding: 9px 14px;
+  }
+
+  /* The switch is taller for fingers, so everything stacked under it moves down. */
+  .sx .sx-topleft,
+  .sx .sx-nisar-top {
+    top: 112px;
+  }
+
+  .sx .sx-info {
+    top: 162px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 900px) {
+  .sx .sx-hint {
+    top: 158px;
+  }
+
+  .sx .sx-panel {
+    top: 112px;
+    max-height: min(52vh, calc(100% - 112px - 12px));
+  }
+}
+
+@media (max-width: 900px) {
+  /* The open sheet stops above the controls bar and attribution (see useBottomInset.js), and the
+     zoom buttons it would half-cover step aside: pinch still zooms. */
+  .sx .sx-panel {
+    max-height: min(52vh, calc(100% - 112px - var(--sx-bottom-inset, 12px) - 56px));
+  }
+
+  .sx-panel-open .maplibregl-ctrl-top-right {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Follow the sample picker's measured bottom, leaving attribution above playback. */
+  .sx .sx-hint {
+    top: var(--sx-top-inset);
+  }
+
+  /* The card starts under the toolbar's real bottom edge (see useBottomInset.js). */
+  .sx .sx-info {
+    top: var(--sx-top-inset, 156px);
+    max-height: min(46%, calc(100% - var(--sx-top-inset, 170px) - var(--sx-bottom-inset, 12px) - 8px));
+  }
+}

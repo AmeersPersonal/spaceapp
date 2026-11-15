@@ -44,6 +44,7 @@ The merged suite passed 203 tests across 14 files on 2026-11-14. It covers both 
 Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. The deployed Worker browser E2E also passed; frontend integration remains separate.
 
 ## Changelog
+- 2026-11-15 - Added `outlook.test.js` (12 tests: outlook query, cell maths, AI wording and fallback, `/api/outlook`, event pictures and `/api/events/:id/media`), 2 `events.test.js` cases for the discover `start`/`end` period, and an `auth0.test.js` case for the hosted frontend. Suite is 241 tests.
 - 2026-11-14 - Added `sceneBounds.test.js` for scene footprint bounds.
 - 2026-11-14 - Added `eventContext.test.js` (15 tests); `resetDb()` clears `event_context`; vitest config sets `EVENT_CONTEXT=off` so other suites never query NASA providers.
 - 2026-11-14 - Added two `auth0.test.js` cases for `FRONTEND_URL`: post-login return and `screen_hint`, write-origin allowlist (including an invalid URL), and the browser redirect on `/`. Suite is 205 tests.

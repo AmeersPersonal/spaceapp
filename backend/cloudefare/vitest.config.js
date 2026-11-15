@@ -19,6 +19,7 @@ export default defineConfig({
           AUTH0_CLIENT_SECRET: '',
           AUTH0_SESSION_ENCRYPTION_KEY: '',
           APP_BASE_URL: '',
+          FRONTEND_URL: '',
           FIRMS_MAP_KEY: '',
           GOOGLE_MAPS_API_KEY: '',
           PROCESSOR_URL: '',
