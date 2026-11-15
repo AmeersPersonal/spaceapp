@@ -19,12 +19,24 @@ import { formatDay, plural, percent, statusLabel, contains, layerLabel } from '.
 /* DOM helpers                                                          */
 /* ------------------------------------------------------------------ */
 
+/** Provider-supplied URLs: links may be http(s)/relative/hash; images may also be blob: or data:image. Never script schemes. */
+function safeUrl(name, value) {
+  const text = String(value).replace(/[\u0000-\u0020]+/g, '');
+  if (/^(#|\/(?!\/)|\.{0,2}\/)/.test(text)) return true; // hash, root-relative or relative path
+  let url;
+  try { url = new URL(text, document.baseURI); } catch { return false; }
+  if (url.protocol === 'https:' || url.protocol === 'http:') return true;
+  if (name === 'src') return url.protocol === 'blob:' || /^data:image\/(png|jpe?g|gif|webp);/i.test(text);
+  return false;
+}
+
 /** h('p', { class: 'meta' }, 'text', child, ...) — attributes are set as attributes. */
 export function h(tag, attrs, ...children) {
   const node = document.createElement(tag);
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === false || v === null || v === undefined) continue;
+      if ((k === 'href' || k === 'src') && typeof v === 'string' && !safeUrl(k, v)) continue;
       node.setAttribute(k, v === true ? '' : String(v));
     }
   }

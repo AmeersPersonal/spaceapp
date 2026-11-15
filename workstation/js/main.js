@@ -1000,11 +1000,6 @@ function renderLive() {
   setText(el.liveStatus, L.actionError || L.notice || '');
   setHidden(el.liveStatus, !L.actionError && !L.notice);
   setAttr(el.liveStatus, 'class', L.actionError ? 'live-error' : 'meta');
-  setText(el.liveLegendRaster, simOn
-    ? 'Simulated illustration: fabricated imagery, not measured data'
-    : tl.mode === 'tiles'
-      ? `${layerLabel(L.layer)}${step?.tile?.units ? ` (${step.tile.units})` : ''}: processed NISAR layer; colours are scaled per scene`
-      : 'ASF preview: a real NISAR pass, quicklook only, not calibrated');
   const stepDate = step ? formatDate(step.date) : '—';
   const signedIn = state.api.auth === 'signed-in';
   const hasEvent = !L.replay && L.detail.status === 'done';
@@ -1040,6 +1035,11 @@ function renderLive() {
     }
   }
   const simOn = Boolean(sim && simUrl);
+  setText(el.liveLegendRaster, simOn
+    ? 'Simulated illustration: fabricated imagery, not measured data'
+    : tl.mode === 'tiles'
+      ? `${layerLabel(L.layer)}${step?.tile?.units ? ` (${step.tile.units})` : ''}: processed NISAR layer; colours are scaled per scene`
+      : 'ASF preview: a real NISAR pass, quicklook only, not calibrated');
   setAttr(el.html, 'data-sim', simOn ? 'on' : 'off');
   setHidden(el.simBadge, !simOn);
   setHidden(el.provenanceSim, !simOn);
@@ -1225,7 +1225,9 @@ function ensureBrowseImages(tl, index = state.live.idx ?? 0) {
           const keep = new Set(view.tl.steps.slice(Math.max(0, (view.idx ?? 0) - 1), (view.idx ?? 0) + 2).flatMap(x => x.scenes).map(sceneKey));
           for (const [oldKey, image] of cache.browse) {
             if (cache.browse.size <= 64) break;
-            if (!keep.has(oldKey) && image.status !== 'loading') cache.browse.delete(oldKey);
+            if (keep.has(oldKey) || image.status === 'loading') continue;
+            if (image.url) URL.revokeObjectURL(image.url);
+            cache.browse.delete(oldKey);
           }
         }
         if (state.source === 'live') render();

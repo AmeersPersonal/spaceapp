@@ -30,8 +30,9 @@ export const SIM_MODELS = Object.freeze({
 /** Which demo model to run for an event. */
 export function simModelFor(event) {
   const name = String((event && event.name) || '').toLowerCase();
+  const about = `${name} ${String((event && event.description) || '').toLowerCase()}`;
   const type = String((event && event.type) || 'other').toLowerCase();
-  if (/volcan|erupt|caldera|lava/.test(name)) return 'volcano';
+  if (/volcan|erupt|caldera|lava/.test(about)) return 'volcano';
   if (/tsunami|surge|coast|cyclone|hurricane|typhoon/.test(name)) return 'tsunami';
   if (['flood', 'wetland', 'forest', 'crop', 'soil_moisture'].includes(type) || /flood|fire|burn|drought|rain/.test(name)) return 'flood';
   return 'quake';
