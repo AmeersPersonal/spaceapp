@@ -116,7 +116,7 @@ function footprintTicks(bounds) {
   };
 }
 
-function paddingFor(map, isMobile) {
+export function paddingFor(map, isMobile) {
   if (isMobile) return { ...MOBILE_PADDING };
   const el = map && typeof map.getContainer === 'function' ? map.getContainer() : null;
   const w = el ? el.clientWidth : 0;
@@ -218,7 +218,7 @@ export function createMap(container, { style, hazard, padding, isMobile = false,
 
   map.on('click', (e) => {
     if (typeof onClick !== 'function' || !e || !e.lngLat) return;
-    onClick({ lng: e.lngLat.lng, lat: e.lngLat.lat });
+    onClick({ lng: e.lngLat.lng, lat: e.lngLat.lat, point: e.point ? { x: e.point.x, y: e.point.y } : null });
   });
 
   if (hazard && hazard.bounds) {
@@ -305,7 +305,7 @@ const COMPOUND_MATCH = ['match', ['get', 'risk'], 'high', PALETTE.riskHigh, 'med
  * the overlays. Inserting before the trailing run keeps every non-label
  * basemap layer underneath and every label on top.
  */
-function labelStackStartId(map) {
+export function labelStackStartId(map) {
   try {
     const style = map.getStyle();
     const layers = style && style.layers ? style.layers : [];
@@ -334,12 +334,15 @@ export function addLayers(map, hazard) {
     else map.addLayer(layer);
   };
 
+  // No 'raster-resampling': 'nearest' on these image layers: with MapLibre
+  // 4.7.1 it drew the radar as a solid black square in Chrome (measured with
+  // readPixels ≈ 2,2,3 inside the footprint; ≈ 80–100 grey with linear).
   map.addSource('raster', { type: 'image', url: TRANSPARENT_PIXEL, coordinates: corners });
   add({
     id: 'raster',
     type: 'raster',
     source: 'raster',
-    paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' },
+    paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 },
   });
 
   map.addSource('change', { type: 'image', url: TRANSPARENT_PIXEL, coordinates: corners });
@@ -348,7 +351,7 @@ export function addLayers(map, hazard) {
     type: 'raster',
     source: 'change',
     layout: { visibility: 'none' },
-    paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0, 'raster-resampling': 'nearest' },
+    paint: { 'raster-opacity': 0.85, 'raster-fade-duration': 0 },
   });
 
   map.addSource('risk', { type: 'geojson', data: EMPTY_FC });
@@ -455,6 +458,21 @@ function setPaint(map, layerId, prop, value) {
   }
 }
 
+const DEMO_LAYERS = ['raster', 'change', 'risk-fill', 'risk-line', 'fault-line', 'footprint-frame', 'footprint-ticks', 'compound-seismic', 'compound-tsunami'];
+
+/**
+ * Hide every synthetic (demo-channel) layer and the reticle, for the LIVE
+ * channel. Forgets what applyMapState applied, so the next applyMapState
+ * (back on a demo channel) re-applies every image, visibility and paint.
+ */
+export function hideDemoLayers(map) {
+  if (!map || !map.getSource('raster')) return;
+  for (const id of DEMO_LAYERS) setVisibility(map, id, false);
+  const s = applied.get(map);
+  if (s && s.marker && s.markerOnMap) s.marker.remove();
+  applied.delete(map);
+}
+
 /**
  * Apply a derived view (main.js deriveView output) to the map. Idempotent:
  * calling it twice with equal views issues no MapLibre calls the second time.
@@ -529,7 +547,13 @@ export function applyMapState(map, view) {
     s.forecastDash = forecastDash;
   }
 
-  // 4. Footprint frame and corner ticks follow the hazard bounds.
+  // 4. Footprint frame and corner ticks follow the hazard bounds (and are
+  //    re-shown after hideDemoLayers, which resets this bookkeeping).
+  if (!s.footprintShown) {
+    setVisibility(map, 'footprint-frame', true);
+    setVisibility(map, 'footprint-ticks', true);
+    s.footprintShown = true;
+  }
   if (hazardChanged) {
     const frame = map.getSource('footprint');
     if (frame && typeof frame.setData === 'function') frame.setData(footprintFrame(hazard.bounds));

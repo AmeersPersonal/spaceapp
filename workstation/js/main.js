@@ -20,7 +20,39 @@ import {
 } from './config.js';
 import { TelemetryService, ERROR_COPY } from './telemetry.js';
 import { riskChart, pointChart } from './charts.js';
-import { createMap, styleBasemap, addLayers, applyMapState, refitCamera } from './map.js';
+import { createMap, styleBasemap, addLayers, applyMapState, refitCamera, hideDemoLayers, paddingFor } from './map.js';
+import { api, probe } from './api.js';
+import { addLiveLayers, applyLiveMap, outlookCellAt, fitBox } from './liveMap.js';
+import { loadBrowseImage } from './browse.js';
+import { RoomClient } from './room.js';
+import { simHazardFor, simFrame } from './simulate.js';
+import {
+  liveTimeline,
+  lastMonths,
+  setRangeEnd,
+  MAX_SEARCH_DAYS,
+  NISAR_LAUNCH,
+  isoDay,
+  areaAround,
+  wrapLng,
+  unionBounds,
+  boundsOf,
+  outlookBoxFrom,
+  layerLabel,
+  formatLngLat,
+} from './explore.js';
+import {
+  renderEventHead,
+  renderProjection,
+  renderBriefing,
+  renderAskLog,
+  renderContext,
+  renderMedia,
+  renderScenes,
+  renderArea,
+  renderOutlook,
+  h,
+} from './live.js';
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                            */
@@ -36,7 +68,7 @@ const COPY = Object.freeze({
   pointWaiting: 'Point selected. Values appear once the observed rasters have loaded.',
   pointUnavailable: 'Raster unavailable — no point values can be sampled.',
   noTimeline: 'No timeline data.',
-  pwMismatch: 'Passwords do not match.',
+  sessionEnded: 'Your session has ended. Sign in again.',
 });
 
 // Point-series display scales per raster type. The raw sample is a 0..1
@@ -67,6 +99,49 @@ const state = {
   // Separate slots so one failure never overwrites another; render() joins
   // map + backend into #map-error.
   errors: { map: '', asset: '', backend: '' },
+  // Earth Replay API link (js/api.js probe). The demo channels never read it;
+  // the LIVE channel is built from it.
+  api: {
+    status: 'checking' /* checking | online | offline */,
+    eventCount: 0,
+    user: null,
+    auth: 'checking' /* checking | signed-in | signed-out | unavailable */,
+    authMessage: '',
+    error: '',
+  },
+  // 'demo' = the three synthetic channels; 'live' = channel 04, the Earth Replay API.
+  source: 'demo',
+  live: {
+    events: { status: 'idle', list: [], message: '' },
+    eventId: '',
+    detail: { status: 'idle' },
+    replay: null /* { id, name, bbox, scenes, eventTime? } — previews found by a search, not tracked */,
+    idx: null,
+    pendingFrame: null /* a frame from a replay room, applied once the event loads */,
+    layer: 'preview',
+    panel: 'event' /* event | area | outlook */,
+    area: null /* { id, lng, lat, bbox } */,
+    range: lastMonths(6),
+    results: { nisar: { status: 'idle' }, quakes: { status: 'idle' }, context: { status: 'idle' } },
+    busy: '',
+    notice: '',
+    actionError: '',
+    predict: { status: 'idle' },
+    brief: { status: 'idle' },
+    context: { status: 'idle' },
+    media: { status: 'idle' },
+    ask: { turns: [], busy: false, error: '', chatId: null, history: '' },
+    outlookOn: false,
+    // "Simulated illustration": the demo generators run on the event's area.
+    // FABRICATED frames, shown only with #sim-badge and #provenance-sim.
+    sim: false,
+    simModel: 'auto' /* auto | volcano | flood | quake | tsunami */,
+    horizon: 30,
+    outlookBox: null,
+    outlook: { status: 'idle' },
+    cell: null,
+    room: { status: 'idle' /* idle | connecting | open | closed | error */, code: '', count: 0, message: '' },
+  },
 };
 
 // Data caches: not UI state, but inputs deriveView reads alongside `state`.
@@ -75,7 +150,31 @@ const cache = {
   rasters: new Map(), // hazardId → array of { canvas, imageData, url, source }
   rasterStatus: new Map(), // hazardId → 'loading' | 'ready' | 'error'
   changeUrls: new Map(), // `${hazard}|${baseline}|${idx}` → data URL
+  browse: new Map(), // live scene id → { status: 'loading'|'ready'|'error', url, coordinates, message }
 };
+
+let liveLayersReady = false;
+let demoHidden = false; // demo layers currently hidden by hideDemoLayers
+let liveSeq = 0; // guards stale live fetches (event switches)
+const room = new RoomClient({
+  onStatus: (status, message) => {
+    state.live.room = { ...state.live.room, status, message: message || '' };
+    if (status === 'open') {
+      // A fresh room adopts what this viewer is looking at.
+      room.send({ type: 'sync' });
+    }
+    render();
+  },
+  onPresence: (count) => {
+    state.live.room = { ...state.live.room, count };
+    render();
+  },
+  onState: (st) => applyRoomState(st),
+  onError: (message) => {
+    state.live.room = { ...state.live.room, message };
+    render();
+  },
+});
 
 const telemetry = new TelemetryService(CONFIG, HAZARD_REGISTRY);
 
@@ -133,6 +232,7 @@ const el = {
   evidenceDrawer: $('evidence-drawer'),
   mapError: $('map-error'),
   assetError: $('asset-error'),
+  backendStatus: $('backend-status'),
   observedCard: $('observed-card'),
   observedPass: $('observed-pass'),
   observedBaseline: $('observed-baseline'),
@@ -159,10 +259,65 @@ const el = {
   page: $('page'),
   signinForm: $('signin-form'),
   signupForm: $('signup-form'),
-  pwError: $('pw-error'),
+  signinStatus: $('signin-status'),
+  signupStatus: $('signup-status'),
+  signinSubmit: $('signin-submit'),
+  signupSubmit: $('signup-submit'),
+  signinSignout: $('signin-signout'),
   notfound: $('notfound'),
-  signupPassword: $('signup-password'),
-  signupConfirm: $('signup-confirm'),
+  navSignin: $('nav-signin'),
+  navUser: $('nav-user'),
+  navSignout: $('nav-signout'),
+  hzLive: $('hz-live'),
+  provenance: $('provenance'),
+  provenanceLive: $('provenance-live'),
+  // Live channel
+  liveControls: $('live-controls'),
+  liveEvent: $('live-event'),
+  liveEventsNote: $('live-events-note'),
+  liveLayerWrap: $('live-layer-wrap'),
+  liveLayer: $('live-layer'),
+  liveFit: $('live-fit'),
+  liveOutlook: $('live-outlook'),
+  liveSim: $('live-sim'),
+  liveSimModel: $('live-sim-model'),
+  liveSimModelWrap: $('live-sim-model-wrap'),
+  simBadge: $('sim-badge'),
+  provenanceSim: $('provenance-sim'),
+  livePassNote: $('live-pass-note'),
+  roomForm: $('room-form'),
+  roomCode: $('room-code'),
+  roomJoin: $('room-join'),
+  roomLeave: $('room-leave'),
+  roomStatus: $('room-status'),
+  legendLive: $('legend-live'),
+  legendOutlook: $('legend-outlook'),
+  livePanel: $('live-panel'),
+  liveViewEvent: $('live-view-event'),
+  liveEventHead: $('live-event-head'),
+  liveProjectionBody: $('live-projection-body'),
+  livePredict: $('live-predict'),
+  liveBriefingBody: $('live-briefing-body'),
+  liveBrief: $('live-brief'),
+  liveAskLog: $('live-ask-log'),
+  liveAskForm: $('live-ask-form'),
+  liveAskInput: $('live-ask-input'),
+  liveAskSubmit: $('live-ask-submit'),
+  liveAskNote: $('live-ask-note'),
+  liveContextBody: $('live-context-body'),
+  liveMediaBody: $('live-media-body'),
+  liveScenesBody: $('live-scenes-body'),
+  liveViewArea: $('live-view-area'),
+  liveAreaClose: $('live-area-close'),
+  liveAreaCoords: $('live-area-coords'),
+  liveRangeStart: $('live-range-start'),
+  liveRangeEnd: $('live-range-end'),
+  liveAreaBody: $('live-area-body'),
+  liveViewOutlook: $('live-view-outlook'),
+  liveOutlookClose: $('live-outlook-close'),
+  liveHorizon: $('live-horizon'),
+  liveOutlookView: $('live-outlook-view'),
+  liveOutlookBody: $('live-outlook-body'),
   dlgMethod: $('dlg-method'),
   dlgAbout: $('dlg-about'),
   announcer: $('announcer'),
@@ -366,8 +521,8 @@ function deriveView(st) {
 /* render()                                                             */
 /* ------------------------------------------------------------------ */
 
-function renderTicks(view) {
-  const signature = view.timeline.map((s) => `${s.kind}:${s.date}`).join(',');
+function renderTicks(view, passWord = 'Observed sample pass') {
+  const signature = `${passWord}|${view.timeline.map((s) => `${s.kind}:${s.date}`).join(',')}`;
   if (signature !== lastTickSignature) {
     const frag = document.createDocumentFragment();
     view.timeline.forEach((s, i) => {
@@ -377,7 +532,7 @@ function renderTicks(view) {
       btn.dataset.index = String(i);
       btn.dataset.kind = s.kind === 'forecast' ? 'forecast' : 'observed';
       btn.textContent = formatShort(s.date);
-      btn.setAttribute('aria-label', `${s.kind === 'forecast' ? 'Forecast' : 'Observed sample pass'}, ${formatSpoken(s.date)}`);
+      btn.setAttribute('aria-label', `${s.kind === 'forecast' ? 'Forecast' : passWord}, ${formatSpoken(s.date)}`);
       li.appendChild(btn);
       frag.appendChild(li);
     });
@@ -410,10 +565,121 @@ function renderBaselineOptions(view) {
   if (el.baseline.value !== want) el.baseline.value = want;
 }
 
+/** One render for the whole page: shared chrome, then the active channel. */
 function render() {
+  renderCommon();
+  if (state.source === 'live') renderLive();
+  else renderDemo();
+}
+
+/** Auth, nav, backend link and route-independent bits shared by every channel. */
+function renderCommon() {
+  setAttr(el.html, 'data-source', state.source);
+  // Channel blocks. The demo provenance strip shows on every demo channel;
+  // the live channel carries its own strip, so neither claim is ever wrong.
+  const live = state.source === 'live';
+  setHidden(el.provenance, live);
+  setHidden(el.provenanceLive, !live);
+  if (!live) {
+    setHidden(el.provenanceSim, true);
+    setHidden(el.simBadge, true);
+    setAttr(el.html, 'data-sim', 'off');
+  }
+  setHidden(el.livePanel, !live);
+  setHidden(el.liveControls, !live);
+  setHidden(el.legendLive, !live);
+  const a = state.api;
+  const signedIn = a.auth === 'signed-in' && a.user;
+  const who = signedIn ? String(a.user.name || a.user.email || 'Signed in') : '';
+
+  // Nav: Sign in ↔ name + Sign out.
+  setHidden(el.navSignin, Boolean(signedIn));
+  setHidden(el.navUser, !signedIn);
+  setHidden(el.navSignout, !signedIn);
+  setText(el.navUser, who);
+
+  // Auth pages (Auth0 hand-off; no credentials ever enter this page).
+  let authText;
+  if (a.status === 'offline') authText = `Sign-in is unavailable: the API is offline (${a.error})`;
+  else if (a.auth === 'checking') authText = 'Checking your session…';
+  else if (a.auth === 'unavailable') authText = `Sign-in is unavailable right now: ${a.authMessage}`;
+  else if (signedIn) authText = `Signed in as ${who}.`;
+  else authText = 'You are signed out.';
+  setText(el.signinStatus, authText);
+  setText(el.signupStatus, authText);
+  const cannot = a.status !== 'online' || a.auth === 'unavailable' || a.auth === 'checking';
+  setHidden(el.signinSubmit, Boolean(signedIn));
+  setHidden(el.signupSubmit, Boolean(signedIn));
+  if (el.signinSubmit.disabled !== cannot) el.signinSubmit.disabled = cannot;
+  if (el.signupSubmit.disabled !== cannot) el.signupSubmit.disabled = cannot;
+  setHidden(el.signinSignout, !signedIn);
+
+  // Backend link line. Its suffix says which data comes from the API.
+  const suffix = state.source === 'live' ? '// LIVE CHANNEL DATA COMES FROM IT' : '// DEMO CHANNEL DATA IS NOT FROM IT';
+  let linkText;
+  if (a.status === 'online') {
+    const authWord = signedIn ? `SIGNED IN AS ${who.toUpperCase()}` : a.auth === 'unavailable' ? 'SIGN-IN UNAVAILABLE' : 'SIGNED OUT';
+    linkText = `BACKEND LINK: ONLINE · ${a.eventCount} EVENT${a.eventCount === 1 ? '' : 'S'} · ${authWord} ${suffix}`;
+  } else if (a.status === 'offline') {
+    linkText = `BACKEND LINK: OFFLINE // ${a.error}`;
+  } else {
+    linkText = `BACKEND LINK: CHECKING ${suffix}`;
+  }
+  setText(el.backendStatus, linkText);
+  setAttr(el.backendStatus, 'data-state', a.status);
+
+  // Errors: explicit, never a substitute.
+  const mapText = [state.errors.map, state.errors.backend].filter(Boolean).join(' ');
+  setText(el.mapError, mapText);
+  setHidden(el.mapError, !mapText);
+}
+
+/**
+ * The timeline dock, shared by both channels.
+ * t: { timeline, idx, step, isForecast, hasForecast, observedCount, forecastCount, len, stepDate, spoken, observedLabel, passWord }
+ */
+function renderTimeline(t) {
+  const { timeline, idx, step, isForecast, hasForecast, observedCount, forecastCount, len, stepDate, spoken } = t;
+  const sliderMax = Math.max(0, len - 1);
+  setAttr(el.dateSlider, 'max', sliderMax);
+  if (el.dateSlider.disabled !== (len < 2)) el.dateSlider.disabled = len < 2;
+  if (idx !== null && Number(el.dateSlider.value) !== idx) el.dateSlider.value = String(idx);
+  setAttr(el.dateSlider, 'aria-valuetext', spoken);
+
+  // Track geometry: --obs / --fc are plain numbers; the NOW line sits at
+  // obs/(obs+fc) of the width, i.e. midway between the last observed and the
+  // first forecast thumb stop when obs = observed − 0.5 and fc = forecast − 0.5.
+  const obs = hasForecast ? observedCount - 0.5 : Math.max(1, observedCount);
+  const fc = hasForecast ? forecastCount - 0.5 : 0;
+  el.track.style.setProperty('--obs', String(obs));
+  el.track.style.setProperty('--fc', String(fc));
+  const lastObs = lastObservedIndex(timeline);
+  const segObs = el.segObserved.querySelector('.meta');
+  const segNow = el.nowTick.querySelector('.meta');
+  const segFc = el.segForecast.querySelector('.meta');
+  setText(segObs, observedCount ? `${t.observedLabel} (01–${pad2(observedCount)})` : t.observedLabel);
+  setText(segNow, lastObs >= 0 ? `NOW (${formatDate(timeline[lastObs].date)})` : 'NOW');
+  setText(segFc, hasForecast ? `FORECAST HORIZON (${pad2(observedCount + 1)}–${pad2(len)})` : 'FORECAST HORIZON');
+
+  renderTicks({ timeline, idx }, t.passWord);
+
+  // Lock 3 wording on the date readout.
+  setText(el.timelineDate, step ? (isForecast ? `FORECAST · ${stepDate}` : stepDate) : '—');
+
+  setAttr(el.play, 'aria-label', state.playing ? 'Pause' : 'Play');
+  setHidden(playIcon, state.playing);
+  setHidden(pauseIcon, !state.playing);
+  if (el.play.disabled !== (len < 2)) el.play.disabled = len < 2;
+}
+
+function renderDemo() {
   const view = deriveView(state);
   const { hazard, step, idx, isForecast, hasForecast, observedCount, forecastCount, len } = view;
   const stepDate = step ? formatDate(step.date) : '—';
+
+  // Coming back from the live channel: hide its layers, re-show the demo.
+  if (map && mapReady && liveLayersReady) applyLiveMap(map, { active: false });
+  demoHidden = false;
 
   // 1. Root attributes (the only JS → CSS channel). Lock 3 colour/shape
   //    changes hang off data-mode="forecast".
@@ -550,46 +816,27 @@ function render() {
   setText(el.pointStatus, view.pointStatus);
   setAttr(el.evidence, 'aria-busy', view.rasterStatus === 'loading' ? 'true' : 'false');
 
-  // Errors: explicit, never a substitute.
-  const mapText = [state.errors.map, state.errors.backend].filter(Boolean).join(' ');
-  setText(el.mapError, mapText);
-  setHidden(el.mapError, !mapText);
+  // Errors: explicit, never a substitute (map + backend are joined in renderCommon).
   const assetText = state.errors.asset || view.changeError;
   setText(el.assetError, assetText);
   setHidden(el.assetError, !assetText);
 
   // 5. Timeline.
-  const sliderMax = Math.max(0, len - 1);
-  setAttr(el.dateSlider, 'max', sliderMax);
-  if (el.dateSlider.disabled !== (len < 2)) el.dateSlider.disabled = len < 2;
-  if (idx !== null && Number(el.dateSlider.value) !== idx) el.dateSlider.value = String(idx);
   const spoken = step ? (isForecast ? `Forecast, ${formatSpoken(step.date)}` : `Observed sample pass, ${formatSpoken(step.date)}`) : COPY.noTimeline;
-  setAttr(el.dateSlider, 'aria-valuetext', spoken);
-
-  // Track geometry: --obs / --fc are plain numbers; the NOW line sits at
-  // obs/(obs+fc) of the width, i.e. midway between the last observed and the
-  // first forecast thumb stop when obs = observed − 0.5 and fc = forecast − 0.5.
-  const obs = hasForecast ? observedCount - 0.5 : Math.max(1, observedCount);
-  const fc = hasForecast ? forecastCount - 0.5 : 0;
-  el.track.style.setProperty('--obs', String(obs));
-  el.track.style.setProperty('--fc', String(fc));
-  const lastObs = lastObservedIndex(view.timeline);
-  const segObs = el.segObserved.querySelector('.meta');
-  const segNow = el.nowTick.querySelector('.meta');
-  const segFc = el.segForecast.querySelector('.meta');
-  setText(segObs, observedCount ? `OBSERVED PASSES (01–${pad2(observedCount)})` : 'OBSERVED PASSES');
-  setText(segNow, lastObs >= 0 ? `NOW (${formatDate(view.timeline[lastObs].date)})` : 'NOW');
-  setText(segFc, hasForecast ? `FORECAST HORIZON (${pad2(observedCount + 1)}–${pad2(len)})` : 'FORECAST HORIZON');
-
-  renderTicks(view);
-
-  // Lock 3 wording on the date readout.
-  setText(el.timelineDate, step ? (isForecast ? `FORECAST · ${stepDate}` : stepDate) : '—');
-
-  setAttr(el.play, 'aria-label', state.playing ? 'Pause' : 'Play');
-  setHidden(playIcon, state.playing);
-  setHidden(pauseIcon, !state.playing);
-  if (el.play.disabled !== (len < 2)) el.play.disabled = len < 2;
+  renderTimeline({
+    timeline: view.timeline,
+    idx,
+    step,
+    isForecast,
+    hasForecast,
+    observedCount,
+    forecastCount,
+    len,
+    stepDate,
+    spoken,
+    observedLabel: 'OBSERVED PASSES',
+    passWord: 'Observed sample pass',
+  });
 
   // 6. Map.
   if (map && mapReady) {
@@ -613,6 +860,806 @@ function render() {
     lastAnnounced = announceKey;
     setText(el.announcer, spoken);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* LIVE channel: view, render, loaders                                  */
+/* ------------------------------------------------------------------ */
+
+let stampSeq = 0;
+/** A load-status object with a unique stamp (live.js keys its re-render on it). */
+const st = (status, extra = {}) => ({ status, stamp: ++stampSeq, ...extra });
+const IDLE = () => st('idle');
+
+let lastEventOptionsSig = '';
+let lastLayerOptionsSig = '';
+
+const sceneKey = (s) => (s && (s.browseUrl || s.id)) || '';
+
+/** The live detail being shown: a catalog event, or a replay shaped like one. */
+function liveDetailData() {
+  const L = state.live;
+  if (L.replay) {
+    return {
+      event: { id: L.replay.id, name: L.replay.name, bbox: L.replay.bbox, type: L.replay.eventTime ? 'earthquake' : 'other' },
+      scenes: L.replay.scenes,
+      layers: [],
+      dates: [],
+    };
+  }
+  return L.detail.status === 'done' ? L.detail.data : null;
+}
+
+/** Everything renderLive() and the live map need, derived from state + cache. */
+function liveView() {
+  const L = state.live;
+  const data = liveDetailData();
+  const tl = liveTimeline(data, L.layer);
+  const len = tl.steps.length;
+  const idx = len && L.idx !== null && L.idx !== undefined ? Math.min(len - 1, Math.max(0, L.idx)) : null;
+  const step = idx === null ? null : tl.steps[idx];
+  const event = data ? data.event : null;
+  let loading = 0;
+  let imageErrors = 0;
+  for (const s of tl.steps.flatMap((x) => x.scenes)) {
+    const b = cache.browse.get(sceneKey(s));
+    if (b && b.status === 'loading') loading++;
+  }
+  if (step && tl.mode === 'preview') {
+    for (const s of step.scenes) {
+      const b = cache.browse.get(sceneKey(s));
+      if (b && b.status === 'error') imageErrors++;
+    }
+  }
+  return { data, tl, len, idx, step, event, loading, imageErrors };
+}
+
+function liveMapView(v) {
+  const L = state.live;
+  const current = new Set(v.step && v.tl.mode === 'preview' ? v.step.scenes.map(sceneKey) : []);
+  const images = [];
+  for (const s of v.tl.steps.flatMap((x) => x.scenes)) {
+    const key = sceneKey(s);
+    const b = cache.browse.get(key);
+    if (b && b.status === 'ready') images.push({ key, url: b.url, coordinates: b.coordinates, visible: current.has(key) });
+  }
+  const tile = v.tl.mode === 'tiles' && v.step ? v.step.tile : null;
+  return {
+    active: true,
+    aoi: v.event && Array.isArray(v.event.bbox) ? v.event.bbox : null,
+    probe: L.area ? L.area.bbox : null,
+    outlookOn: L.outlookOn,
+    cells: L.outlook.status === 'done' ? L.outlook.data.cells : [],
+    selectedCell: L.cell,
+    images,
+    tiles: tile ? { url: tile.tiles, minZoom: tile.minZoom, maxZoom: tile.maxZoom, bounds: tile.bounds } : null,
+    opacity: state.observedOpacity / 100,
+  };
+}
+
+function renderEventOptions() {
+  const L = state.live;
+  const list = L.events.list;
+  const sig = `${L.events.status}|${list.map((e) => `${e.id}:${e.name}`).join(',')}|${L.replay ? L.replay.id : ''}`;
+  if (sig !== lastEventOptionsSig) {
+    const frag = document.createDocumentFragment();
+    if (L.replay) frag.appendChild(h('option', { value: L.replay.id }, `Replay: ${L.replay.name}`));
+    if (!list.length) {
+      frag.appendChild(h('option', { value: '' }, L.events.status === 'loading' ? 'Loading events…' : 'No tracked events yet'));
+    } else {
+      if (!L.eventId && !L.replay) frag.appendChild(h('option', { value: '' }, 'Choose an event…'));
+      for (const e of list) frag.appendChild(h('option', { value: e.id }, e.name));
+    }
+    el.liveEvent.replaceChildren(frag);
+    lastEventOptionsSig = sig;
+  }
+  const want = L.replay ? L.replay.id : L.eventId || '';
+  if (el.liveEvent.value !== want) el.liveEvent.value = want;
+  const disabled = !list.length && !L.replay;
+  if (el.liveEvent.disabled !== disabled) el.liveEvent.disabled = disabled;
+}
+
+function renderLayerOptions(tl) {
+  const L = state.live;
+  const show = tl.layers.length > 0;
+  setHidden(el.liveLayerWrap, !show);
+  if (!show) return;
+  const sig = tl.layers.join(',');
+  if (sig !== lastLayerOptionsSig) {
+    const frag = document.createDocumentFragment();
+    frag.appendChild(h('option', { value: 'preview' }, 'ASF preview images'));
+    for (const id of tl.layers) frag.appendChild(h('option', { value: id }, `${layerLabel(id)} (processed)`));
+    el.liveLayer.replaceChildren(frag);
+    lastLayerOptionsSig = sig;
+  }
+  if (el.liveLayer.value !== L.layer) el.liveLayer.value = L.layer;
+}
+
+function roomText() {
+  const r = state.live.room;
+  if (r.status === 'connecting') return `CONNECTING TO ROOM ${r.code}…`;
+  if (r.status === 'open') {
+    const shared = state.live.replay ? 'SEARCH REPLAYS ARE NOT SHARED' : 'EVENT, PASS AND PLAY ARE SHARED';
+    return `IN ROOM ${r.code} · ${r.count || 1} VIEWER${r.count === 1 ? '' : 'S'} · ${shared}${r.message ? ` · ${r.message.toUpperCase()}` : ''}`;
+  }
+  if (r.status === 'error') return r.message || 'THE ROOM CONNECTION FAILED';
+  if (r.status === 'closed') return `DISCONNECTED FROM ROOM ${r.code}`;
+  return 'NOT IN A ROOM · PLAYBACK STAYS LOCAL';
+}
+
+function renderLive() {
+  const L = state.live;
+  const v = liveView();
+  const { tl, step, idx, len, event } = v;
+  const stepDate = step ? formatDate(step.date) : '—';
+  const signedIn = state.api.auth === 'signed-in';
+  const hasEvent = !L.replay && L.detail.status === 'done';
+
+  // 1. Root attributes. The live timeline has no forecast half.
+  setAttr(el.html, 'data-mode', 'observed');
+  setAttr(el.html, 'data-forecasts', 'none');
+  setAttr(el.html, 'data-route', state.route);
+  if (!el.hzLive.checked) el.hzLive.checked = true;
+
+  // 2. Top bar.
+  if (event && Array.isArray(event.bbox)) {
+    const bb = event.bbox;
+    setText(el.targetName, `TARGET: ${String(event.name).toUpperCase()}`);
+    setText(el.targetCoords, formatCoords((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2));
+    setText(el.targetFootprint, `AREA: ${footprintKm(boundsOf(bb)).label}`);
+  } else {
+    setText(el.targetName, event ? `TARGET: ${String(event.name).toUpperCase()}` : 'TARGET: NO EVENT SELECTED');
+    setText(el.targetCoords, '—');
+    setText(el.targetFootprint, 'AREA: —');
+  }
+  // Simulated illustration: FABRICATED frames from the demo models, keyed to
+  // the real pass dates. Only ever shown with the badge + strip below.
+  const sim = L.sim && step ? simHazardFor(event, tl.steps, L.simModel) : null;
+  setHidden(el.liveSimModelWrap, !L.sim);
+  if (el.liveSimModel.value !== L.simModel) el.liveSimModel.value = L.simModel;
+  let simUrl = null;
+  if (sim) {
+    try {
+      simUrl = simFrame(sim, idx).url;
+    } catch (err) {
+      state.errors.asset = `Simulated illustration unavailable (${err && err.message ? err.message : 'render error'}).`;
+    }
+  }
+  const simOn = Boolean(sim && simUrl);
+  setAttr(el.html, 'data-sim', simOn ? 'on' : 'off');
+  setHidden(el.simBadge, !simOn);
+  setHidden(el.provenanceSim, !simOn);
+  if (simOn) setText(el.simBadge.lastChild, ` · NOT MEASURED · ${sim.model.label}`);
+  setAttr(el.liveSim, 'aria-pressed', L.sim ? 'true' : 'false');
+  const simDisabled = !len;
+  if (el.liveSim.disabled !== simDisabled) el.liveSim.disabled = simDisabled;
+
+  setText(pillMain, step ? '● NISAR PASS' : '● LIVE CATALOG');
+  setText(
+    pillSuffix,
+    step ? (simOn ? ' // SIMULATED ILLUSTRATION' : tl.mode === 'tiles' ? ' // PROCESSED TILES' : ' // ASF PREVIEW') : ' // NO PASS SELECTED',
+  );
+
+  // 3. Controls.
+  setText(el.passDate, stepDate);
+  if (step) setText(el.passIndex, `PASS ${pad2(idx + 1)} / ${pad2(len)}`);
+  else setText(el.passIndex, L.detail.status === 'loading' ? 'LOADING' : event ? 'NO PREVIEWABLE PASSES' : 'NO EVENT');
+  setHidden(el.noPassAlert, true);
+  if (el.opacity.disabled) el.opacity.disabled = false;
+  if (Number(el.opacity.value) !== state.observedOpacity) el.opacity.value = String(state.observedOpacity);
+  setAttr(el.opacity, 'aria-valuetext', `${state.observedOpacity} percent`);
+  setText(el.opacityReadout, `${state.observedOpacity}%`);
+  setHidden(el.opacityLock, true);
+
+  renderEventOptions();
+  const n = L.events.list.length;
+  setText(
+    el.liveEventsNote,
+    L.events.status === 'loading' ? 'LOADING THE CATALOG' : L.events.status === 'error' ? L.events.message : `${n} TRACKED EVENT${n === 1 ? '' : 'S'}`,
+  );
+  renderLayerOptions(tl);
+  setAttr(el.liveOutlook, 'aria-pressed', L.outlookOn ? 'true' : 'false');
+  const canFit = Boolean(event && Array.isArray(event.bbox));
+  if (el.liveFit.disabled !== !canFit) el.liveFit.disabled = !canFit;
+  setText(
+    el.livePassNote,
+    v.loading ? `LOADING ${v.loading} PREVIEW IMAGE${v.loading === 1 ? '' : 'S'} FROM ASF…` : 'Click anywhere on the map to explore that area.',
+  );
+
+  // Room.
+  const inRoom = L.room.status === 'open' || L.room.status === 'connecting';
+  setHidden(el.roomJoin, inRoom);
+  setHidden(el.roomLeave, !inRoom);
+  if (el.roomCode.disabled !== inRoom) el.roomCode.disabled = inRoom;
+  setText(el.roomStatus, roomText());
+  setAttr(el.roomStatus, 'data-state', L.room.status);
+
+  setHidden(el.legendOutlook, !L.outlookOn);
+
+  // 4. Evidence: one of three views.
+  setHidden(el.liveViewEvent, L.panel !== 'event');
+  setHidden(el.liveViewArea, L.panel !== 'area');
+  setHidden(el.liveViewOutlook, L.panel !== 'outlook');
+
+  renderEventHead(el.liveEventHead, { detail: L.detail, replay: L.replay, step, stepCount: len, mode: tl.mode, layer: L.layer, imageErrors: v.imageErrors });
+  for (const id of ['live-projection', 'live-briefing', 'live-ask', 'live-context', 'live-media']) setHidden($(id), !hasEvent);
+  setHidden($('live-scenes'), !(hasEvent || L.replay));
+  renderProjection(el.liveProjectionBody, L.predict);
+  setHidden(el.livePredict, L.predict.status === 'loading' || L.predict.status === 'done');
+  setText(el.livePredict, L.predict.status === 'error' ? 'Try again' : 'Project this event forward');
+  renderBriefing(el.liveBriefingBody, L.brief);
+  setHidden(el.liveBrief, L.brief.status === 'loading' || L.brief.status === 'done');
+  setText(el.liveBrief, L.brief.status === 'error' ? 'Try again' : 'Write a briefing');
+  renderAskLog(el.liveAskLog, L.ask);
+  const askOff = !signedIn || L.ask.busy;
+  if (el.liveAskInput.disabled !== askOff) el.liveAskInput.disabled = askOff;
+  if (el.liveAskSubmit.disabled !== askOff) el.liveAskSubmit.disabled = askOff;
+  setText(el.liveAskSubmit, L.ask.busy ? 'Asking…' : 'Ask');
+  setText(
+    el.liveAskNote,
+    signedIn
+      ? L.ask.chatId
+        ? 'SAVED TO YOUR ACCOUNT · ANSWERS ARE AI HYPOTHESES'
+        : 'YOUR QUESTIONS ARE SAVED TO YOUR ACCOUNT · ANSWERS ARE AI HYPOTHESES'
+      : state.api.auth === 'unavailable'
+        ? 'SIGN-IN IS UNAVAILABLE, SO QUESTIONS ARE OFF'
+        : 'SIGN IN (TOP RIGHT) TO ASK QUESTIONS AND KEEP THE CONVERSATION',
+  );
+  renderContext(el.liveContextBody, L.context);
+  renderMedia(el.liveMediaBody, L.media);
+  renderScenes(el.liveScenesBody, L.detail, L.replay);
+
+  // Area explorer.
+  setText(el.liveAreaCoords, L.area ? `${formatLngLat(L.area.lng, L.area.lat)} · ABOUT 1° ACROSS` : '—');
+  const today = isoDay(Date.now());
+  for (const [input, value] of [[el.liveRangeStart, L.range.start], [el.liveRangeEnd, L.range.end]]) {
+    setAttr(input, 'min', NISAR_LAUNCH);
+    setAttr(input, 'max', today);
+    if (input.value !== value) input.value = value;
+  }
+  renderArea(el.liveAreaBody, { area: L.area, results: L.results, events: L.events.list, busy: L.busy, notice: L.notice, actionError: L.actionError, signedIn });
+
+  // Outlook.
+  el.liveHorizon.querySelectorAll('button[data-horizon]').forEach((b) => setAttr(b, 'aria-pressed', Number(b.dataset.horizon) === L.horizon ? 'true' : 'false'));
+  renderOutlook(el.liveOutlookBody, L.outlook, L.cell);
+
+  setText(el.assetError, state.errors.asset);
+  setHidden(el.assetError, !state.errors.asset);
+
+  // 5. Timeline: NISAR passes only.
+  const spoken = step ? `NISAR pass, ${formatSpoken(step.date)}` : 'No NISAR passes to show.';
+  renderTimeline({
+    timeline: tl.steps,
+    idx,
+    step,
+    isForecast: false,
+    hasForecast: false,
+    observedCount: len,
+    forecastCount: 0,
+    len,
+    stepDate,
+    spoken,
+    observedLabel: 'NISAR PASSES',
+    passWord: 'NISAR pass',
+  });
+
+  // 6. Map.
+  if (map && mapReady) {
+    if (simOn) {
+      // The demo layers draw the simulated frame + extents on the event box.
+      applyMapState(map, {
+        hazard: sim,
+        idx,
+        stepKind: 'observed',
+        isForecast: false,
+        rasterUrl: simUrl,
+        rasterVisible: true,
+        rasterOpacity: state.observedOpacity / 100,
+        showChange: false,
+        changeUrl: null,
+        riskGeojson: sim.riskExtents(idx),
+        riskKey: `${sim.id}|${idx}`,
+        showRisk: true,
+        compound: false,
+        point: null,
+        showReticle: false,
+      });
+      demoHidden = false;
+    } else if (!demoHidden) {
+      hideDemoLayers(map);
+      demoHidden = true;
+    }
+    if (liveLayersReady) {
+      try {
+        const lv = liveMapView(v);
+        // While simulating, the real previews/tiles step aside (not mixed).
+        if (simOn) {
+          lv.images = lv.images.map((img) => ({ ...img, visible: false }));
+          lv.tiles = null;
+          lv.aoi = null;
+        }
+        applyLiveMap(map, lv);
+      } catch (err) {
+        state.errors.map = `Live map layers failed (${err && err.message ? err.message : 'render error'}).`;
+      }
+    }
+  }
+
+  // 7. Announce on pass or event change.
+  const announceKey = step ? `live|${event ? event.id : ''}|${idx}` : '';
+  if (announceKey && announceKey !== lastAnnounced) {
+    lastAnnounced = announceKey;
+    setText(el.announcer, spoken);
+  }
+}
+
+/** Load (once) every ASF preview a timeline needs; each finish re-renders. */
+function ensureBrowseImages(tl) {
+  for (const s of tl.steps.flatMap((x) => x.scenes)) {
+    const key = sceneKey(s);
+    if (!key || cache.browse.has(key)) continue;
+    cache.browse.set(key, { status: 'loading' });
+    loadBrowseImage(s.browseUrl, s.bounds)
+      .then((r) => cache.browse.set(key, { status: 'ready', url: r.url, coordinates: r.coordinates }))
+      .catch((err) => cache.browse.set(key, { status: 'error', message: err && err.message ? err.message : 'load failed' }))
+      .finally(() => {
+        if (state.source === 'live') render();
+      });
+  }
+}
+
+function fitLive(animate = true) {
+  if (!map) return;
+  const v = liveView();
+  // The simulated illustration is drawn on the event box only, so frame that
+  // (as the demo channels frame their study area); otherwise frame the scenes too.
+  const simulating = state.live.sim && v.event && Array.isArray(v.event.bbox);
+  const scenes = !simulating && v.tl.mode === 'preview' ? v.tl.steps.flatMap((x) => x.scenes) : [];
+  const box = simulating ? v.event.bbox : unionBounds(v.event, scenes);
+  if (box) fitBox(map, box, paddingFor(map, isMobile()), animate);
+}
+
+function markSignedOut() {
+  state.api = { ...state.api, auth: 'signed-out', user: null };
+}
+
+async function loadLiveEvents(selectId, stub = null) {
+  const L = state.live;
+  L.events = { ...L.events, status: 'loading', message: '' };
+  render();
+  try {
+    const d = await api.events();
+    let list = Array.isArray(d.events) ? d.events : [];
+    // The catalog list is cached for ~60 s, so a just-tracked event may be
+    // missing: list it from what we know until the cache catches up.
+    if (stub && !list.some((e) => e.id === stub.id)) list = [stub, ...list];
+    L.events = { status: 'done', list, message: '' };
+    state.api = { ...state.api, eventCount: list.length };
+    const want = selectId || L.eventId || (list[0] && list[0].id);
+    if (want && !L.replay && (want !== L.eventId || L.detail.status !== 'done')) {
+      selectLiveEvent(want, { fromRoom: false });
+      return;
+    }
+  } catch (err) {
+    L.events = { status: 'error', list: [], message: err && err.message ? err.message : 'Could not load events' };
+  }
+  render();
+}
+
+async function selectLiveEvent(id, { fromRoom = false } = {}) {
+  const L = state.live;
+  stopPlaying();
+  const seq = ++liveSeq;
+  L.replay = null;
+  L.eventId = id;
+  L.detail = st('loading', { id });
+  L.idx = null;
+  L.layer = 'preview';
+  L.panel = 'event';
+  L.predict = IDLE();
+  L.brief = IDLE();
+  L.context = IDLE();
+  L.media = IDLE();
+  L.ask = { turns: [], busy: false, error: '', chatId: null, history: '' };
+  state.errors.asset = '';
+  if (!fromRoom && room.open) room.send({ type: 'load', eventId: id });
+  render();
+  try {
+    const data = await api.event(id);
+    if (seq !== liveSeq) return;
+    L.detail = st('done', { data });
+    const tl = liveTimeline(data, L.layer);
+    const pending = L.pendingFrame;
+    L.idx = tl.steps.length ? (Number.isInteger(pending) ? Math.min(tl.steps.length - 1, Math.max(0, pending)) : tl.steps.length - 1) : null;
+    L.pendingFrame = null;
+    ensureBrowseImages(tl);
+    if (state.source === 'live') fitLive();
+    loadInto('context', () => api.context(id), seq);
+    loadInto('media', () => api.media(id), seq);
+    if (state.api.auth === 'signed-in') loadChatHistory(id, seq);
+    if (L.pendingPlay) {
+      L.pendingPlay = false;
+      render();
+      startPlaying();
+      return;
+    }
+  } catch (err) {
+    if (seq !== liveSeq) return;
+    L.detail = st('error', { message: err && err.message ? err.message : 'Could not load the event' });
+  }
+  render();
+}
+
+/** Fetch into state.live[key] as a stamped status object, for the current event only. */
+async function loadInto(key, fetcher, seq = liveSeq) {
+  state.live[key] = st('loading');
+  render();
+  try {
+    const data = await fetcher();
+    if (seq !== liveSeq) return;
+    state.live[key] = st('done', { data });
+  } catch (err) {
+    if (seq !== liveSeq) return;
+    if (err && err.status === 401) markSignedOut();
+    state.live[key] = st('error', { message: err && err.message ? err.message : 'Request failed' });
+  }
+  render();
+}
+
+async function loadChatHistory(eventId, seq) {
+  const L = state.live;
+  L.ask = { ...L.ask, history: 'loading' };
+  render();
+  try {
+    const { chats } = await api.chats();
+    if (seq !== liveSeq) return;
+    const chat = (chats || []).find((c) => c.eventId === eventId);
+    if (!chat) {
+      L.ask = { ...L.ask, history: 'done' };
+      render();
+      return;
+    }
+    const { messages } = await api.chatMessages(chat.id);
+    if (seq !== liveSeq) return;
+    const turns = [];
+    for (const m of messages || []) {
+      if (m.role === 'user') turns.push({ question: m.content, answer: '' });
+      else if (m.role === 'assistant' && turns.length && !turns[turns.length - 1].answer) turns[turns.length - 1].answer = m.content;
+    }
+    L.ask = { ...L.ask, chatId: chat.id, turns: turns.filter((t) => t.answer), history: 'done' };
+  } catch (err) {
+    if (seq !== liveSeq) return;
+    if (err && err.status === 401) markSignedOut();
+    L.ask = { ...L.ask, history: '' };
+  }
+  render();
+}
+
+async function askQuestion(text) {
+  const L = state.live;
+  const id = L.eventId;
+  const q = String(text || '').trim();
+  if (!id || L.replay || L.ask.busy) return;
+  if (q.length < 3) {
+    L.ask = { ...L.ask, error: 'Questions need at least 3 characters.' };
+    render();
+    return;
+  }
+  if (state.api.auth !== 'signed-in') {
+    L.ask = { ...L.ask, error: 'Sign in to ask a question.' };
+    render();
+    return;
+  }
+  const seq = liveSeq;
+  const before = L.ask.turns;
+  L.ask = { ...L.ask, busy: true, error: '', turns: [...before, { question: q, answer: '' }] };
+  render();
+  try {
+    let chatId = L.ask.chatId;
+    if (!chatId) {
+      try {
+        const name = (L.detail.status === 'done' && L.detail.data.event.name) || id;
+        const c = await api.createChat(id, String(name).slice(0, 120));
+        chatId = c && c.chat ? c.chat.id : null;
+      } catch (err) {
+        if (err && err.status === 401) throw err;
+        chatId = null; // saving failed; the question is still answered
+      }
+    }
+    const d = await api.ask(id, q, chatId || undefined);
+    if (seq !== liveSeq) return;
+    L.ask = { ...L.ask, busy: false, chatId: d.chatId || chatId, turns: [...before, { question: q, answer: d.answer, disclaimer: d.disclaimer }] };
+    if (el.liveAskInput.value.trim() === q) el.liveAskInput.value = '';
+  } catch (err) {
+    if (seq !== liveSeq) return;
+    if (err && err.status === 401) markSignedOut();
+    L.ask = { ...L.ask, busy: false, turns: before, error: err && err.status === 401 ? COPY.sessionEnded : err && err.message ? err.message : 'The question failed.' };
+  }
+  render();
+}
+
+/* Area explorer */
+
+function exploreAt(lng, lat) {
+  const L = state.live;
+  const w = wrapLng(lng);
+  L.area = { id: ++stampSeq, lng: w, lat, bbox: areaAround(w, lat) };
+  L.panel = 'area';
+  L.notice = '';
+  L.actionError = '';
+  L.busy = '';
+  runAreaQueries();
+}
+
+function runAreaQueries() {
+  const L = state.live;
+  const area = L.area;
+  if (!area) return;
+  const { start, end } = L.range;
+  const period = `${area.id}|${start}..${end}`;
+  L.results = { nisar: st('loading', { period }), quakes: st('loading', { period }), context: st('loading', { period }) };
+  const track = (key, promise) =>
+    promise
+      .then((data) => st('done', { data, period }))
+      .catch((err) => st('error', { message: err && err.message ? err.message : 'Request failed', period }))
+      .then((r) => {
+        if (state.live.results[key].period !== period) return;
+        state.live.results = { ...state.live.results, [key]: r };
+        render();
+      });
+  track('nisar', api.nisarSearch(area.bbox, start, end));
+  track('quakes', api.quakes(area.bbox, start, end));
+  track('context', api.datasetContext(area.bbox, start, end));
+  render();
+}
+
+async function liveAction(action, id) {
+  const L = state.live;
+  const fail = (err) => {
+    if (err && err.status === 401) {
+      markSignedOut();
+      L.actionError = 'Your session has ended. Sign in again to track places.';
+    } else {
+      L.actionError = err && err.message ? err.message : 'That did not work.';
+    }
+  };
+  const withPreview = (scenes) => (scenes || []).filter((s) => s.browseUrl && Array.isArray(s.bounds));
+  L.actionError = '';
+  L.notice = '';
+
+  if (action === 'open-event' && id) {
+    selectLiveEvent(id);
+    return;
+  }
+  if (action === 'track-area' && L.area) {
+    L.busy = 'area';
+    render();
+    try {
+      const name = `Area near ${formatLngLat(L.area.lng, L.area.lat)}`;
+      const out = await api.trackArea({ aoi: L.area.bbox, dateRange: { ...L.range }, name, type: 'other' });
+      L.busy = '';
+      await loadLiveEvents(out.eventId, { id: out.eventId, name, type: 'other', bbox: L.area.bbox, sceneCount: 0 });
+      watchNewEvent(out.eventId);
+      return;
+    } catch (err) {
+      fail(err);
+    }
+    L.busy = '';
+  } else if (action === 'track-quake' && id) {
+    L.busy = id;
+    render();
+    try {
+      const out = await api.trackQuake(id);
+      L.busy = '';
+      const q = L.results.quakes.status === 'done' ? L.results.quakes.data.earthquakes.find((x) => x.sourceId === id) : null;
+      const aoi = q && q.suggested && Array.isArray(q.suggested.aoi) ? q.suggested.aoi : null;
+      await loadLiveEvents(out.eventId, { id: out.eventId, name: q ? q.title : out.eventId, type: 'earthquake', bbox: aoi, sceneCount: 0 });
+      watchNewEvent(out.eventId);
+      return;
+    } catch (err) {
+      fail(err);
+    }
+    L.busy = '';
+  } else if (action === 'replay-area' && L.area && L.results.nisar.status === 'done') {
+    const scenes = withPreview(L.results.nisar.data.scenes);
+    if (!scenes.length) L.notice = 'None of these scenes has a preview image to replay.';
+    else startReplay({ id: `replay-area-${L.area.id}`, name: `Area near ${formatLngLat(L.area.lng, L.area.lat)}`, bbox: L.area.bbox, scenes });
+  } else if (action === 'replay-quake' && id && L.results.quakes.status === 'done') {
+    const q = L.results.quakes.data.earthquakes.find((x) => x.sourceId === id);
+    if (q && q.suggested) {
+      L.busy = `replay-${id}`;
+      render();
+      try {
+        const { aoi, dateRange } = q.suggested;
+        const found = await api.nisarSearch(aoi, dateRange.start, dateRange.end);
+        const scenes = withPreview(found.scenes);
+        L.busy = '';
+        if (!scenes.length) L.notice = `NISAR has no previewable scenes for M ${q.magnitude.toFixed(1)} yet.`;
+        else {
+          startReplay({ id: `replay-${id}`, name: q.title, bbox: aoi, scenes, eventTime: q.time });
+          return;
+        }
+      } catch (err) {
+        L.busy = '';
+        fail(err);
+      }
+    }
+  }
+  render();
+}
+
+/**
+ * A just-tracked event has no scenes until the backend's ingest finds them.
+ * Re-check its detail every 10 s for ~2 minutes and fill the scenes in place
+ * (without resetting the panel) as soon as they appear.
+ */
+async function watchNewEvent(id) {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await new Promise((r) => setTimeout(r, 10000));
+    const L = state.live;
+    if (L.eventId !== id || L.replay) return;
+    if (L.detail.status === 'done' && L.detail.data.scenes.length > 0) return;
+    let data;
+    try {
+      data = await api.event(id);
+    } catch {
+      continue;
+    }
+    if (state.live.eventId !== id || !data.scenes.length) continue;
+    L.detail = st('done', { data });
+    const tl = liveTimeline(data, L.layer);
+    L.idx = tl.steps.length ? tl.steps.length - 1 : null;
+    ensureBrowseImages(tl);
+    if (state.source === 'live') fitLive();
+    render();
+    return;
+  }
+}
+
+function startReplay(next) {
+  const L = state.live;
+  stopPlaying();
+  ++liveSeq;
+  L.replay = next;
+  L.eventId = '';
+  L.detail = IDLE();
+  L.idx = 0;
+  L.layer = 'preview';
+  L.panel = 'event';
+  state.errors.asset = '';
+  const tl = liveTimeline(liveDetailData(), 'preview');
+  ensureBrowseImages(tl);
+  fitLive();
+  render();
+  if (tl.steps.length > 1) startPlaying();
+  render();
+}
+
+/* Outlook (modelled) */
+
+function currentViewBox() {
+  if (!map) return [122.9, 24.0, 146.0, 45.7];
+  const b = map.getBounds();
+  return outlookBoxFrom({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+}
+
+async function loadOutlook() {
+  const L = state.live;
+  const box = L.outlookBox || currentViewBox();
+  L.outlookBox = box;
+  const key = `${box.join(',')}|${L.horizon}`;
+  L.outlook = st('loading', { key });
+  render();
+  try {
+    const data = await api.outlook(box, L.horizon);
+    if (L.outlook.key !== key) return;
+    L.outlook = st('done', { data, key });
+    if (L.cell && !data.cells.some((c) => c.id === L.cell)) L.cell = null;
+  } catch (err) {
+    if (L.outlook.key !== key) return;
+    L.outlook = st('error', { key, message: err && err.message ? err.message : 'Outlook failed' });
+  }
+  render();
+}
+
+function toggleOutlook(on = !state.live.outlookOn) {
+  const L = state.live;
+  L.outlookOn = on;
+  if (on) {
+    L.outlookBox = currentViewBox();
+    L.panel = 'outlook';
+    loadOutlook();
+    return;
+  }
+  L.cell = null;
+  if (L.panel === 'outlook') L.panel = L.area ? 'area' : 'event';
+  render();
+}
+
+function selectCell(cellId) {
+  const L = state.live;
+  L.cell = cellId;
+  L.panel = 'outlook';
+  const cell = L.outlook.status === 'done' ? L.outlook.data.cells.find((c) => c.id === cellId) : null;
+  if (cell && map) fitBox(map, cell.bbox, paddingFor(map, isMobile()), true);
+  render();
+}
+
+/* Replay room */
+
+function applyRoomState(rs) {
+  const L = state.live;
+  if (state.source !== 'live' || !rs) return;
+  // Remote state is applied without sending anything back: only explicit
+  // user actions (seek, play, pause, choosing an event) are sent to the room.
+  {
+    if (!rs.eventId) {
+      // An empty room adopts this viewer's event and pass.
+      if (L.eventId && !L.replay) {
+        room.send({ type: 'load', eventId: L.eventId });
+        if (L.idx !== null) room.send({ type: 'seek', frame: L.idx });
+      }
+      return;
+    }
+    if (rs.eventId !== L.eventId || L.replay) {
+      L.pendingFrame = Number.isInteger(rs.frame) ? rs.frame : null;
+      L.pendingPlay = Boolean(rs.playing);
+      selectLiveEvent(rs.eventId, { fromRoom: true });
+      return;
+    }
+    const v = liveView();
+    if (v.len && Number.isInteger(rs.frame)) L.idx = Math.min(v.len - 1, Math.max(0, rs.frame));
+    if (rs.playing && !state.playing) startPlaying();
+    else if (!rs.playing && state.playing) stopPlaying();
+    render();
+  }
+}
+
+function leaveRoom() {
+  room.close();
+  state.live.room = { status: 'idle', code: '', count: 0, message: '' };
+}
+
+/* Channel switching */
+
+function saveSource(source) {
+  try {
+    window.localStorage.setItem('spaceapp.source', source);
+  } catch {
+    /* per-viewer convenience only */
+  }
+}
+
+function savedSource() {
+  try {
+    return window.localStorage.getItem('spaceapp.source');
+  } catch {
+    return null;
+  }
+}
+
+function enterLive() {
+  if (state.source === 'live') return;
+  stopPlaying();
+  state.source = 'live';
+  saveSource('live');
+  render();
+  const status = state.live.events.status;
+  if (status === 'idle' || status === 'error') loadLiveEvents();
+  else fitLive();
+}
+
+function enterDemo(hazardId) {
+  stopPlaying();
+  leaveRoom();
+  state.source = 'demo';
+  saveSource('demo');
+  if (getHazard(hazardId) && hazardId !== state.hazard) {
+    switchHazard(hazardId);
+    return;
+  }
+  render();
+  if (map) refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), true);
 }
 
 /* ------------------------------------------------------------------ */
@@ -678,13 +1725,18 @@ function stopPlaying() {
   state.playing = false;
 }
 
+/** Length of the timeline the active channel shows. */
+function activeLength() {
+  return state.source === 'live' ? liveView().len : timelineFor(state.hazard).length;
+}
+
 function startPlaying() {
   stopPlaying();
-  const len = timelineFor(state.hazard).length;
+  const len = activeLength();
   if (len < 2) return;
   state.playing = true;
   playTimer = setInterval(() => {
-    const n = timelineFor(state.hazard).length;
+    const n = activeLength();
     if (n < 2) {
       stopPlaying();
       render();
@@ -692,7 +1744,11 @@ function startPlaying() {
     }
     // Wraps from the last forecast back to the first observed pass; the
     // observed behaviour is restored by render() because every lock is derived.
-    state.idx = ((state.idx === null ? -1 : state.idx) + 1) % n;
+    if (state.source === 'live') {
+      state.live.idx = ((state.live.idx === null ? -1 : state.live.idx) + 1) % n;
+    } else {
+      state.idx = ((state.idx === null ? -1 : state.idx) + 1) % n;
+    }
     render();
   }, Math.max(100, Number(CONFIG.playIntervalMs) || 1000));
 }
@@ -723,10 +1779,17 @@ function switchHazard(hazardId) {
 /* ------------------------------------------------------------------ */
 
 function setIndex(i) {
-  const len = timelineFor(state.hazard).length;
+  const len = activeLength();
   if (!len || !Number.isFinite(i)) return;
   stopPlaying();
-  state.idx = Math.min(len - 1, Math.max(0, Math.round(i)));
+  const next = Math.min(len - 1, Math.max(0, Math.round(i)));
+  if (state.source === 'live') {
+    state.live.idx = next;
+    // A user's seek is shared with the replay room (search replays are not).
+    if (room.open && !state.live.replay) room.send({ type: 'seek', frame: next });
+  } else {
+    state.idx = next;
+  }
   render();
 }
 
@@ -750,6 +1813,9 @@ function bindEvents() {
   el.play.addEventListener('click', () => {
     if (state.playing) stopPlaying();
     else startPlaying();
+    if (state.source === 'live' && room.open && !state.live.replay) {
+      room.send(state.playing ? { type: 'play' } : { type: 'pause', frame: state.live.idx === null ? 0 : state.live.idx });
+    }
     render();
   });
 
@@ -774,7 +1840,7 @@ function bindEvents() {
     // Forecast dates never write back: the control is disabled, and even a
     // synthetic event is ignored while the view is a forecast.
     // render() puts the control back to the locked 35.
-    if (deriveView(state).isForecast) {
+    if (state.source === 'demo' && deriveView(state).isForecast) {
       render();
       return;
     }
@@ -798,8 +1864,13 @@ function bindEvents() {
 
   el.hazardSwitch.addEventListener('change', (e) => {
     const input = e.target;
-    if (input && input.name === 'hazard' && input.checked) switchHazard(input.value);
+    if (!input || input.name !== 'hazard' || !input.checked) return;
+    if (input.value === 'live') enterLive();
+    else if (state.source === 'live') enterDemo(input.value);
+    else switchHazard(input.value);
   });
+
+  bindLiveEvents();
 
   // Menu toggle (mobile dropdown).
   el.menuToggle.addEventListener('click', () => {
@@ -834,44 +1905,14 @@ function bindEvents() {
   bindDialog(el.openMethod, el.dlgMethod);
   bindDialog(el.openAbout, el.dlgAbout);
 
-  // Forms: prevent submission, validate, reset, route. Nothing is read into
-  // state, stored, logged or sent.
-  el.signinForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!el.signinForm.checkValidity()) {
-      el.signinForm.reportValidity();
-      return;
-    }
-    el.signinForm.reset();
-    window.location.hash = '#/';
-  });
-
-  el.signupForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!el.signupForm.checkValidity()) {
-      el.signupForm.reportValidity();
-      return;
-    }
-    if (el.signupPassword.value !== el.signupConfirm.value) {
-      setText(el.pwError, COPY.pwMismatch);
-      setHidden(el.pwError, false);
-      el.signupConfirm.setAttribute('aria-invalid', 'true');
-      el.signupConfirm.focus();
-      return;
-    }
-    setHidden(el.pwError, true);
-    el.signupConfirm.removeAttribute('aria-invalid');
-    el.signupForm.reset();
-    window.location.hash = '#/signin';
-  });
-  const clearPwError = () => {
-    if (!el.pwError.hidden) {
-      setHidden(el.pwError, true);
-      el.signupConfirm.removeAttribute('aria-invalid');
-    }
+  // Auth forms are plain GET navigations to /auth/login (Auth0 hosted page).
+  // They hold no credential fields; the browser leaves this page to sign in.
+  const guardAuth = (e) => {
+    const a = state.api;
+    if (a.status !== 'online' || a.auth === 'unavailable' || a.auth === 'checking' || a.auth === 'signed-in') e.preventDefault();
   };
-  el.signupPassword.addEventListener('input', clearPwError);
-  el.signupConfirm.addEventListener('input', clearPwError);
+  el.signinForm.addEventListener('submit', guardAuth);
+  el.signupForm.addEventListener('submit', guardAuth);
 
   // Mobile drawers are exclusive: both open at once would overlap, since
   // the evidence drawer grows upward over the controls drawer. (Desktop keeps
@@ -890,11 +1931,105 @@ function bindEvents() {
     if (resizeTimer !== null) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       resizeTimer = null;
-      if (map && state.route === 'home') refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), false);
+      if (map && state.route === 'home' && state.source === 'demo') refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), false);
     }, 150);
   });
 
   window.addEventListener('hashchange', route);
+}
+
+/** Controls and evidence of the LIVE channel. */
+function bindLiveEvents() {
+  const L = () => state.live;
+
+  el.liveEvent.addEventListener('change', () => {
+    const id = el.liveEvent.value;
+    if (!id || (L().replay && id === L().replay.id)) return;
+    selectLiveEvent(id);
+  });
+  el.liveLayer.addEventListener('change', () => {
+    L().layer = el.liveLayer.value || 'preview';
+    const v = liveView();
+    L().idx = v.len ? v.len - 1 : null;
+    stopPlaying();
+    render();
+  });
+  el.liveFit.addEventListener('click', () => fitLive());
+  el.liveOutlook.addEventListener('click', () => toggleOutlook());
+  el.liveSim.addEventListener('click', () => {
+    L().sim = !L().sim;
+    render();
+    fitLive();
+  });
+  el.liveSimModel.addEventListener('change', () => {
+    L().simModel = el.liveSimModel.value || 'auto';
+    render();
+  });
+
+  el.livePredict.addEventListener('click', () => {
+    if (L().eventId) loadInto('predict', () => api.predict(L().eventId));
+  });
+  el.liveBrief.addEventListener('click', () => {
+    if (L().eventId) loadInto('brief', () => api.summary(L().eventId));
+  });
+  el.liveAskForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    askQuestion(el.liveAskInput.value);
+  });
+
+  el.liveAreaClose.addEventListener('click', () => {
+    L().area = null;
+    L().panel = 'event';
+    render();
+  });
+  const onRange = (key, input) => () => {
+    const next = setRangeEnd(L().range, key, input.value, { maxSpan: MAX_SEARCH_DAYS });
+    const changed = next.start !== L().range.start || next.end !== L().range.end;
+    L().range = next;
+    if (changed) runAreaQueries();
+    else render();
+  };
+  el.liveRangeStart.addEventListener('change', onRange('start', el.liveRangeStart));
+  el.liveRangeEnd.addEventListener('change', onRange('end', el.liveRangeEnd));
+  el.liveAreaBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn || btn.disabled || !el.liveAreaBody.contains(btn)) return;
+    liveAction(btn.dataset.action, btn.dataset.id || '');
+  });
+
+  el.liveOutlookClose.addEventListener('click', () => toggleOutlook(false));
+  el.liveOutlookView.addEventListener('click', () => {
+    L().outlookBox = currentViewBox();
+    loadOutlook();
+  });
+  el.liveHorizon.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-horizon]');
+    if (!btn) return;
+    const days = Number(btn.dataset.horizon);
+    if (days === L().horizon) return;
+    L().horizon = days;
+    loadOutlook();
+  });
+  el.liveOutlookBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-cell]');
+    if (btn) selectCell(btn.dataset.cell);
+  });
+
+  el.roomForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = el.roomCode.value.trim().toUpperCase();
+    if (!el.roomForm.checkValidity() || !code) {
+      el.roomForm.reportValidity();
+      return;
+    }
+    state.live.room = { status: 'connecting', code, count: 0, message: '' };
+    render();
+    room.connect(code);
+  });
+  el.roomLeave.addEventListener('click', () => {
+    leaveRoom();
+    render();
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -903,6 +2038,13 @@ function bindEvents() {
 
 function onMapClick(lngLat) {
   if (state.route !== 'home') return;
+  if (state.source === 'live') {
+    // An outlook cell answers first; anywhere else explores that area.
+    const cell = lngLat.point ? outlookCellAt(map, lngLat.point) : null;
+    if (cell) selectCell(cell);
+    else exploreAt(lngLat.lng, lngLat.lat);
+    return;
+  }
   const hazard = getHazard(state.hazard) || defaultHazard();
   if (insideBounds(lngLat, hazard.bounds)) {
     state.point = { lng: lngLat.lng, lat: lngLat.lat };
@@ -914,6 +2056,15 @@ function onMapClick(lngLat) {
 
 function onMapError(message, info) {
   const sourceId = info && info.sourceId ? info.sourceId : '';
+  if (sourceId === 'live-tiles') {
+    const msg = `Processed tiles failed to load (${info && info.detail ? info.detail : 'tile error'}). Nothing is drawn in their place.`;
+    if (state.errors.asset !== msg) {
+      state.errors.asset = msg;
+      render();
+    }
+    return;
+  }
+  if (sourceId.startsWith('live-')) return; // preview failures are reported by their loader
   if (sourceId === 'raster' || sourceId === 'change') {
     // An overlay image failed inside MapLibre: hide the raster, no substitute.
     const detail = info && info.detail ? info.detail : 'image error';
@@ -967,14 +2118,6 @@ function route() {
   const { name, anchor } = parseRoute(window.location.hash);
   const previous = currentRoute;
 
-  // Leaving a form route resets its form.
-  if (previous === 'signin' && name !== 'signin') el.signinForm.reset();
-  if (previous === 'signup' && name !== 'signup') {
-    el.signupForm.reset();
-    setHidden(el.pwError, true);
-    el.signupConfirm.removeAttribute('aria-invalid');
-  }
-
   if (name !== 'home') stopPlaying();
   state.route = name;
   currentRoute = name;
@@ -995,7 +2138,7 @@ function route() {
     anchor.focus();
   } else if (previous !== null && previous !== 'home') {
     focusFirst(el.controls);
-    if (map) refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), false);
+    if (map && state.source === 'demo') refitCamera(map, getHazard(state.hazard) || defaultHazard(), isMobile(), false);
   }
 }
 
@@ -1040,12 +2183,34 @@ function boot() {
         state.errors.map = `Map layers could not be added (${err && err.message ? err.message : 'layer setup failed'}). Controls and evidence still work.`;
         mapLastError = state.errors.map;
       }
+      try {
+        addLiveLayers(map);
+        liveLayersReady = true;
+      } catch (err) {
+        state.errors.map = `Live map layers could not be added (${err && err.message ? err.message : 'layer setup failed'}).`;
+      }
       render();
+      if (state.source === 'live') fitLive(false);
     });
   }
 
   // 4. Timeline and rasters.
   loadHazard(state.hazard);
+
+  // 4b. Earth Replay API connection + session check (never blocks the demo).
+  probe().then((r) => {
+    state.api = r.online
+      ? { status: 'online', eventCount: r.eventCount, user: r.user, auth: r.auth, authMessage: r.authMessage, error: '' }
+      : { status: 'offline', eventCount: 0, user: null, auth: 'unavailable', authMessage: r.error, error: r.error };
+    // The session is known now: load the saved conversation for an open event.
+    const L = state.live;
+    if (r.online && r.auth === 'signed-in' && L.detail.status === 'done' && !L.ask.history) loadChatHistory(L.eventId, liveSeq);
+    render();
+  });
+
+  // 4c. Come back to the channel the viewer last used (e.g. after the Auth0
+  //     round trip, which always lands on "/").
+  if (savedSource() === 'live') enterLive();
 
   // 5. Route (also performs a render).
   route();
@@ -1068,6 +2233,14 @@ function boot() {
     },
     inspect(lng, lat) {
       onMapClick({ lng: Number(lng), lat: Number(lat) });
+    },
+    // Console access to the backend client, e.g. await __spaceapp.api.events()
+    api,
+    probe,
+    // Read-only peek at the live channel for tests.
+    get live() {
+      const v = liveView();
+      return { source: state.source, eventId: state.live.eventId, mode: v.tl.mode, steps: v.len, idx: v.idx, panel: state.live.panel, loading: v.loading };
     },
   });
 }

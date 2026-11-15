@@ -598,6 +598,12 @@ export function getHazard(id) {
   return HAZARD_REGISTRY[id];
 }
 
+/**
+ * Geometry helpers shared with js/simulate.js, which builds the live channel's
+ * labelled simulated illustration with the same shapes as the demo extents.
+ */
+export const GEO = Object.freeze({ offsetKm, clampToBounds, ringPolygon, ellipsePolygon, coastBand, arrivalArc, feature, round5, kmPerDegLon, KM_PER_DEG_LAT });
+
 /** The hazard CONFIG.defaultHazard names, or the volcano if it names nothing valid. */
 export function defaultHazard() {
   return getHazard(CONFIG.defaultHazard) || HAZARD_REGISTRY.volcano;

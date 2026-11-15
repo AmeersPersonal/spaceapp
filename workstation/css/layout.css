@@ -461,6 +461,18 @@ html:not([data-route="home"]) #timeline {
     visibility: hidden;
   }
 
+  /* Live events can have many passes: keep only the first, last and current
+     labels so they never overlap (the slider still stops at every pass). */
+  html[data-source="live"] #ticks li {
+    visibility: hidden;
+  }
+
+  html[data-source="live"] #ticks li:first-child,
+  html[data-source="live"] #ticks li:last-child,
+  html[data-source="live"] #ticks li:has(> button[aria-current="true"]) {
+    visibility: visible;
+  }
+
   /* Segment and NOW labels have no room at this width; the text stays in
      the accessibility tree, the lines and hatch keep their px geometry. */
   /* The text sits in span.meta, which sets its own font-size, so the

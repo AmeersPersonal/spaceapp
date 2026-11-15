@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#07090E">
   <title>spaceapp — Aso, in time</title>
-  <meta name="description" content="Synthetic NISAR-style SAR workstation over Aso caldera, Japan. Demonstration only: not live telemetry, not a validated forecast.">
+  <meta name="description" content="NISAR SAR workstation. Three synthetic demonstration channels over Japan, plus a live channel showing real NISAR catalog events and ASF preview images. Not real-time monitoring, not a validated forecast.">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,10 +24,12 @@
   <a class="skip-link" href="#controls">Skip to controls</a>
 
   <div id="map" role="region" aria-label="Map of the study area"></div>
+  <p id="sim-badge" hidden><span>SIMULATED</span> · NOT MEASURED · DEMO MODEL</p>
 
   <header id="topbar" class="hud">
     <a class="wordmark" href="#/">spaceapp
-      <span class="meta">NISAR-SIM // L-BAND SAR</span>
+      <span class="meta wm-demo">NISAR-SIM // L-BAND SAR</span>
+      <span class="meta wm-live">NISAR LIVE // L-BAND SAR</span>
     </a>
 
     <fieldset id="hazard-switch">
@@ -38,6 +40,8 @@
       <label for="hz-earthquake"><span class="hz-num">02 // </span>SEISMIC FAULT</label>
       <input id="hz-tsunami" type="radio" name="hazard" value="tsunami">
       <label for="hz-tsunami"><span class="hz-num">03 // </span>TSUNAMI PROPAGATION</label>
+      <input id="hz-live" type="radio" name="hazard" value="live">
+      <label for="hz-live"><span class="hz-num">04 // </span>LIVE NISAR</label>
       <label class="compound-label">
         <input id="compound-toggle" type="checkbox">
         + COMPOUND OVERLAY
@@ -56,7 +60,9 @@
       <div id="topnav-menu">
         <button id="open-method" type="button">Method</button>
         <button id="open-about" type="button">About</button>
-        <a href="#/signin">Sign in</a>
+        <a id="nav-signin" href="#/signin">Sign in</a>
+        <span id="nav-user" class="meta" hidden></span>
+        <a id="nav-signout" href="/auth/logout" hidden>Sign out</a>
       </div>
       <button id="menu-toggle" type="button" aria-expanded="false" aria-controls="topnav-menu">Menu</button>
     </nav>
@@ -72,6 +78,42 @@
           <h2 id="pass-date">20 JUN 2026</h2>
           <p id="pass-index" class="meta">PASS 06 / 06</p>
           <p id="no-pass-alert" class="meta" hidden>NO SATELLITE PASS FOR THIS DATE</p>
+        </section>
+
+        <section id="live-controls" aria-label="Live NISAR catalog" hidden>
+          <label for="live-event">Event</label>
+          <select id="live-event">
+            <option value="">Loading events…</option>
+          </select>
+          <p id="live-events-note" class="meta">CONNECTING TO THE CATALOG</p>
+          <label id="live-layer-wrap" hidden>Layer
+            <select id="live-layer"></select>
+          </label>
+          <div id="live-actions" role="group" aria-label="Live map tools">
+            <button id="live-fit" type="button">Zoom to data</button>
+            <button id="live-outlook" type="button" aria-pressed="false">Quake outlook</button>
+            <button id="live-sim" type="button" aria-pressed="false">Simulated illustration</button>
+          </div>
+          <label id="live-sim-model-wrap" hidden>Simulation model
+            <select id="live-sim-model">
+              <option value="auto">Auto (from event type)</option>
+              <option value="volcano">Volcanic SAR (ash lobe)</option>
+              <option value="flood">Surface-change SAR (flood / burn)</option>
+              <option value="quake">Seismic InSAR (fringes)</option>
+              <option value="tsunami">Tsunami altimetry (wave train)</option>
+            </select>
+          </label>
+          <p id="live-pass-note" class="meta">Click anywhere on the map to explore that area.</p>
+          <form id="room-form" aria-labelledby="room-title">
+            <h3 id="room-title">Shared replay room</h3>
+            <div class="room-row">
+              <label for="room-code" class="visually-hidden">Room code</label>
+              <input id="room-code" type="text" autocomplete="off" spellcheck="false" minlength="4" maxlength="12" pattern="[A-Za-z0-9]{4,12}" placeholder="CODE">
+              <button id="room-join" type="submit">Join</button>
+              <button id="room-leave" type="button" hidden>Leave</button>
+            </div>
+            <p id="room-status" class="meta" role="status">NOT IN A ROOM · PLAYBACK STAYS LOCAL</p>
+          </form>
         </section>
 
         <div id="view-toggle" role="group" aria-label="View mode">
@@ -127,6 +169,24 @@
           <div id="legend-forecast" hidden>
             <p>No satellite radar pass. The last sample image is dimmed to 35% as geographic context, not a new observation.</p>
           </div>
+          <ul id="legend-live" hidden>
+            <li>
+              <span class="legend-swatch" data-kind="preview" aria-hidden="true"></span>
+              <span class="legend-text">ASF preview: a real NISAR pass, quicklook only, not calibrated</span>
+            </li>
+            <li>
+              <span class="legend-swatch" data-kind="aoi" aria-hidden="true"></span>
+              <span class="legend-text">Tracked event area</span>
+            </li>
+            <li>
+              <span class="legend-swatch" data-kind="probe" aria-hidden="true"></span>
+              <span class="legend-text">Area you are exploring</span>
+            </li>
+            <li id="legend-outlook" hidden>
+              <span class="legend-swatch" data-kind="outlook" aria-hidden="true"></span>
+              <span class="legend-text">Modelled outlook cell · denser hatch = higher chance · not an observation</span>
+            </li>
+          </ul>
           <ul id="legend-risk">
             <li>
               <span class="legend-mark" data-risk="high" aria-hidden="true"></span>
@@ -145,11 +205,92 @@
       <!-- Outside the collapsible drawer so the warnings stay visible when
            the drawer is closed (mobile). -->
       <p id="provenance" class="meta">SYNTHETIC DEMONSTRATION // NOT LIVE NISAR TELEMETRY</p>
+      <p id="provenance-live" class="meta" hidden>LIVE NISAR CATALOG // ASF PREVIEWS ARE QUICKLOOKS, NOT CALIBRATED MEASUREMENTS // NOT REAL-TIME MONITORING</p>
+      <p id="provenance-sim" class="meta" hidden>SIMULATED ILLUSTRATION // IMAGERY AND EXTENTS ARE FABRICATED BY THE DEMO MODELS FOR THIS AREA // NOT THIS EVENT'S DATA // ONLY THE PASS DATES ARE REAL</p>
       <p id="map-error" role="alert" hidden></p>
       <p id="asset-error" role="alert" hidden></p>
+      <p id="backend-status" class="meta" role="status" data-state="checking">BACKEND LINK: CHECKING // MAP DATA ABOVE IS NOT FROM IT</p>
 
       <details id="evidence-drawer" open>
         <summary>Evidence</summary>
+
+        <section id="live-panel" aria-label="Live event" hidden>
+
+          <div id="live-view-event">
+            <div id="live-event-head">
+              <p class="meta">Pick an event, or click the map to explore an area.</p>
+            </div>
+
+            <section id="live-projection" class="model-card" aria-labelledby="live-projection-title">
+              <h3 id="live-projection-title">◆ Model projection</h3>
+              <p class="meta">MODELLED FROM THIS EVENT'S NISAR TIME SERIES · NOT AN OBSERVATION</p>
+              <div id="live-projection-body"></div>
+              <button id="live-predict" type="button">Project this event forward</button>
+            </section>
+
+            <section id="live-briefing" class="live-section" aria-labelledby="live-briefing-title">
+              <h3 id="live-briefing-title">AI briefing</h3>
+              <div id="live-briefing-body"></div>
+              <button id="live-brief" type="button">Write a briefing</button>
+            </section>
+
+            <section id="live-ask" class="live-section" aria-labelledby="live-ask-title">
+              <h3 id="live-ask-title">Ask about this event</h3>
+              <div id="live-ask-log" aria-live="polite"></div>
+              <form id="live-ask-form">
+                <label for="live-ask-input" class="visually-hidden">Question</label>
+                <input id="live-ask-input" type="text" minlength="3" maxlength="500" autocomplete="off" placeholder="What changed on the ground here?">
+                <button id="live-ask-submit" type="submit">Ask</button>
+              </form>
+              <p id="live-ask-note" class="meta"></p>
+            </section>
+
+            <section id="live-context" class="live-section" aria-labelledby="live-context-title">
+              <h3 id="live-context-title">Other NASA data for this area</h3>
+              <div id="live-context-body"></div>
+            </section>
+
+            <section id="live-media" class="live-section" aria-labelledby="live-media-title">
+              <h3 id="live-media-title">Photos and impact maps</h3>
+              <div id="live-media-body"></div>
+            </section>
+
+            <section id="live-scenes" class="live-section" aria-labelledby="live-scenes-title">
+              <h3 id="live-scenes-title">Scenes</h3>
+              <div id="live-scenes-body"></div>
+            </section>
+          </div>
+
+          <div id="live-view-area" hidden>
+            <div class="panel-head">
+              <h3 id="live-area-title">Selected area</h3>
+              <button id="live-area-close" type="button" aria-label="Close area details">Close</button>
+            </div>
+            <p id="live-area-coords" class="meta">—</p>
+            <fieldset id="live-range">
+              <legend>Period to search</legend>
+              <label>From <input id="live-range-start" type="date"></label>
+              <label>To <input id="live-range-end" type="date"></label>
+            </fieldset>
+            <div id="live-area-body"></div>
+          </div>
+
+          <div id="live-view-outlook" class="model-card" hidden>
+            <div class="panel-head">
+              <h3 id="live-outlook-title">◆ Earthquake outlook</h3>
+              <button id="live-outlook-close" type="button" aria-label="Close the outlook">Close</button>
+            </div>
+            <p class="meta">MODELLED, NOT OBSERVED · FROM THE USGS M4.5+ CATALOG OF THE PAST 365 DAYS</p>
+            <div id="live-horizon" role="group" aria-label="How far ahead">
+              <button type="button" data-horizon="7" aria-pressed="false">Next 7 days</button>
+              <button type="button" data-horizon="30" aria-pressed="true">Next 30 days</button>
+              <button type="button" data-horizon="90" aria-pressed="false">Next 90 days</button>
+            </div>
+            <button id="live-outlook-view" type="button">Use the current map view</button>
+            <div id="live-outlook-body"></div>
+          </div>
+
+        </section>
 
         <section id="status-card" aria-label="Pass status">
           <div id="observed-card">
@@ -237,31 +378,26 @@
 
   <section id="page" hidden aria-label="Account and navigation pages">
 
-    <form id="signin-form" aria-labelledby="signin-title" hidden>
+    <!-- Accounts live in Auth0, not in this page: each form is a plain GET
+         navigation to the API, which sends the browser to Auth0's hosted page
+         and back here. No email or password field exists in this app. -->
+    <form id="signin-form" method="get" action="/auth/login" aria-labelledby="signin-title" hidden>
       <h2 id="signin-title">Sign in</h2>
-      <label for="signin-email">Email</label>
-      <input id="signin-email" type="email" name="email" autocomplete="email" required>
-      <label for="signin-password">Password</label>
-      <input id="signin-password" type="password" name="password" autocomplete="current-password" required>
-      <button type="submit">Sign in</button>
+      <p>Accounts are handled by Auth0. You sign in on Auth0's page and come straight back here.</p>
+      <p class="meta">Signed in, you can ask the AI about an event, keep your conversations and track new areas.</p>
+      <p id="signin-status" class="meta" role="status">Checking your session…</p>
+      <button id="signin-submit" type="submit">Continue to sign in</button>
+      <a id="signin-signout" href="/auth/logout" hidden>Sign out</a>
       <a href="#/signup">Create an account</a>
-      <p class="meta">Prototype: no account is created and nothing is sent.</p>
     </form>
 
-    <form id="signup-form" aria-labelledby="signup-title" hidden>
+    <form id="signup-form" method="get" action="/auth/login" aria-labelledby="signup-title" hidden>
       <h2 id="signup-title">Sign up</h2>
-      <label for="signup-name">Name</label>
-      <input id="signup-name" type="text" name="name" autocomplete="name" required>
-      <label for="signup-email">Email</label>
-      <input id="signup-email" type="email" name="email" autocomplete="email" required>
-      <label for="signup-password">Password</label>
-      <input id="signup-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
-      <label for="signup-confirm">Confirm password</label>
-      <input id="signup-confirm" type="password" name="confirm" autocomplete="new-password" minlength="8" required>
-      <p id="pw-error" role="alert" hidden>Passwords do not match.</p>
-      <button type="submit">Sign up</button>
+      <input type="hidden" name="screen_hint" value="signup">
+      <p>Accounts are handled by Auth0. You create one on Auth0's page and come straight back here, signed in.</p>
+      <p id="signup-status" class="meta" role="status">Checking your session…</p>
+      <button id="signup-submit" type="submit">Create an account</button>
       <a href="#/signin">Already have an account? Sign in</a>
-      <p class="meta">Prototype: no account is created and nothing is sent.</p>
     </form>
 
     <div id="notfound" hidden>
@@ -279,6 +415,9 @@
     <p>The risk index on the observed passes and the probability on each forecast date are placeholders written into a small registry. The forecast values are not the output of a model: they are specimen numbers chosen to exercise the interface. Level thresholds (medium at 0.35, high at 0.60) are demonstration categories, not official ones. Risk extents on the map are schematic polygons seeded per date. They are not a hazard map.</p>
     <p>Past the last sample pass the workstation changes state rather than inventing data. The last observed image is locked to 35% opacity as geographic context, the view modes and opacity control are disabled, the timeline thumb becomes a pale-sky diamond labelled FORECAST, extents and chart segments turn dashed, and a prediction card carries the disclaimer. No pixel brightness or point value is ever produced for a future date.</p>
     <p>To replace the placeholders, point the configuration at your own imagery and timeline endpoint. When an external image or backend fails to load the workstation reports the error and hides the layer. It never substitutes a generated image for a missing real one.</p>
+    <h3>The live channel</h3>
+    <p>Channel 04 // LIVE NISAR reads the Earth Replay API. Events are areas tracked in its catalog; their scenes are real NISAR acquisitions found through ASF DAAC. Each pass date shows the scene's ASF browse image placed on its footprint. Browse images are quicklooks: real acquisitions, but not calibrated measurements. Where the processor has turned a scene into map tiles, those tiles are offered as layers. The live timeline holds only pass dates: it has no forecast half.</p>
+    <p>Two things on the live channel are modelled, and are always drawn hatched, dashed and pale sky with a MODELLED label: the event projection (a trend fitted to the event's own NISAR statistics, worded by an AI) and the earthquake outlook (the chance of at least one M4.5+ earthquake per grid cell, from the past year of the USGS catalog). Neither is an observation or a prediction of a specific event. AI briefings and answers are hypotheses and say so.</p>
     <button class="dialog-close" type="button">Close</button>
   </dialog>
 
@@ -287,7 +426,8 @@
     <p>spaceapp is a prototype built for the NASA Space Apps challenge "Dancing with the SARs". It explores how a repeat-pass L-band SAR mission such as NISAR could be presented alongside a model forecast without letting the two be confused. The study point is Aso caldera in Kumamoto, Japan, at 32.884° N, 131.104° E, with two further channels (a seismic fault and a tsunami propagation view) sharing the same timeline to show that the forecast locks behave identically for every hazard.</p>
     <p>The timeline carries six observed passes twelve days apart, ending at a demonstration "NOW" of 20 June 2026, followed by four forecast dates. The dates are design specimens, not the system clock, and NOW is not a claim about real satellite availability. Nothing here is real-time monitoring.</p>
     <p>Limitations: all imagery, values, probabilities, drivers and extents are synthetic demonstration material. There is no NISAR observation in this build and no validated forecast. Seismic and tsunami units are illustrative. The basemap and fonts load from public CDNs, and when they are unavailable the workstation shows an explicit error rather than a substitute.</p>
-    <p>Data credits: NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. This demonstration uses no NISAR data; the credit line is retained so that a future build that does ingest NISAR products carries the correct attribution. Basemap tiles by OpenFreeMap, map data from OpenStreetMap contributors.</p>
+    <p>The live channel (04) shows real NISAR catalog events from the Earth Replay API, with ASF browse previews, AI briefings, a modelled projection, the earthquake outlook, area exploration and shared replay rooms. Sign-in is handled by Auth0. The three demonstration channels remain entirely synthetic.</p>
+    <p>Data credits: NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. Earthquakes: USGS. Supplementary datasets: NASA Earthdata (GPM, SMAP, HLS, NASADEM, GRACE). The demonstration channels use no NISAR data. Basemap tiles by OpenFreeMap, map data from OpenStreetMap contributors.</p>
     <button class="dialog-close" type="button">Close</button>
   </dialog>
 

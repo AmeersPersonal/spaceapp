@@ -182,11 +182,13 @@ function buildSarStatic(hazard) {
 
   const vx = f.lngToX(hazard.coords[0]);
   const vy = f.latToY(hazard.coords[1]);
-  const cx = f.lngToX(g.calderaCentre[0]);
-  const cy = f.latToY(g.calderaCentre[1]);
-  const CAL_A = g.rimKm.a * f.pxPerKmX;
-  const CAL_B = g.rimKm.b * f.pxPerKmY;
-  const cones = g.cones.map(([dLng, dLat, amp, sxKm, syKm]) => ({
+  // A live simulation may omit the caldera (rimKm null) and the cones.
+  const hasRim = Boolean(g.rimKm && g.calderaCentre);
+  const cx = hasRim ? f.lngToX(g.calderaCentre[0]) : 0;
+  const cy = hasRim ? f.latToY(g.calderaCentre[1]) : 0;
+  const CAL_A = hasRim ? g.rimKm.a * f.pxPerKmX : 1;
+  const CAL_B = hasRim ? g.rimKm.b * f.pxPerKmY : 1;
+  const cones = (g.cones || []).map(([dLng, dLat, amp, sxKm, syKm]) => ({
     x: f.lngToX(hazard.coords[0] + dLng),
     y: f.latToY(hazard.coords[1] + dLat),
     amp,
@@ -204,15 +206,17 @@ function buildSarStatic(hazard) {
       const shade = clamp(gx * 22, -0.6, 0.6);
       let v = (70 + 60 * t) * (1 + 0.5 * shade);
 
-      // Somma rim: steep wall, bright, with asymmetric look-direction shading.
-      const ex = (x - cx) / CAL_A;
-      const ey = (y - cy) / CAL_B;
-      const rim = Math.hypot(ex, ey);
-      const bump = Math.exp(-((rim - 1) * (rim - 1)) / 0.006);
-      const facing = rim > 1e-3 ? (-(rim - 1) * ex) / rim : 0; // > 0 faces west (sensor)
-      v += 85 * bump * (1 + 0.6 * clamp(facing * 4, -1, 1));
-      // Dark, smooth caldera floor.
-      v -= 26 * Math.exp(-(rim * rim) / 0.35);
+      if (hasRim) {
+        // Somma rim: steep wall, bright, with asymmetric look-direction shading.
+        const ex = (x - cx) / CAL_A;
+        const ey = (y - cy) / CAL_B;
+        const rim = Math.hypot(ex, ey);
+        const bump = Math.exp(-((rim - 1) * (rim - 1)) / 0.006);
+        const facing = rim > 1e-3 ? (-(rim - 1) * ex) / rim : 0; // > 0 faces west (sensor)
+        v += 85 * bump * (1 + 0.6 * clamp(facing * 4, -1, 1));
+        // Dark, smooth caldera floor.
+        v -= 26 * Math.exp(-(rim * rim) / 0.35);
+      }
 
       // Nakadake cone cluster, west flanks facing the sensor are brighter.
       for (let c = 0; c < cones.length; c++) {
@@ -240,7 +244,8 @@ function buildInterferogramStatic(hazard) {
   const { W } = f;
   const g = hazard.geometry;
   const nz = makeNoise(seedFrom(`ifg|${hazard.id}`));
-  const land = COAST.land;
+  // `land: null` (live simulation) treats the whole box as land.
+  const land = g.land === undefined ? COAST.land : g.land;
 
   const terrain = new Float32Array(N);
   const coh = new Float32Array(N);
@@ -256,7 +261,7 @@ function buildInterferogramStatic(hazard) {
       const lng = f.xToLng(x);
       const kmx = (x + 0.5) * (f.kmW / W);
       terrain[i] = nz.fbm(x / 56, y / 56, 5);
-      const onLand = land.some((r) => pointInRing(lng, lat, r));
+      const onLand = !land || land.some((r) => pointInRing(lng, lat, r));
       coh[i] = onLand ? smoothstep(0.36, 0.64, nz.fbm(x / 40 + 7, y / 40 + 7, 4)) : 0;
       const r = distanceToPolyline(kmx, kmy, faultKm);
       dist[i] = r.d;
@@ -320,24 +325,31 @@ function staticFor(hazard) {
 /* ------------------------------------------------------------------ */
 
 function ashRadiusKm(hazard, idx, count) {
-  const table = hazard.geometry && hazard.geometry.ashKm;
+  const g = hazard.geometry || {};
+  const table = g.ashKm;
   if (table && count === table.length) return table[idx];
   const span = Math.max(1, count - 1);
-  return 0.8 + 3.0 * (idx / span);
+  const [from, to] = Array.isArray(g.spreadKm) ? g.spreadKm : [0.8, 3.8];
+  return from + (to - from) * (idx / span);
 }
 
 function renderSar(hazard, st, idx, count, out, S) {
+  const g = hazard.geometry || {};
   const r = ashRadiusKm(hazard, idx, count);
   const rough = idx >= 3 ? (idx - 2) * 0.08 : 0;
+  // Length scales default to the Aso demo; a live simulation scales them to its box.
+  const edgeKm = g.edgeKm || 1.2;
+  const ringKm = g.ringKm || 0.6;
+  const ringW2 = g.ringWidthKm ? g.ringWidthKm * g.ringWidthKm : 0.03;
   const { base, fromVent, lobe, wobble } = st;
   for (let i = 0; i < N; i++) {
     let v = base[i];
     // Fresh ash smooths the ground, so less signal returns and it goes dark.
-    const edge = clamp01((r * lobe[i] * wobble[i] - fromVent[i]) / 1.2);
+    const edge = clamp01((r * lobe[i] * wobble[i] - fromVent[i]) / edgeKm);
     v *= 1 - 0.78 * edge;
     if (rough > 0) {
-      const d = fromVent[i] - 0.6;
-      v += 160 * rough * Math.exp(-(d * d) / 0.03);
+      const d = fromVent[i] - ringKm;
+      v += 160 * rough * Math.exp(-(d * d) / ringW2);
     }
     v = clamp(v, 0, 255) * S[i];
     const q = v < 0 ? 0 : v > 255 ? 255 : (v + 0.5) | 0;
@@ -355,12 +367,13 @@ function renderInterferogram(hazard, st, idx, count, out, S) {
   const fringes = idx < mainshock ? 0.35 + 0.1 * idx : 5 + 0.45 * (idx - mainshock);
   const kEast = TAU * fringes;
   const kWest = TAU * fringes * 0.72;
+  const [decayE, decayW] = Array.isArray(hazard.geometry && hazard.geometry.decayKm) ? hazard.geometry.decayKm : [40, 28];
   const { terrain, coh, dist, side } = st;
   for (let i = 0; i < N; i++) {
     const d = dist[i];
     const c = coh[i];
     // Modelled LOS displacement decays away from the trace; wrapped phase of it.
-    const disp = side[i] > 0 ? Math.exp(-d / 40) : Math.exp(-d / 28);
+    const disp = side[i] > 0 ? Math.exp(-d / decayE) : Math.exp(-d / decayW);
     const phase = (side[i] > 0 ? kEast : kWest) * disp;
     const fringe = 0.5 + 0.5 * Math.cos(phase);
     let v = (35 + 70 * terrain[i]) * (1 - 0.65 * c) + c * 200 * fringe;
@@ -377,15 +390,17 @@ function renderInterferogram(hazard, st, idx, count, out, S) {
 function renderSsha(hazard, st, idx, count, out, S) {
   const span = Math.max(1, count - 1);
   const t = idx / span;
-  const front = 100 - 75 * t; // km from the coast; the crest advances shoreward
+  const k = (hazard.geometry && hazard.geometry.kmScale) || 1; // 1 = the Kyushu demo box
+  const front = (100 - 75 * t) * k; // km from the coast; the crest advances shoreward
   const amp = 64 * (1 + 0.45 * t); // shoaling
+  const envW2 = 22 * 22 * k * k;
   const { land, tex, dist } = st;
   for (let i = 0; i < N; i++) {
     let v = tex[i];
     if (!land[i]) {
       const d = dist[i];
-      const lambda = 14 + 0.1 * d;
-      const env = Math.exp(-((d - front) * (d - front)) / (22 * 22));
+      const lambda = (14 + 0.1 * d / k) * k;
+      const env = Math.exp(-((d - front) * (d - front)) / envW2);
       v += amp * env * Math.sin((TAU * (d - front)) / lambda);
     }
     v = clamp(v, 0, 255) * S[i];
@@ -583,7 +598,8 @@ export class TelemetryService {
 /* Raster producers                                                     */
 /* ------------------------------------------------------------------ */
 
-function procedural(hazard, dateIndex, count) {
+/** Exported for js/simulate.js (the live channel's labelled simulated illustration). */
+export function procedural(hazard, dateIndex, count) {
   const st = staticFor(hazard);
   const render = RENDERERS[st.type];
   const S = speckleFor(st.speckleStrength);
