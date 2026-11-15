@@ -8,10 +8,11 @@ The one rule that outranks everything else: **a prediction must never look like 
 
 ```bash
 cd spaceapp/workstation
-python -m http.server 5173
+npm run dev                  # zero-dependency Node static server (dev-server.mjs), no install needed
+# or: python -m http.server 5173
 ```
 
-Open <http://localhost:5173/#/>.
+Open <http://localhost:5173/#/>. `npm run dev` moves to the next free port if 5173 is busy (e.g. the old `Frontend/` Vite app is running); set `PORT=` to choose one.
 
 It must be served over HTTP. ES modules do not load from `file://`. Fonts (Google Fonts), MapLibre (unpkg) and basemap tiles (OpenFreeMap) need network access. Every failure is explicit: a missing map library, blocked tiles or a failed external image each show an error in the Evidence dock, and nothing synthetic is substituted in their place.
 
