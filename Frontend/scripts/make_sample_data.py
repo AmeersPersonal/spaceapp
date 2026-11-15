@@ -64,7 +64,7 @@ for d, r in zip(dates, ash_km):
         Image.fromarray((speckle * 100).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)),
         dtype=float) / 100.0
     img = land * speckle
-    # Fresh ash smooths the ground, so less signal co    mes back and it goes dark.
+    # Fresh ash smooths the ground, so less signal comes back and it goes dark.
     # A soft edge keeps the deposit from looking like a drawn shape.
     edge = np.clip((r * lobe * wobble - from_vent) / 1.2, 0, 1)
     img *= 1 - 0.78 * edge
