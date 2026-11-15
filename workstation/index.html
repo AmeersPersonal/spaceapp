@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en" data-mode="observed" data-hazard="volcano" data-route="home">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07090E">
+  <title>spaceapp — Aso, in time</title>
+  <meta name="description" content="Synthetic NISAR-style SAR workstation over Aso caldera, Japan. Demonstration only: not live telemetry, not a validated forecast.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+  <a class="skip-link" href="#controls">Skip to controls</a>
+
+  <div id="map" role="region" aria-label="Map of the study area"></div>
+
+  <header id="topbar" class="hud">
+    <a class="wordmark" href="#/">spaceapp
+      <span class="meta">NISAR-SIM // L-BAND SAR</span>
+    </a>
+
+    <fieldset id="hazard-switch">
+      <legend class="visually-hidden">Hazard channel</legend>
+      <input id="hz-volcano" type="radio" name="hazard" value="volcano" checked>
+      <label for="hz-volcano"><span class="hz-num">01 // </span>VOLCANIC SAR</label>
+      <input id="hz-earthquake" type="radio" name="hazard" value="earthquake">
+      <label for="hz-earthquake"><span class="hz-num">02 // </span>SEISMIC FAULT</label>
+      <input id="hz-tsunami" type="radio" name="hazard" value="tsunami">
+      <label for="hz-tsunami"><span class="hz-num">03 // </span>TSUNAMI PROPAGATION</label>
+      <label class="compound-label">
+        <input id="compound-toggle" type="checkbox">
+        + COMPOUND OVERLAY
+      </label>
+    </fieldset>
+
+    <div id="target-cell">
+      <span id="target-name" class="meta">TARGET: ASO CALDERA, JP</span>
+      <span id="target-coords" class="meta">32.884° N, 131.104° E</span>
+      <span id="target-footprint" class="meta">FOOTPRINT: — KM</span>
+    </div>
+
+    <div id="mode-pill" role="status"><span class="pill-main">● OBSERVED PASS</span><span class="pill-suffix"> // MEASURED</span></div>
+
+    <nav id="topnav" aria-label="Site">
+      <div id="topnav-menu">
+        <button id="open-method" type="button">Method</button>
+        <button id="open-about" type="button">About</button>
+        <a href="#/signin">Sign in</a>
+      </div>
+      <button id="menu-toggle" type="button" aria-expanded="false" aria-controls="topnav-menu">Menu</button>
+    </nav>
+  </header>
+
+  <main id="workspace">
+
+    <aside id="controls" class="hud" aria-label="Sensor and layer controls">
+      <details id="controls-drawer" open>
+        <summary>Controls</summary>
+
+        <section id="pass-header" aria-label="Current pass">
+          <h2 id="pass-date">20 JUN 2026</h2>
+          <p id="pass-index" class="meta">PASS 06 / 06</p>
+          <p id="no-pass-alert" class="meta" hidden>NO SATELLITE PASS FOR THIS DATE</p>
+        </section>
+
+        <div id="view-toggle" role="group" aria-label="View mode">
+          <button id="btn-radar" type="button" aria-pressed="true">Radar image</button>
+          <button id="btn-change" type="button" aria-pressed="false">Change since</button>
+        </div>
+
+        <label id="baseline-wrap" hidden>Baseline
+          <select id="baseline">
+            <option value="0">21 APR 2026</option>
+            <option value="1">03 MAY 2026</option>
+            <option value="2">15 MAY 2026</option>
+            <option value="3">27 MAY 2026</option>
+            <option value="4">08 JUN 2026</option>
+            <option value="5">20 JUN 2026</option>
+          </select>
+        </label>
+
+        <div id="opacity-wrap">
+          <label for="opacity">Raster opacity</label>
+          <input id="opacity" type="range" min="0" max="100" step="5" value="85">
+          <output id="opacity-readout" for="opacity" aria-live="off">85%</output>
+          <p id="opacity-lock" class="meta" hidden>LOCKED: 35% CONTEXT ONLY</p>
+        </div>
+
+        <label class="check-label">
+          <input id="toggle-risk" type="checkbox" checked>
+          Risk extent
+        </label>
+        <label class="check-label">
+          <input id="toggle-reticle" type="checkbox" checked>
+          Inspection reticle
+        </label>
+
+        <section id="legend" aria-label="Legend">
+          <div id="legend-radar">
+            <div class="legend-ramp" role="img" aria-label="Greyscale ramp from dark to bright"></div>
+            <div class="legend-ramp-labels">
+              <span class="legend-text">Dark: smooth / wet</span>
+              <span class="legend-text">Bright: rough / steep</span>
+            </div>
+          </div>
+          <div id="legend-change" hidden>
+            <span class="legend-key">
+              <span class="legend-patch" data-change="darker" aria-hidden="true"></span>
+              <span class="legend-text">Darker than baseline</span>
+            </span>
+            <span class="legend-key">
+              <span class="legend-patch" data-change="brighter" aria-hidden="true"></span>
+              <span class="legend-text">Brighter than baseline</span>
+            </span>
+          </div>
+          <div id="legend-forecast" hidden>
+            <p>No satellite radar pass. The last sample image is dimmed to 35% as geographic context, not a new observation.</p>
+          </div>
+          <ul id="legend-risk">
+            <li>
+              <span class="legend-mark" data-risk="high" aria-hidden="true"></span>
+              <span class="legend-text">High hazard extent (measured extent)</span>
+            </li>
+            <li>
+              <span class="legend-mark" data-risk="medium" aria-hidden="true"></span>
+              <span class="legend-text">Medium hazard extent (measured extent)</span>
+            </li>
+          </ul>
+        </section>
+      </details>
+    </aside>
+
+    <aside id="evidence" class="hud" aria-label="Evidence">
+      <!-- Outside the collapsible drawer so the warnings stay visible when
+           the drawer is closed (mobile). -->
+      <p id="provenance" class="meta">SYNTHETIC DEMONSTRATION // NOT LIVE NISAR TELEMETRY</p>
+      <p id="map-error" role="alert" hidden></p>
+      <p id="asset-error" role="alert" hidden></p>
+
+      <details id="evidence-drawer" open>
+        <summary>Evidence</summary>
+
+        <section id="status-card" aria-label="Pass status">
+          <div id="observed-card">
+            <h3>Observed sample pass</h3>
+            <dl id="observed-summary">
+              <dt>Pass</dt>
+              <dd id="observed-pass">06 / 06 · 20 JUN 2026</dd>
+              <dt>Baseline</dt>
+              <dd id="observed-baseline">None · radar image view</dd>
+              <dt>Inspected point</dt>
+              <dd id="observed-point">None</dd>
+            </dl>
+          </div>
+          <div id="forecast-card" hidden>
+            <h3>Forecast for <span id="forecast-date">02 JUL 2026</span></h3>
+            <p id="forecast-prob">—%</p>
+            <span id="forecast-level" class="level" data-level="low">—</span>
+            <div class="prob-bar" role="img" aria-label="Sample probability bar">
+              <div id="forecast-bar"></div>
+            </div>
+            <p id="forecast-driver">Simulated driver: —</p>
+            <p id="forecast-disclaimer">Placeholder forecast. Swap in your model output.</p>
+            <p class="meta">Sample probability · not validated</p>
+          </div>
+        </section>
+
+        <section aria-label="Risk over time">
+          <h3>Risk over time</h3>
+          <figure id="chart-risk">
+            <div class="chart-slot">
+              <p class="chart-empty">Chart renders when the workstation script loads.</p>
+            </div>
+            <figcaption class="meta">Solid: measured risk index. Dashed: model projection. Both synthetic.</figcaption>
+          </figure>
+        </section>
+
+        <section aria-label="Point series">
+          <h3 id="point-title">Brightness at a point</h3>
+          <p id="point-coords" class="meta">32.884° N, 131.104° E</p>
+          <figure id="chart-point">
+            <div class="chart-slot">
+              <p class="chart-empty">No point selected.</p>
+            </div>
+            <figcaption class="meta">No future pixel brightness values — ever.</figcaption>
+          </figure>
+          <p id="point-status" role="status">Click inside the radar footprint to inspect a point.</p>
+        </section>
+      </details>
+    </aside>
+
+  </main>
+
+  <footer id="timeline" class="hud">
+    <button id="play" type="button" aria-label="Play">
+      <svg class="icon-play" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+        <path d="M2 1 L11 6 L2 11 Z"></path>
+      </svg>
+      <svg class="icon-pause" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false" hidden>
+        <rect x="2" y="1" width="3" height="10"></rect>
+        <rect x="7" y="1" width="3" height="10"></rect>
+      </svg>
+    </button>
+
+    <div id="track">
+      <div id="seg-observed"><span class="meta">OBSERVED PASSES (01–06)</span></div>
+      <div id="now-tick"><span class="meta">NOW (20 JUN 2026)</span></div>
+      <div id="seg-forecast"><span class="meta">FORECAST HORIZON (07–10)</span></div>
+      <input id="date-slider" type="range" min="0" max="9" step="1" value="5" aria-label="Pass date" aria-valuetext="Observed sample pass, 20 Jun 2026">
+      <ol id="ticks" aria-label="Pass dates">
+        <li><button type="button" data-index="0" data-kind="observed">21 APR</button></li>
+        <li><button type="button" data-index="1" data-kind="observed">03 MAY</button></li>
+        <li><button type="button" data-index="2" data-kind="observed">15 MAY</button></li>
+        <li><button type="button" data-index="3" data-kind="observed">27 MAY</button></li>
+        <li><button type="button" data-index="4" data-kind="observed">08 JUN</button></li>
+        <li><button type="button" data-index="5" data-kind="observed" aria-current="true">20 JUN</button></li>
+        <li><button type="button" data-index="6" data-kind="forecast">02 JUL</button></li>
+        <li><button type="button" data-index="7" data-kind="forecast">14 JUL</button></li>
+        <li><button type="button" data-index="8" data-kind="forecast">26 JUL</button></li>
+        <li><button type="button" data-index="9" data-kind="forecast">07 AUG</button></li>
+      </ol>
+    </div>
+
+    <output id="timeline-date" for="date-slider" aria-live="off">20 JUN 2026</output>
+  </footer>
+
+  <section id="page" hidden aria-label="Account and navigation pages">
+
+    <form id="signin-form" aria-labelledby="signin-title" hidden>
+      <h2 id="signin-title">Sign in</h2>
+      <label for="signin-email">Email</label>
+      <input id="signin-email" type="email" name="email" autocomplete="email" required>
+      <label for="signin-password">Password</label>
+      <input id="signin-password" type="password" name="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+      <a href="#/signup">Create an account</a>
+      <p class="meta">Prototype: no account is created and nothing is sent.</p>
+    </form>
+
+    <form id="signup-form" aria-labelledby="signup-title" hidden>
+      <h2 id="signup-title">Sign up</h2>
+      <label for="signup-name">Name</label>
+      <input id="signup-name" type="text" name="name" autocomplete="name" required>
+      <label for="signup-email">Email</label>
+      <input id="signup-email" type="email" name="email" autocomplete="email" required>
+      <label for="signup-password">Password</label>
+      <input id="signup-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+      <label for="signup-confirm">Confirm password</label>
+      <input id="signup-confirm" type="password" name="confirm" autocomplete="new-password" minlength="8" required>
+      <p id="pw-error" role="alert" hidden>Passwords do not match.</p>
+      <button type="submit">Sign up</button>
+      <a href="#/signin">Already have an account? Sign in</a>
+      <p class="meta">Prototype: no account is created and nothing is sent.</p>
+    </form>
+
+    <div id="notfound" hidden>
+      <p class="display-404">spaceapp</p>
+      <p class="meta">404 · PAGE NOT FOUND</p>
+      <a href="#/">Back to workstation</a>
+    </div>
+
+  </section>
+
+  <dialog id="dlg-method" aria-labelledby="dlg-method-title">
+    <h2 id="dlg-method-title">Method</h2>
+    <p>Every radar image in this workstation is synthetic. A seeded procedural generator builds a 512 × 512 greyscale texture per pass from fractal value noise: an elliptical somma rim with sensor-facing slopes brightened and far slopes darkened, a smooth dark caldera floor, and a bright cone cluster near the Nakadake vent. A single fixed speckle field, roughly four-look, multiplies every pass so the grain stays identical between dates. Pixel values are display intensities on a 0–255 scale. They are not calibrated backscatter and are never labelled in dB.</p>
+    <p>Change between two passes is computed in the browser. Both images get a 3 × 3 box blur to suppress speckle, then each pixel is differenced (current minus baseline). Differences below 18 of 255 are transparent. Negative differences draw blue (the surface got darker, or in the seismic and tsunami channels, subsided or drew down), positive differences draw orange (brighter, uplifted, or crested). Alpha scales with the magnitude. Choosing the current pass as its own baseline yields an empty layer by construction.</p>
+    <p>The risk index on the observed passes and the probability on each forecast date are placeholders written into a small registry. The forecast values are not the output of a model: they are specimen numbers chosen to exercise the interface. Level thresholds (medium at 0.35, high at 0.60) are demonstration categories, not official ones. Risk extents on the map are schematic polygons seeded per date. They are not a hazard map.</p>
+    <p>Past the last sample pass the workstation changes state rather than inventing data. The last observed image is locked to 35% opacity as geographic context, the view modes and opacity control are disabled, the timeline thumb becomes a pale-sky diamond labelled FORECAST, extents and chart segments turn dashed, and a prediction card carries the disclaimer. No pixel brightness or point value is ever produced for a future date.</p>
+    <p>To replace the placeholders, point the configuration at your own imagery and timeline endpoint. When an external image or backend fails to load the workstation reports the error and hides the layer. It never substitutes a generated image for a missing real one.</p>
+    <button class="dialog-close" type="button">Close</button>
+  </dialog>
+
+  <dialog id="dlg-about" aria-labelledby="dlg-about-title">
+    <h2 id="dlg-about-title">About</h2>
+    <p>spaceapp is a prototype built for the NASA Space Apps challenge "Dancing with the SARs". It explores how a repeat-pass L-band SAR mission such as NISAR could be presented alongside a model forecast without letting the two be confused. The study point is Aso caldera in Kumamoto, Japan, at 32.884° N, 131.104° E, with two further channels (a seismic fault and a tsunami propagation view) sharing the same timeline to show that the forecast locks behave identically for every hazard.</p>
+    <p>The timeline carries six observed passes twelve days apart, ending at a demonstration "NOW" of 20 June 2026, followed by four forecast dates. The dates are design specimens, not the system clock, and NOW is not a claim about real satellite availability. Nothing here is real-time monitoring.</p>
+    <p>Limitations: all imagery, values, probabilities, drivers and extents are synthetic demonstration material. There is no NISAR observation in this build and no validated forecast. Seismic and tsunami units are illustrative. The basemap and fonts load from public CDNs, and when they are unavailable the workstation shows an explicit error rather than a substitute.</p>
+    <p>Data credits: NISAR data courtesy of NASA/JPL-Caltech and ISRO, distributed by ASF DAAC. This demonstration uses no NISAR data; the credit line is retained so that a future build that does ingest NISAR products carries the correct attribution. Basemap tiles by OpenFreeMap, map data from OpenStreetMap contributors.</p>
+    <button class="dialog-close" type="button">Close</button>
+  </dialog>
+
+  <div id="announcer" class="visually-hidden" aria-live="polite"></div>
+
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "spaceapp-workstation",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "No-build static workstation. `npm run dev` serves this folder over HTTP; there are no dependencies to install.",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "start": "node dev-server.mjs"
+  }
+}
