@@ -30,9 +30,10 @@ D1 binding `DB` (database `earth-replay`). Queried by `../dataManger.js` and `..
 Every integration test in `../tests/` runs against this schema, since `applyD1Migrations` runs in the test setup.
 
 ## Status
-Both `0002_chats.sql` (owned chats) and `0002_chat_stats.sql` (specialist threads and scene stats) are present with distinct filenames. The owned-chat migration was previously applied locally. Application of the specialist migration to this local database and the production migration state were not checked in this update. Inspect the migration ledger before rollout; no remote migration was performed here.
+Both `0002_chats.sql` (owned chats) and `0002_chat_stats.sql` (specialist threads and scene stats) applied successfully to production D1 on 2026-11-14. The remote ledger and schema were inspected first: only `0001_init.sql` was previously applied. Existing catalog data was preserved.
 
 ## Changelog
+- 2026-11-14 - Inspected production schema and applied both pending chat migrations with Wrangler.
 - 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
 - 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.
 - 2026-11-14 - Added persistent owner-scoped chats and messages, indexed for listing/history pagination; local migration verified.

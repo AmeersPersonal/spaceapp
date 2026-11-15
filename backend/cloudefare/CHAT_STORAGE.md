@@ -26,7 +26,7 @@ Chats without an event support manual message storage. Create an event-bound cha
 
 ## Deployment
 
-Apply `npm run db:migrate:local` for local use. Production needs `npm run db:migrate:remote` followed by deployment of this source and the Auth0 production configuration described in [AUTH0.md](AUTH0.md). Neither production migration nor deployment is performed automatically. History survives session expiry, logout and a new browser login with the same Auth0 `sub`. Session revocation/listing and chat history are distinct concerns; server-side login-session storage is not added.
+Apply `npm run db:migrate:local` for local use. Both chat migrations have now been applied remotely, followed by deployment of the merged source with the Auth0 production configuration described in [AUTH0.md](AUTH0.md). Future rollouts must inspect migration state and apply pending migrations before deployment. History survives session expiry, logout and a new browser login with the same Auth0 `sub`. Session revocation/listing and chat history are distinct concerns; server-side login-session storage is not added.
 
 Concurrent requests save whole user/assistant pairs atomically in completion order. They can generate against the same prior history; strict per-chat generation serialization and request retry deduplication are not implemented. Storage access remains owner-scoped. Chat count/retention quotas, deletion/export APIs and frontend UI are future work.
 
@@ -34,6 +34,8 @@ Concurrent requests save whole user/assistant pairs atomically in completion ord
 
 All 157 backend tests passed across 11 files on 2026-11-14. The deployment dry run built successfully. Local migrations 0001 and 0002 applied successfully; production was not changed. Independent review found no blocking security/correctness issues.
 
-## Current E2E gap (2026-11-14)
+## Production E2E verification (2026-11-14)
 
-Real Auth0 login → AI chat → logout → re-login → restored messages remains pending; see [AUTH0.md](AUTH0.md#browser-e2e-verification-status-2026-11-14) for acceptance steps. The latest successful 157-test run predates the current merge and used mocked providers. The merge is now resolved and its combined suite passes 203 tests across 14 files. The full local Worker could not establish its remote AI proxy because Wrangler lacked `CLOUDFLARE_API_TOKEN`. No production rollout or remote migration was performed during that check.
+The production browser E2E passed on 2026-11-14 (EST). Real Auth0 login established Secure/HttpOnly/SameSite=Lax session cookies. Two owner-scoped chats each saved two user/assistant AI turns. After the user confirmed Auth0's logout page, the session cookie was absent and profile, chat reads and AI writes returned 401. A second real login returned the same Auth0 subject and restored both histories exactly, including message IDs, content, ordering and metadata. A follow-up generated another user/assistant pair; the first chat then had six messages after a page reload. The same isolated browser profile was reopened between logout and re-login. No forged sessions or mocked providers were used for this browser check.
+
+Both chat migrations are now applied remotely and the merged backend is deployed. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md) for evidence and remaining frontend/processor limits.

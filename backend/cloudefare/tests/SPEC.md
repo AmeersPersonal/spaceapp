@@ -36,12 +36,13 @@ The merged suite passed 203 tests across 14 files on 2026-11-14. It covers both 
 - The `getQueueResult()` helper does not record `delaySeconds`, so the backoff check spies on `msg.retry`.
 - `mockStepError` makes the Workflows engine log "uncaught exception" lines. This is expected.
 - Automated tests mock Workers AI, Vectorize and external providers; historical live checks are separate evidence.
-- Real browser sign-in, saved AI chat, logout, rejected logged-out access, re-login and restored history remain unverified. Local Worker startup requires Cloudflare credentials for its remote AI binding.
+- A separate live browser check passed real Auth0 login, two owned conversations, confirmed logout, rejected protected access, re-login, exact history restoration and continued generation. This is deployment evidence, not part of the mocked automated suite; see [../DEPLOYMENT_VERIFICATION.md](../DEPLOYMENT_VERIFICATION.md).
 
 ## Status
-Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. Real browser E2E remains pending.
+Merge resolved; all 203 automated tests pass. `resetDb()` clears `chat_messages`/`chats` and `messages`/`conversations` before parent catalog tables. The deployed Worker browser E2E also passed; frontend integration remains separate.
 
 ## Changelog
+- 2026-11-14 - Fresh deployment run passed all 203 tests; recorded separate successful real Auth0/AI persistence browser checks.
 - 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
 - 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.
 - 2026-11-14 - Added ten persistent-chat tests plus session access-policy coverage; reset chat tables before parent events to preserve foreign keys.

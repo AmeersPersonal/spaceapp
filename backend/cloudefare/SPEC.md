@@ -10,6 +10,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `auth0.js` | Auth0 SDK setup, browser login/callback/logout/profile, session protection for writes, origin and JSON checks, secure-cookie enforcement. |
 | `chats.js` | Owner-scoped D1 chat/message queries, bounded history, atomic message saves and authenticated chat routes. |
 | `CHAT_STORAGE.md` | Chat API contract, continuation behavior, pagination and rollout limitations. |
+| `DEPLOYMENT_VERIFICATION.md` | Current merged deployment, migration and live API verification evidence; browser E2E status and limits. |
 | `AUTH0.md` | Local credentials, Auth0 tenant/application, frontend cookie contract, deployment steps and verification limitations. |
 | `.gitignore` | Ignores Auth0 helper credentials, state and write audit logs. |
 | `workFlowManger.js` | Ingest request validation, `IngestWorkflow`, queue consumer + DLQ handler, cron poller. |
@@ -27,7 +28,7 @@ The Cloudflare Worker that serves the Earth Replay API. It catalogs NISAR scenes
 | `AI/` | Workers AI via AI Gateway: captions, Vectorize search, `/api/ask`, the multi-agent chat, summaries and predictions. See [AI/SPEC.md](AI/SPEC.md). |
 | `migrations/` | D1 schema. See [migrations/SPEC.md](migrations/SPEC.md). |
 | `tests/` | Vitest suites + fixtures. See [tests/SPEC.md](tests/SPEC.md). |
-| `wrangler.jsonc` | Bindings, vars, queues, workflow, DO, cron. |
+| `wrangler.jsonc` (local, ignored) | Bindings, vars, queues, workflow, DO and cron; removed from versioned history. Preserve locally when refreshing the clone. |
 | `vitest.config.js` | `@cloudflare/vitest-plugin` config (local bindings, D1 migrations, offline env). |
 | `package.json` / `.npmrc` | Deps and scripts. `.npmrc` sets `legacy-peer-deps` to work around an npm 10 peer-resolution crash with vitest 4. |
 | `.dev.vars.example` | Template for local secrets. |
@@ -127,21 +128,24 @@ npm run db:migrate:remote
 ## Tests
 Run `npm test` from this folder. Vitest uses workerd with local D1/R2/KV/Queues/DO/Workflows, fake AI/Vectorize bindings and mocked external providers. The merged source passed 203 tests across 14 files on 2026-11-14. See [tests/SPEC.md](tests/SPEC.md).
 
-Real Auth0 browser login → saved AI conversation → logout → login → restored history has not been completed. The full local Worker startup failed because Wrangler did not receive `CLOUDFLARE_API_TOKEN` for the remote Workers AI binding. The configured Vectorize binding is not locally supported without remote access. Real model behavior, processor-to-R2 notification delivery and frontend cookie integration need separate live checks.
+The deployed browser E2E passed real Auth0 login, saved AI conversations, confirmed logout and rejected protected access, re-login to the same identity, exact history restoration and continued generation after reload. Workers AI returned real answers. Wrangler is now authenticated through browser OAuth; an API token is not required for this interactive deployment. The earlier unauthenticated local-startup failure does not describe current production status. Processor-to-R2 notification delivery and frontend cookie integration still need separate checks. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md).
 
 ## Status
-Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E remains pending.
+Implemented and merge-resolved: Auth0 login/logout/profile, owner-scoped D1 chats, private `/api/ask` continuation, specialist shared conversations, summaries and modeled forecasts. Both schemas and their foreign-key-safe test cleanup are retained. Model routing reports the actual answering model and preserves private cache bypass across external-provider and Workers AI fallbacks. The combined automated suite passes; live browser E2E passed against the deployed Worker.
 
-Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. No deployment or remote migration was performed during this documentation update. Both `0002_chats.sql` and `0002_chat_stats.sql` exist; inspect applied migrations before rollout. The owned-chat migration was previously verified locally.
+Earlier catalog/dataset/ingest functionality was deployed to `earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`; historical checks and resource setup are recorded in [ENDPOINT_REFERENCE.md](ENDPOINT_REFERENCE.md). That evidence does not verify the current Auth0, owned-chat or merged AI changes. The merged backend is now deployed as version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`, with production Auth0 configuration/secrets. Both `0002_chats.sql` and `0002_chat_stats.sql` are applied remotely. Existing production vars/secrets were preserved. Live login redirects, anonymous-access rejection and browser conversation persistence across confirmed logout and re-login all passed.
 
 Remaining limitations:
 - The external Python processor is absent; scenes remain `awaiting_processor`, so successful raster/tile production is not verified.
-- Auth0 browser E2E needs real sign-in and Cloudflare credentials; use [AUTH0.md](AUTH0.md) and [CHAT_STORAGE.md](CHAT_STORAGE.md) for setup and acceptance checks.
+- Deployed Worker Auth0 browser E2E passed; frontend sign-in integration and credentialed cross-origin use remain unverified. See [AUTH0.md](AUTH0.md) and [CHAT_STORAGE.md](CHAT_STORAGE.md).
 - `/api/chats` is owner-scoped; the separate `/api/chat` specialist thread is public and is not the private chat-storage contract.
 - Supplementary dataset adapters provide discovery, not automatic raster extraction, alignment, persistence or prompt enrichment. `handleEventQueue` is not bound to a queue.
 - `compatibility_date` remains pinned to 2026-08-15 for the bundled local runtime.
 
 ## Changelog
+- 2026-11-14 - Removed wrangler.jsonc from all local and published branch histories; retained the ignored local config and preserved working files. GitHub read-only PR refs and external clones can retain old commits and require separate cleanup.
+- 2026-11-14 - Deployed merged backend version 1ca56909-55b9-4f03-9b8d-ca34b24d42e4 with production Auth0 settings/secrets and both chat migrations; all 203 tests and deployment build passed. Real Auth0 login, confirmed logout, re-login, exact restoration of two private conversations and continued AI generation passed.
+- 2026-11-14 - Prepared production Auth0 domain, client ID and Worker origin in Wrangler before secret upload, migration reconciliation and deployment.
 - 2026-11-14 - Resolved main/Auth0 merge while preserving owned chats and specialist conversations; combined suite passes 203 tests in 14 files.
 - 2026-11-14 - Reconciled merged specifications and distinguished prior verification from pending merged-source and browser E2E checks.
 - 2026-11-14 - Added owned chat/message storage, session policy, bounded AI continuation and atomic private turns, with migration and ownership/rollback/pagination tests.

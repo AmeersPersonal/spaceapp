@@ -59,7 +59,7 @@ For a frontend on another origin, set `CORS_ORIGIN` to its exact origin; the Wor
 
 ## Production and verification
 
-The source integration has not been deployed. Before deploying, configure `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `APP_BASE_URL` and the exact frontend origin, then store `AUTH0_CLIENT_SECRET` and `AUTH0_SESSION_ENCRYPTION_KEY` using Wrangler secrets. Local env files are not uploaded automatically. Preserve existing Worker bindings and service secrets. The Auth0 application already allows the current production Worker callback URL.
+The merged integration is deployed at `https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev`, version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`. Wrangler config sets `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID` and `APP_BASE_URL`. Auth0 secrets were uploaded through Wrangler stdin, with a new production-only session key. Existing service secrets and production vars were preserved (`--keep-vars`). Both chat migrations are applied remotely. Local env files are not uploaded automatically. The Auth0 application allows the production callback/logout URLs. `CORS_ORIGIN` remains `*`; cross-origin frontend authentication still requires an exact allowlist and a compatible same-site deployment.
 
 Run `npm test`. Auth tests use the actual SDK, encrypted cookies and an RSA-signed test ID token, with Auth0 discovery/token/JWKS calls mocked. They cover callback exchange, forged/expired/missing sessions, logout, CSRF/origin and JSON checks, CORS, fail-closed configuration, no-store headers and the three protected operations. Browser sign-in with a real end-user account is still a manual check.
 
@@ -69,16 +69,8 @@ Client secrets are redacted from MCP responses. View the full secret in [Auth0 a
 
 ## Browser E2E verification status (2026-11-14)
 
-The pre-merge automated suite passed 157 tests in 11 files. It uses mocked Auth0 endpoints and AI services; it does not establish real end-user sign-in or real AI chat persistence. The main/Auth0 merge is now resolved; its combined automated suite passes 203 tests across 14 files. Real browser E2E remains pending.
+All 203 backend tests across 14 files passed in a fresh deployment run. The deployment dry run passed, and the merged backend is active in production with both chat migrations applied.
 
-The attempted full local startup failed because Wrangler did not receive `CLOUDFLARE_API_TOKEN` for its remote AI proxy. Auth0 client credentials do not authenticate Wrangler to Cloudflare. Configure Cloudflare credentials securely outside chat before retrying. The Vectorize binding also needs supported remote access for live retrieval. No deployment was performed during this check.
+The production browser E2E passed on 2026-11-14 (EST). Real Auth0 login established Secure/HttpOnly/SameSite=Lax session cookies. Two owner-scoped chats each saved two user/assistant AI turns. After the user confirmed Auth0's logout page, the session cookie was absent and profile, chat reads and AI writes returned 401. A second real login returned the same Auth0 subject and restored both histories exactly, including message IDs, content, ordering and metadata. A follow-up generated another user/assistant pair; the first chat then had six messages after a page reload. The same isolated browser profile was reopened between logout and re-login. No forged sessions or mocked providers were used for this browser check.
 
-After starting the complete Worker, verify in the same browser:
-
-1. Visit `/auth/login`, complete real Auth0 login, and confirm `/api/auth/me` returns the signed-in profile.
-2. Select an existing event, create an event-bound chat with `POST /api/chats`, and send `/api/ask` with its `chatId`. Confirm both user and assistant messages appear in its message history.
-3. Visit `/auth/logout`; confirm `/api/auth/me` and owned chat reads return 401 after logout.
-4. Log in again to the same account; confirm the Auth0 subject is unchanged and the same chat and messages are restored.
-5. Send a follow-up using the same `chatId`; confirm the history grows and continuation succeeds.
-
-This sequence remains pending. A deployed environment is additionally required to verify deployed secrets, HTTPS cookie behavior and actual frontend/API origin integration. The public specialist `/api/chat` thread is separate from owner-scoped `/api/chats` and does not verify private chat access controls.
+Auth0 logout can pause at `/oidc/logout/confirm`; confirm Yes before checking the return to the API root. Session policy and stored history are independent: logout clears browser authentication without deleting D1 chats. The frontend's sign-in form remains unintegrated, so these checks used the deployed Worker directly. Credentialed cross-origin frontend behavior is not verified. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md) for the deployment version, live checks and limits.

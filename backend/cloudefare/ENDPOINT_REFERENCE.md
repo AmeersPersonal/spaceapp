@@ -1,8 +1,8 @@
 # Earth Replay: deployed API and endpoint checks
 
-Source update: Auth0 login/logout/profile and session-protected ingest/AI writes are now implemented locally; see [AUTH0.md](AUTH0.md). They have not been deployed. The authentication descriptions and verification evidence below describe the earlier production deployment, not the current source contract.
+Current deployment: the merged Auth0/private-chat/specialist backend is now deployed as version `1ca56909-55b9-4f03-9b8d-ca34b24d42e4`. All 203 backend tests, the build, live API checks and real Auth0 login → AI conversations → confirmed logout → re-login → exact history restoration passed. See [DEPLOYMENT_VERIFICATION.md](DEPLOYMENT_VERIFICATION.md), [AUTH0.md](AUTH0.md) and [CHAT_STORAGE.md](CHAT_STORAGE.md).
 
-Persistent owner-scoped chat endpoints and optional `/api/ask` conversation storage are also implemented locally, with migration 0002 applied locally only; see [CHAT_STORAGE.md](CHAT_STORAGE.md).
+The endpoint checks below and `ENDPOINT_CHECKS.json` are historical evidence from the earlier deployment. Their legacy API-key authentication description and public `/api/ask` behavior do not describe the current Auth0 session contract; use [SPEC.md](SPEC.md) for the current API.
 
 Verified November 14, 2026. Base URL:
 
