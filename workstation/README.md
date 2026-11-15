@@ -1,18 +1,30 @@
 # spaceapp workstation
 
-A flat, north-up, full-viewport map workstation for exploring **synthetic** NISAR-style SAR passes over Aso caldera (Kumamoto, Japan, 32.884° N, 131.104° E), with a timeline that runs past "NOW" into **placeholder** model forecasts. Vanilla HTML, CSS and ES modules with MapLibre GL JS from a CDN. No framework, no build step, no npm.
+A flat, north-up, full-viewport map workstation with four channels:
+
+- **01–03 (demo):** **synthetic** NISAR-style SAR passes over Aso caldera (Kumamoto, Japan, 32.884° N, 131.104° E), with a timeline that runs past "NOW" into **placeholder** model forecasts.
+- **04 // LIVE NISAR:** the Earth Replay API (`backend/cloudefare`) — real catalog events with their ASF browse previews per pass, processed tile layers when they exist, AI briefings and questions (signed in, saved per account), a **modelled** event projection, a **modelled** earthquake outlook, click-anywhere area exploration (NISAR scenes, nearby quakes, NASA datasets, track the area or a quake), replay of search results, and shared replay rooms. Sign-in is Auth0.
+
+Vanilla HTML, CSS and ES modules with MapLibre GL JS from a CDN. No framework, no build step, no npm.
 
 The one rule that outranks everything else: **a prediction must never look like a measurement.**
 
 ## Run
 
 ```bash
-cd spaceapp/workstation
-npm run dev                  # zero-dependency Node static server (dev-server.mjs), no install needed
-# or: python -m http.server 5173
+# terminal 1 — the Earth Replay API (backend/cloudefare), on :8787
+cd spaceapp/backend/cloudefare && npm run dev
+
+# terminal 2 — the workstation, on :5173, proxying /api /auth /tiles to :8787
+cd spaceapp/workstation && npm run dev
 ```
 
-Open <http://localhost:5173/#/>. `npm run dev` moves to the next free port if 5173 is busy (e.g. the old `Frontend/` Vite app is running); set `PORT=` to choose one.
+Open <http://localhost:5173/#/>. The Evidence dock shows `BACKEND LINK: ONLINE · N EVENTS · SIGNED OUT` when the API is reachable, or `OFFLINE` with the reason. The workstation still works with the backend down.
+
+- **Use `npm run dev`, not `python -m http.server`.** Only `dev-server.mjs` has the API proxy; a plain static server shows `OFFLINE // No API proxy on this server`.
+- **Keep it on 5173.** The backend's `FRONTEND_URL` is `http://localhost:5173/`, so Auth0 login returns there. Stop `Frontend/`'s Vite server first (it also wants 5173). If 5173 is busy the server moves to the next port and warns that login will not return to it.
+- **Deployed API instead of local:** `API_TARGET=https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev npm run dev` (PowerShell: `$env:API_TARGET='…'; npm run dev`).
+- Browser console: `await __spaceapp.api.events()`, `await __spaceapp.probe()`.
 
 It must be served over HTTP. ES modules do not load from `file://`. Fonts (Google Fonts), MapLibre (unpkg) and basemap tiles (OpenFreeMap) need network access. Every failure is explicit: a missing map library, blocked tiles or a failed external image each show an error in the Evidence dock, and nothing synthetic is substituted in their place.
 
@@ -24,7 +36,17 @@ It must be served over HTTP. ES modules do not load from `file://`. Fonts (Googl
 - **Radar image** view shows a procedural greyscale raster per pass. **Change since** view blurs (3 × 3) and differences the current pass against a chosen baseline: negative is blue, positive is orange.
 - **Risk extent** polygons are schematic, seeded per date. **Inspection reticle** marks a clicked point and plots its value on each observed pass.
 - **Evidence** dock: provenance strip, observed/forecast status card, a risk-over-time chart and a point-series chart, both SVG with `<title>`/`<desc>` summaries.
-- **Routes**: `#/` (workstation), `#/signin`, `#/signup`, anything else is a 404. The forms are prototypes: nothing is created, stored, logged or sent.
+- **Routes**: `#/` (workstation), `#/signin`, `#/signup`, anything else is a 404. Sign in / sign up hand off to Auth0's hosted page via the API (`/auth/login`) and return here; this page never holds a password.
+
+## The live channel (04 // LIVE NISAR)
+
+- **Event** picker lists the catalog (`GET /api/events`). The timeline steps through the event's real pass dates (one step per acquisition day with an ASF preview, or per processed-tile date when a processed **Layer** is chosen). There is no forecast half on this timeline.
+- The map draws each pass's ASF **browse preview** on its footprint. These are real acquisitions but quicklooks, not calibrated measurements; the strip `LIVE NISAR CATALOG // ASF PREVIEWS ARE QUICKLOOKS, NOT CALIBRATED MEASUREMENTS // NOT REAL-TIME MONITORING` replaces the synthetic one on this channel.
+- **Model projection** and **Quake outlook** are modelled. They appear only in hatched, pale-sky `◆` cards (and hatched, dashed outlook cells on the map), labelled MODELLED with the backend's disclaimer. They never become timeline steps.
+- **Click the map** to explore a 1° area: NISAR coverage for a chosen period, tracked events there, nearby M4.5+ quakes and NASA dataset records. Signed in, **Track this area** / **Track quake** start a backend ingest; the new event opens and fills in as scenes are found. **Replay** plays search results without tracking anything.
+- **Ask about this event** (signed in): questions go to `POST /api/ask` and are saved to a chat on your account, restored when you come back.
+- **Shared replay room**: enter a code to share the event, pass and play state with everyone in the room (WebSocket `/api/room/:code`).
+- Data: the local backend's catalog starts empty. To browse the deployed catalog run with `API_TARGET=https://earth-replay-api.jc-cloudflare-a56b8c1d.workers.dev` (sign-in then does not return here; use the local backend for that).
 
 ## Forecast behaviour (the locks)
 
@@ -130,7 +152,13 @@ workstation/
     ├── main.js       entry: boot, state, render(), events, play timer, router, dialogs
     ├── config.js     CONFIG (DEFAULTS merged with window.SPACEAPP_CONFIG) and HAZARD_REGISTRY
     ├── telemetry.js  TelemetryService: timelines, procedural rasters, external images, sampling, change images
-    ├── map.js        MapLibre setup, basemap recolouring, sources and layers, applyMapState()
+    ├── api.js        Earth Replay API client: api.*, probe(), ApiError (via the dev-server proxy)
+    ├── explore.js    live helpers: liveTimeline(), date ranges, areas, outlook box, labels
+    ├── browse.js     loadBrowseImage(): ASF preview placed on its footprint
+    ├── room.js       RoomClient: replay-room WebSocket
+    ├── liveMap.js    live map layers, applyLiveMap(), outlook hit-test
+    ├── live.js       live evidence panel renderers (textContent only)
+    ├── map.js        MapLibre setup, basemap recolouring, sources and layers, applyMapState(), hideDemoLayers()
     └── charts.js     SVG plotFrame, risk chart, point chart
 ```
 

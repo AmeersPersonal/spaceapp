@@ -117,6 +117,16 @@ The `.hud` dock surface is `background:var(--bg-hud-well); border:1px solid var(
 - `#provenance`: mono, `--desert-sand`, 1px dashed `--desert-sand` border, and padding.
 - `#no-pass-alert`: mono, `--pale-sky` text, 1px solid `--pale-sky` border.
 - `#map-error`, `#asset-error`, `#pw-error`: `--error` text, 1px `--error` border.
+- `#backend-status`: mono meta, `--text-secondary`, 1px `--grey` left rule; `[data-state="offline"]` makes the rule dashed. Never `--error` (the page works without the backend) and never louder than `#provenance`.
+- `#provenance-live`: mono, `--mint-cream`, 1px solid `--border-strong` (real catalog data: solid frame, but the text still says quicklook / not real-time).
+
+### 5.14 Live channel (`html[data-source="live"]`)
+- Hidden on live: `.wm-demo`, `#view-toggle`, `#baseline-wrap`, the risk/reticle checkboxes, the demo legend variants, `.compound-label`, and every `#evidence-drawer > section` except `#live-panel`. JS toggles `[hidden]` on the live-only blocks.
+- `.model-card` (projection, outlook): the forecast-card treatment — 1px `--pale-sky` frame, 8px `--hatch` strip with a dashed rule, pale-sky `◆` heading. Used only for modelled output.
+- Live legend `.legend-swatch`: preview = greyscale ramp; event area = dashed pale sky; explored area = dotted mint; outlook = dashed pale sky + `--hatch`.
+- Inputs (`#room-code`, `#live-ask-input`, `#live-range input`): transparent, hairline border, pale-sky focus, hatched when disabled. Selects (`#live-event`, `#live-layer`) follow `#baseline`.
+- Mobile: live ticks show only the first, last and current labels (events can have many passes).
+- On the map (liveMap.js): previews/tiles are plain imagery; outlook cells are pattern-filled hatch + dashed pale-sky outline, never a flat colour.
 
 ### 5.10 Forecast card
 - 1px `--pale-sky` border with a hatch strip along the top edge (8px, `var(--hatch)`).

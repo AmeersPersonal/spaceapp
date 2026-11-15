@@ -81,8 +81,15 @@ The `<html data-mode data-hazard>` attributes are the only channel between JS st
 - With `CONFIG.forecasts = []`, the hatching, NOW divider and forecast labels disappear, and both charts still render.
 - Pixel values are **display intensities, not calibrated units**. Never label them dB. Seismic and tsunami units read "synthetic, illustrative".
 - Level thresholds are demonstration-only. Risk extents are schematic, not a hazard map.
-- Provenance strip, always visible: `SYNTHETIC DEMONSTRATION // NOT LIVE NISAR TELEMETRY`.
+- Provenance strip, always visible on the demo channels (01–03): `SYNTHETIC DEMONSTRATION // NOT LIVE NISAR TELEMETRY`.
 - Nothing may imply validated probabilities or real-time monitoring.
+
+### 3b. The live channel (04 // LIVE NISAR) — added after the original build
+- Data comes from the Earth Replay API through the `dev-server.mjs` proxy. Events, scenes and ASF browse previews are real NISAR catalog material; previews are **quicklooks, not calibrated measurements**. The strip `LIVE NISAR CATALOG // ASF PREVIEWS ARE QUICKLOOKS, NOT CALIBRATED MEASUREMENTS // NOT REAL-TIME MONITORING` replaces the synthetic strip on this channel only.
+- The live timeline holds **only pass dates** (`data-forecasts="none"`). There is no live forecast half.
+- Modelled output — the event projection (`/predict`) and the earthquake outlook (`/outlook`) — appears only in `.model-card` blocks (pale-sky frame, hatched strip, `◆`, MODELLED label, the backend's disclaimer) and as hatched, dashed, pale-sky map cells. Probabilities are never shown as 0% or 100%.
+- AI text (briefing, answers, scenario wording) is labelled AI-generated and carries the backend disclaimer.
+- Accounts are Auth0's: the sign-in/up forms are plain navigations to `/auth/login`; this page holds no credential fields.
 
 ## 4. Design skills to load first
 These live in `c:\Users\husse\Desktop\.Spaceapps\.claude\skills\` and are short templates. Use their **rules**, not their fonts or palettes. The tokens in `css/spec.md` win.
@@ -94,7 +101,7 @@ These live in `c:\Users\husse\Desktop\.Spaceapps\.claude\skills\` and are short 
 Avoid: `cosmic`, `neon`, `glassmorphism`, `enterprise`, `futuristic`.
 
 ## 5. Out of scope
-Real auth, OAuth, password reset, subscriptions, dashboards, invented live data, and any change to `Frontend/`.
+Password reset, subscriptions, dashboards, invented live data, and any change to `Frontend/`. (Real sign-in now exists, but only as the Auth0 hand-off described in §3b.)
 
 ## 6. Acceptance checklist
 - [ ] `#/` loads the volcanic channel at index 5, 20 Jun 2026. The map covers the viewport, flat and north-up, and rotation is impossible by mouse, touch or keyboard.
@@ -112,7 +119,8 @@ Real auth, OAuth, password reset, subscriptions, dashboards, invented live data,
 - [ ] Clicking inside the footprint plots exactly 6 values, and the future region says `No data yet`. Clicking outside shows no coverage.
 - [ ] `CONFIG.forecasts = []` (via `window.SPACEAPP_CONFIG`): no hatch, no NOW line, no forecast labels, and both charts work.
 - [ ] Provenance warnings show in every mode and every hazard.
-- [ ] Sign in, sign up, password mismatch, 404, Method, About and Escape all work, and the console stays clean of credentials.
+- [ ] Sign in and sign up hand off to Auth0 (`/auth/login`); signed in, the nav shows the user and Sign out. 404, Method, About and Escape all work, and the console stays clean of credentials.
+- [ ] Live channel: an event's ASF previews draw per pass; the outlook draws hatched dashed cells with a MODELLED card; a map click opens the area explorer; switching back to 01 restores every demo layer and forecast lock.
 - [ ] 1440×1080 and 390×844 have no horizontal overflow, and evidence scrolls internally.
 - [ ] Missing MapLibre, blocked tiles and a failed external image each show an explicit error, with no synthetic substitution.
 - [ ] Switching hazard keeps the locks identical, and the compound overlay draws both overlays.

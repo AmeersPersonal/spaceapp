@@ -157,6 +157,22 @@ export function applyMapState(map, view) // idempotent; view = derived render ou
 - **Errors:** `map.on('error', e)` calls `onError(message)`. `main.js` shows it in `#map-error`. Image source errors also hide the raster.
 - **Click:** reports `{lng, lat}` to `onClick`. `main.js` decides between inside and outside bounds.
 
+## 4b. `api.js` — Earth Replay API client
+- No DOM, imports nothing. Relative paths (`/api/...`, `/auth/...`), so it only works when served by `dev-server.mjs`, which proxies `/api`, `/auth`, `/tiles` and the `/api/room/:code` WebSocket to `API_TARGET` (default `http://localhost:8787`, the backend's `wrangler dev`).
+- `request()` sends `credentials: 'include'` and throws `ApiError(status, code, message)` on any failure: `network` (proxy 502 / fetch failed), `no_proxy` (404 without JSON from a plain static server), or the Worker's own `{error, message}`. It never substitutes data.
+- `api.*` mirrors `Frontend/src/api.js` (ported, not imported): `me`, `events`, `event`, `context`, `nisarSearch`, `quakes`, `datasetContext`, `trackArea`, `ingestStatus`, `trackQuake`, `outlook`, `predict`, `media`, `summary`, `ask`, `chats`, `createChat`, `chatMessages`. Endpoint contracts: `../../backend/CLAUDE.md` and `backend/cloudefare/SPEC.md`.
+- `probe()` → `{online:true, eventCount, events, user|null, auth:'signed-in'|'signed-out'|'unavailable', authMessage}` or `{online:false, error}`; never throws.
+
+## 4c. LIVE channel modules
+- `explore.js` — `liveTimeline(detail, layer)` → `{mode:'tiles'|'preview'|'area', steps[{date,kind:'observed',index,tile,scenes}], layers}`: one step per processed-tile date (when a processed layer is chosen) or per acquisition day with a browse preview. Every step is an observation; there are no forecast steps. Also `lastMonths`, `setRangeEnd` (launch 2025-07-30, ≤ 366 days), `areaAround` (1° box), `unionBounds`, `outlookBoxFrom` (sides clamped 1–60°), `percent` (never 0%/100%), `formatDay`, `statusLabel`, `layerLabel`.
+- `browse.js` — `loadBrowseImage(url, bounds)` → `{url: objectURL, coordinates}` by locating the PNG's data area and stretching it onto the footprint (Mercator latitude).
+- `room.js` — `RoomClient({onStatus, onState, onPresence, onError})`, `connect(code)`, `send(msg)`, `close()`; pings every 25 s.
+- `liveMap.js` — `addLiveLayers(map)` once after style load; `applyLiveMap(map, {active, aoi, probe, outlookOn, cells, selectedCell, images, tiles, opacity})` idempotently; `outlookCellAt(map, point)`; `fitBox`. Layers: `live-tiles`, `live-scene-<n>`, `live-outlook-fill` (pattern `live-hatch`), `live-outlook-line` (dashed), `live-aoi-line` (dashed pale sky), `live-probe-line` (dotted mint).
+- `live.js` — `renderEventHead`, `renderProjection`, `renderBriefing`, `renderAskLog`, `renderContext`, `renderMedia`, `renderScenes`, `renderArea`, `renderOutlook`, and the `h()` builder. Buttons carry `data-action`/`data-id`/`data-cell`; `main.js` delegates.
+- `map.js` additions — `hideDemoLayers(map)` (hides every synthetic layer and the reticle and forgets applied state), `paddingFor`, `labelStackStartId` exported; map clicks now report the screen `point` too.
+- `loginUrl`, `signupUrl`, `logoutUrl` are page navigations (Auth0 redirects back to `FRONTEND_URL`, i.e. `:5173`).
+- Console: `window.__spaceapp.api` and `window.__spaceapp.probe`.
+
 ## 5. `main.js`
 ### State
 ```js
@@ -166,6 +182,10 @@ const state = {
   showRisk: true, showReticle: true, compound: false,
   point: null /* {lng,lat} | {outside:true} | null */, playing: false,
   route: 'home', errors: { map: '', asset: '', backend: '' }, // map + backend are joined into #map-error
+  api: { status: 'checking' | 'online' | 'offline', eventCount, user, auth, authMessage, error }, // Earth Replay API link + session
+  source: 'demo' | 'live',
+  live: { events, eventId, detail, replay, idx, pendingFrame, layer, panel: 'event'|'area'|'outlook', area, range, results,
+          busy, notice, actionError, predict, brief, context, media, ask, outlookOn, horizon, outlookBox, outlook, cell, room },
 };
 ```
 
@@ -197,6 +217,7 @@ const state = {
    - `#chart-risk.innerHTML = riskChart(...)`, `#chart-point.innerHTML = pointChart(...)`
    - `#point-title`, `#point-coords`, `#point-status`
    - errors: `#map-error` / `#asset-error` text and hidden state
+   - `#backend-status` text and `data-state` from `state.api`. Online text always ends `// MAP DATA ABOVE IS NOT FROM IT` until the map is actually fed from the API.
 5. Timeline:
    - `#date-slider` gets value, `max` and `aria-valuetext`
    - `#track` gets `--obs` and `--fc`
@@ -219,8 +240,8 @@ const state = {
 | Hash | Route | Behaviour |
 | --- | --- | --- |
 | `''`, `#`, `#/` | home | `#page.hidden = true` |
-| `#/signin` | signin | submit: `preventDefault`, `reset()`, `location.hash = '#/'` |
-| `#/signup` | signup | submit: if password ≠ confirm, show `#pw-error` "Passwords do not match." and focus confirm; else `reset()`, `location.hash = '#/signin'` |
+| `#/signin` | signin | Auth0 hand-off: the form GETs `/auth/login`; shows the session status, or "Signed in as …" + Sign out |
+| `#/signup` | signup | same, with `screen_hint=signup` |
 | `#<id>` of an existing element (e.g. the skip link's `#controls`) | home | focus that element; an in-page anchor is not a page |
 | anything else | notfound | show `#notfound` |
 
@@ -234,7 +255,7 @@ Leaving a route resets its form. Focus moves to the route's first heading or inp
 1. Create a `TelemetryService`.
 2. `try { map = createMap(...) } catch { errors.map = message }`.
 3. On map `load`: run `styleBasemap`, add the layers, then `render()`.
-4. Load the rasters.
+4. Load the rasters. Then `probe()` the Earth Replay API (non-blocking) and store the result in `state.api`. If `localStorage['spaceapp.source']` is `'live'` (e.g. returning from Auth0, which always lands on `/`), enter the live channel. On map `load`, `addLiveLayers(map)` too.
 5. Route.
 6. Collapse the drawers if `matchMedia('(max-width:900px)')` matches.
 7. Run the first `render()` immediately, so the UI works without the map.

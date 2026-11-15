@@ -7,11 +7,13 @@ Before working here, read `HANDOFF.md` (the cross-cutting rules and acceptance c
 ## The rule that governs every change
 **Never let a prediction look like a measurement.** On forecast dates the raster locks to 35%, the view modes disable, the slider and pill turn pale-sky diamond `FORECAST`, and a prediction card with the exact disclaimer `Placeholder forecast. Swap in your model output.` appears. If a change blurs that distinction, it is wrong even if it looks better.
 
+On the **live channel (04)** the same rule holds differently: its timeline has **only** real NISAR pass dates, and modelled output (event projection, earthquake outlook) appears only in hatched pale-sky `◆` `.model-card` blocks and hatched, dashed map cells, labelled MODELLED. Never put a modelled value on the live timeline or draw it as a flat fill. Never let synthetic (demo) data appear on the live channel, or live data on a demo channel, **with one labelled exception**: the `#live-sim` "Simulated illustration" toggle (off by default) runs the demo generators on the event's box (`js/simulate.js`). While it is on, `#sim-badge` (SIMULATED · NOT MEASURED) sits on the map, `#provenance-sim` (desert-sand, dashed, hatched) is in the evidence dock, the pill reads `// SIMULATED ILLUSTRATION`, and the real ASF previews/tiles are hidden rather than mixed with fabricated frames. Only the pass dates are real. Never show simulated frames without all of those.
+
 ## Run
 ```bash
-python -m http.server 5173     # from this folder; open http://localhost:5173/#/
+npm run dev     # from this folder; open http://localhost:5173/#/
 ```
-Use HTTP, not `file://`, because ES modules need it.
+Use HTTP, not `file://`, because ES modules need it. Use `npm run dev` (`dev-server.mjs`), not `python -m http.server`: only it proxies `/api`, `/auth`, `/tiles` to the Earth Replay Worker (`API_TARGET`, default `http://localhost:8787`). Start the backend with `npm run dev` in `../backend/cloudefare`. Stay on 5173 so Auth0 login returns here.
 
 ## Rules for `index.html`
 - **Markup only.** No inline `<style>`, no inline `style=""`, no inline `<script>` code, no `on*=` handlers. The only scripts are:
